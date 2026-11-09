@@ -1,0 +1,16 @@
+{
+  "name": "lu-khach-ky-uc",
+  "version": "1.0.0",
+  "private": false,
+  "type": "module",
+  "description": "Lữ Khách Ký Ức (1930 – 2045) — HD-2D Chiaroscuro Historical Side-Scroller (Sơn Mài & Giấy Dó Edition)",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}
