@@ -3,9 +3,11 @@
  * @description Bộ điều phối vòng đời chính của "Lữ Khách Ký Ức (1930 – 2045)".
  * Kết nối GameStore, InputManager, SaveManager, MapLoader, CameraController,
  * SceneTransition, CollisionWorld, InteractionSystem, QuestSystem, DialogueSystem,
- * EvidenceSystem, InventorySystem, OpeningFracture, PixelRenderer, SoundSynth và HudController.
+ * EvidenceSystem, InventorySystem, StealthSystem, DossierPuzzle, OpeningFracture,
+ * PixelRenderer, SoundSynth và HudController.
  */
 
+import { CH1_DOSSIER_PUZZLE } from '../data/chapters/ch1_1930';
 import { CHAPTERS } from '../data/chronicles';
 import { OpeningFractureController } from '../engine/OpeningFracture';
 import {
@@ -24,14 +26,17 @@ import { EvidenceSystem } from '../systems/EvidenceSystem';
 import { InteractionSystem, type InteractionCandidate } from '../systems/InteractionSystem';
 import { InventorySystem } from '../systems/InventorySystem';
 import { QuestSystem } from '../systems/QuestSystem';
+import { StealthSystem } from '../systems/StealthSystem';
 import type {
   ChapterData,
+  DossierPuzzleDefinition,
   EraId,
   Facing4,
   GameMode,
   GameSettings,
   MilestoneArtifact,
   NormalizedMapData,
+  PatrolActorRenderState,
   PortalDefinition,
   Rect2D,
   RomanMilestoneId,
@@ -48,6 +53,11 @@ interface HudExtendedMethods {
   toggleJournalModal?: (forceOpen?: boolean) => void;
   toggleInventoryModal?: (forceOpen?: boolean) => void;
   togglePauseModal?: (forceOpen?: boolean) => void;
+  openDossierPuzzleModal?: (
+    puzzle: DossierPuzzleDefinition,
+    attemptCount: number
+  ) => void;
+  closeDossierPuzzleModal?: () => void;
   closeAllOverlays?: () => void;
   updateWorldMapState?: (
     currentMapId: string,
@@ -70,6 +80,7 @@ export class LuKhachKyUcGame {
   public readonly dialogueSystem: DialogueSystem;
   public readonly evidenceSystem: EvidenceSystem;
   public readonly inventorySystem: InventorySystem;
+  public readonly stealthSystem: StealthSystem;
   public readonly cameraController: CameraController;
   public readonly sceneTransition: SceneTransition;
 
@@ -97,6 +108,7 @@ export class LuKhachKyUcGame {
     string,
     { waypointIndex: number; waitRemainingSec: number }
   >();
+  private puzzleAttemptCounts = new Map<string, number>();
 
   constructor() {
     const canvas = document.getElementById('pixel-canvas') as HTMLCanvasElement | null;
@@ -116,6 +128,7 @@ export class LuKhachKyUcGame {
     this.dialogueSystem = new DialogueSystem();
     this.evidenceSystem = new EvidenceSystem();
     this.inventorySystem = new InventorySystem(this.evidenceSystem);
+    this.stealthSystem = new StealthSystem();
 
     this.allMaps = getAllBuiltInMaps();
     this.currentMap = getBuiltInMap('harbor_square');
@@ -129,6 +142,7 @@ export class LuKhachKyUcGame {
         height: this.currentMap.heightPx,
       }
     );
+    this.stealthSystem.initForMap(this.currentMap);
     this.cameraController = new CameraController({
       worldWidth: this.currentMap.widthPx,
       worldHeight: this.currentMap.heightPx,
@@ -155,6 +169,7 @@ export class LuKhachKyUcGame {
           height: this.currentMap.heightPx,
         }
       );
+      this.stealthSystem.initForMap(this.currentMap);
       this.cameraController.setBounds(
         this.currentMap.widthPx,
         this.currentMap.heightPx,
@@ -268,6 +283,10 @@ export class LuKhachKyUcGame {
       onUpdateSettings: (partial: Partial<GameSettings>) => {
         this.updateSettings(partial);
       },
+      onSubmitDossierPuzzle: (
+        puzzleId: string,
+        selectedOptionIds: Record<string, string>
+      ) => this.submitDossierPuzzle(puzzleId, selectedOptionIds),
     });
 
     this.hud.setPresenterModeUI(this.store.isPresenterMode);
@@ -358,12 +377,97 @@ export class LuKhachKyUcGame {
   public resetSave(): void {
     this.saveManager.clearSave();
     this.store.resetToDefault();
+    this.puzzleAttemptCounts.clear();
     this.hud.setPresenterModeUI(false);
     this.loadMap('harbor_square', 'default_spawn', { x: 85, y: 384 }, 'right');
     this.hud.closeAllOverlays();
     this.store.setMode('exploring');
     this.syncHudWithState();
     this.hud.showToast('🔄 Đã xóa dữ liệu lưu và đặt lại hành trình từ đầu Chương I!');
+  }
+
+  public openDossierPuzzle(puzzle: DossierPuzzleDefinition = CH1_DOSSIER_PUZZLE): void {
+    const attempts = this.puzzleAttemptCounts.get(puzzle.id) ?? 0;
+    (this.hud as unknown as HudExtendedMethods).openDossierPuzzleModal?.(puzzle, attempts);
+  }
+
+  public submitDossierPuzzle(
+    puzzleId: string,
+    selectedOptionIds: Record<string, string>
+  ): {
+    solved: boolean;
+    attemptCount: number;
+    feedback: string;
+    showProgressiveHint: boolean;
+  } {
+    const puzzle = CH1_DOSSIER_PUZZLE;
+    const prevAttempts = this.puzzleAttemptCounts.get(puzzleId || puzzle.id) ?? 0;
+    const attemptCount = prevAttempts + 1;
+    this.puzzleAttemptCounts.set(puzzleId || puzzle.id, attemptCount);
+
+    let allAuthentic = true;
+    for (const slot of puzzle.slots) {
+      const selectedId = selectedOptionIds[slot.id];
+      const matchedOpt = slot.options.find((opt) => opt.id === selectedId);
+      if (!matchedOpt || !matchedOpt.isAuthentic) {
+        allAuthentic = false;
+        break;
+      }
+    }
+
+    if (!allAuthentic) {
+      this.sound.playAlertPushback();
+      return {
+        solved: false,
+        attemptCount,
+        feedback:
+          'Chưa chính xác! Hãy đối chiếu kỹ nội dung Chánh cương vắn tắt (02/1930) và thử lại.',
+        showProgressiveHint: attemptCount >= 2,
+      };
+    }
+
+    if (!this.store.isPresenterMode) {
+      this.store.questFlags.add(puzzle.rewardFlag);
+      if (puzzle.rewardEvidenceId) {
+        this.inventorySystem.addItem(puzzle.rewardEvidenceId, this.store);
+      }
+      if (puzzle.rewardMilestone) {
+        this.store.collectMilestone(puzzle.rewardMilestone);
+      }
+    } else if (puzzle.rewardMilestone) {
+      this.store.presenterCollectedMilestones.add(puzzle.rewardMilestone);
+    }
+
+    this.questSystem.evaluateProgress(this.store, this.currentChapter.id);
+    this.persistProgress();
+    this.sound.playSealStamp();
+    this.syncHudWithState();
+    this.hud.showToast(
+      '✓ Đã xác thực Cương lĩnh chính trị đầu tiên (02/1930) & khôi phục Cột mốc III!'
+    );
+
+    return {
+      solved: true,
+      attemptCount,
+      feedback:
+        '✓ Xác thực hoàn tất! Đã khôi phục Cột mốc III (1930 – 1931) và mở khóa Cổng Thời Gian 1930.',
+      showProgressiveHint: false,
+    };
+  }
+
+  public resetPlayerToMapCheckpoint(): void {
+    const cp =
+      this.currentMap.checkpoints[0] ??
+      this.currentMap.spawns.find((s) => s.id === this.currentMap.defaultSpawnId) ??
+      this.currentMap.spawns[0];
+
+    this.playerX = cp?.x ?? 64;
+    this.playerY = cp?.y ?? 256;
+    this.playerFacing = cp?.facing ?? 'right';
+    this.facingRight = this.playerFacing !== 'left';
+    this.store.playerPos = { x: this.playerX, y: this.playerY };
+    this.store.playerFacing = this.playerFacing;
+    this.stealthSystem.resetSuspicion();
   }
 
   public openDialogueForNpc(npcIdOrDialogueId: string, milestone?: MilestoneArtifact): boolean {
@@ -439,6 +543,7 @@ export class LuKhachKyUcGame {
       width: map.widthPx,
       height: map.heightPx,
     });
+    this.stealthSystem.initForMap(map);
 
     const spawn =
       (spawnId ? map.spawns.find((s) => s.id === spawnId) : undefined) ??
@@ -688,7 +793,26 @@ export class LuKhachKyUcGame {
       return true;
     }
 
-    // 3. Tương tác với Cột mốc lịch sử hoặc NPC / Tư liệu gắn với cột mốc
+    // 3. Tương tác với Bàn Đối Chiếu Hồ Sơ Lịch Sử (Dossier Puzzle)
+    if (candidate?.kind === 'puzzle') {
+      this.openDossierPuzzle(CH1_DOSSIER_PUZZLE);
+      return true;
+    }
+
+    // 4. Tương tác trực tiếp với Cổng Thời Gian cuối màn (Climax Gate)
+    if (candidate?.kind === 'climax_gate') {
+      const check = this.store.canTriggerChapterClimax(chapter);
+      if (!check.allowed) {
+        this.hud.showToast(
+          `🔒 Cần khôi phục đủ Cột mốc ${check.missing.join(', ')} trước khi mở Cổng Thời Gian!`
+        );
+        return false;
+      }
+      this.hud.openClimaxModal(chapter);
+      return true;
+    }
+
+    // 5. Tương tác với Cột mốc lịch sử hoặc NPC / Tư liệu gắn với cột mốc
     const nearbyMilestone = candidate?.milestone ?? this.findNearbyMilestone();
     if (nearbyMilestone) {
       this.store.collectMilestone(nearbyMilestone.roman);
@@ -726,11 +850,16 @@ export class LuKhachKyUcGame {
       return true;
     }
 
-    // 4. Tương tác với NPC không gắn cột mốc trực tiếp (hội thoại phân nhánh)
-    if (candidate?.kind === 'npc' && candidate.npc) {
-      const node = this.dialogueSystem.startDialogue(
-        candidate.npc.dialogueId || candidate.npc.npcId
-      );
+    // 6. Tương tác với NPC không gắn cột mốc trực tiếp (hội thoại phân nhánh)
+    if (candidate?.kind === 'npc') {
+      const npcDialogueKey =
+        candidate.npc?.dialogueId ||
+        candidate.npc?.npcId ||
+        candidate.interactable?.dialogueId ||
+        candidate.interactable?.id;
+      const node = npcDialogueKey
+        ? this.dialogueSystem.startDialogue(npcDialogueKey)
+        : null;
       if (node) {
         const choices = this.dialogueSystem.getAvailableChoices(
           node,
@@ -744,8 +873,8 @@ export class LuKhachKyUcGame {
       }
     }
 
-    // 5. Tương tác với vật thể / chứng cứ / bảng tin trong bản đồ 2D
-    if (candidate?.interactable && candidate.kind !== 'climax_gate') {
+    // 7. Tương tác với vật thể / chứng cứ / bảng tin trong bản đồ 2D
+    if (candidate?.interactable) {
       if (candidate.interactable.evidenceId) {
         this.inventorySystem.addItem(candidate.interactable.evidenceId, this.store);
       }
@@ -760,9 +889,8 @@ export class LuKhachKyUcGame {
       return true;
     }
 
-    // 6. Kiểm tra nếu đứng gần Cổng Thời Gian cuối màn
+    // 8. Kiểm tra nếu đứng gần Cổng Thời Gian cuối màn (1D fallback)
     const nearClimaxGate =
-      candidate?.kind === 'climax_gate' ||
       Math.abs(this.playerX - chapter.climax.gateWorldX) <= 38;
 
     if (nearClimaxGate) {
@@ -858,6 +986,14 @@ export class LuKhachKyUcGame {
       this.currentChapter.shelters,
       this.isCrouching,
       this.playerY
+    );
+  }
+
+  private hasPatrolScheduleBonus(): boolean {
+    return (
+      this.store.isPresenterMode ||
+      this.store.collectedEvidence.has('ev_ch1_patrol_schedule') ||
+      this.store.questFlags.has('ch1_pier_schedule')
     );
   }
 
@@ -977,7 +1113,10 @@ export class LuKhachKyUcGame {
 
     const allowWorldInput = this.store.isWorldInputAllowed();
 
-    const renderState: RenderState & { debugOverlay?: boolean } = {
+    const renderState: RenderState & {
+      debugOverlay?: boolean;
+      patrolActors?: PatrolActorRenderState[];
+    } = {
       chapter: this.currentChapter,
       playerX: this.playerX,
       playerY: this.playerY,
@@ -996,6 +1135,7 @@ export class LuKhachKyUcGame {
       nearbyPrompt: candidate?.promptText ?? null,
       nearbyTargetPos: candidate ? { x: candidate.x, y: candidate.y } : null,
       debugOverlay: this.store.debugOverlayEnabled,
+      patrolActors: this.stealthSystem.getRenderStates(this.hasPatrolScheduleBonus()),
     };
 
     this.renderer.render(renderState);
@@ -1019,6 +1159,25 @@ export class LuKhachKyUcGame {
     if (allowWorldInput) {
       if (!this.useLegacyRenderer) {
         this.updateNpcRoutes(dt);
+
+        const stealthRes = this.stealthSystem.update(
+          dt,
+          { x: this.playerX, y: this.playerY },
+          this.isPlayerInShelter(),
+          this.currentMap,
+          this.collisionWorld,
+          this.hasPatrolScheduleBonus()
+        );
+
+        if (stealthRes.triggeredAlertGuard && this.hazardCooldown <= 0) {
+          this.resetPlayerToMapCheckpoint();
+          this.hazardCooldown = 1.0;
+          this.sound.playAlertPushback();
+          this.hud.showToast(
+            '🚨 Đội tuần tra phát hiện! Lữ Khách đã rút lui về Đèn Báo An Toàn gần nhất (giữ nguyên mọi tư liệu).'
+          );
+          return;
+        }
       }
 
       const speed = this.useLegacyRenderer ? (this.isCrouching ? 42 : 95) : 96;

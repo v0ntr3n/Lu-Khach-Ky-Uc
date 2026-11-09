@@ -9,6 +9,7 @@ import type {
   ChapterData,
   DialogueChoice,
   DialogueNode,
+  DossierPuzzleDefinition,
   EraId,
   EvidenceItem,
   GameMode,
@@ -25,6 +26,7 @@ import { GameHUD } from './GameHUD';
 import { InventoryPanel } from './InventoryPanel';
 import { JournalPanel } from './JournalPanel';
 import { PausePanel } from './PausePanel';
+import { PuzzlePanel } from './PuzzlePanel';
 import { WorldMapPanel } from './WorldMapPanel';
 
 export type { GameMode, HudCallbacks };
@@ -36,6 +38,7 @@ export class HudController {
   public readonly journalPanel: JournalPanel;
   public readonly inventoryPanel: InventoryPanel;
   public readonly pausePanel: PausePanel;
+  public readonly puzzlePanel: PuzzlePanel;
   public readonly worldMapPanel: WorldMapPanel;
 
   constructor(callbacks: HudCallbacks) {
@@ -71,6 +74,13 @@ export class HudController {
       },
       onClose: () => {
         this.callbacks.onOverlayStateChange?.(false, 'paused');
+      },
+    });
+    this.puzzlePanel = new PuzzlePanel({
+      onSubmitDossierPuzzle: (puzzleId, selectedOptions) =>
+        this.callbacks.onSubmitDossierPuzzle?.(puzzleId, selectedOptions),
+      onClose: () => {
+        this.callbacks.onOverlayStateChange?.(false, 'puzzle');
       },
     });
     this.worldMapPanel = new WorldMapPanel({
@@ -357,9 +367,26 @@ export class HudController {
     this.callbacks.onOverlayStateChange?.(isOpen, 'paused');
   }
 
+  public openDossierPuzzleModal(
+    puzzle: DossierPuzzleDefinition,
+    attemptCount = 0
+  ): void {
+    this.puzzlePanel.open(puzzle, attemptCount);
+    this.callbacks.onOverlayStateChange?.(true, 'puzzle');
+  }
+
+  public closeDossierPuzzleModal(): void {
+    const wasOpen = this.puzzlePanel.isOpen();
+    this.puzzlePanel.close();
+    if (wasOpen) {
+      this.callbacks.onOverlayStateChange?.(false, 'puzzle');
+    }
+  }
+
   public closeAllOverlays(): void {
     this.closeClimaxModal();
     this.closeDialogueModal();
+    this.closeDossierPuzzleModal();
     if (document.getElementById('lookup-drawer')?.classList.contains('is-open')) {
       this.toggleLookupDrawer(false);
     }
@@ -453,7 +480,8 @@ export class HudController {
       this.worldMapPanel.isOpen() ||
       this.journalPanel.isOpen() ||
       this.inventoryPanel.isOpen() ||
-      this.pausePanel.isOpen()
+      this.pausePanel.isOpen() ||
+      this.puzzlePanel.isOpen()
     );
   }
 

@@ -1799,18 +1799,18 @@ function buildShadowAlleyRaw(): TiledMapJson {
   const ts = 16;
 
   const ground = createGrid(cols, rows, 1);
-  fillRect(ground, cols, rows, 32, 240, 640, 96, ts, 2);
-  fillRect(ground, cols, rows, 336, 240, 64, 240, ts, 2);
+  fillRect(ground, cols, rows, 16, 224, 672, 96, ts, 2);
+  fillRect(ground, cols, rows, 336, 224, 64, 256, ts, 2);
 
   const structures = createGrid(cols, rows, 0);
   fillRect(structures, cols, rows, 64, 48, 576, 64, ts, 9);
-  fillRect(structures, cols, rows, 224, 208, 48, 48, ts, 10);
-  fillRect(structures, cols, rows, 432, 208, 48, 48, ts, 10);
+  fillRect(structures, cols, rows, 224, 160, 48, 48, ts, 10);
+  fillRect(structures, cols, rows, 432, 160, 48, 48, ts, 10);
 
   const collision = createGrid(cols, rows, 0);
   fillRect(collision, cols, rows, 64, 48, 576, 64, ts, 16);
-  fillRect(collision, cols, rows, 224, 208, 48, 48, ts, 16);
-  fillRect(collision, cols, rows, 432, 208, 48, 48, ts, 16);
+  fillRect(collision, cols, rows, 224, 160, 48, 48, ts, 16);
+  fillRect(collision, cols, rows, 432, 160, 48, 48, ts, 16);
 
   return {
     width: cols,
@@ -1847,7 +1847,7 @@ function buildShadowAlleyRaw(): TiledMapJson {
           name: 'shelter_alley_alcove_1',
           type: 'shelter',
           x: 192,
-          y: 144,
+          y: 112,
           width: 96,
           height: 48,
           properties: [{ name: 'label', type: 'string', value: 'Hốc Tường Khuất Sáng Tây' }],
@@ -1857,7 +1857,7 @@ function buildShadowAlleyRaw(): TiledMapJson {
           name: 'shelter_alley_alcove_2',
           type: 'shelter',
           x: 400,
-          y: 144,
+          y: 112,
           width: 96,
           height: 48,
           properties: [{ name: 'label', type: 'string', value: 'Hốc Tường Khuất Sáng Đông' }],
@@ -1867,7 +1867,7 @@ function buildShadowAlleyRaw(): TiledMapJson {
           name: 'occluder_pillar_west',
           type: 'occluder',
           x: 224,
-          y: 208,
+          y: 160,
           width: 48,
           height: 48,
         },
@@ -1876,7 +1876,7 @@ function buildShadowAlleyRaw(): TiledMapJson {
           name: 'occluder_pillar_east',
           type: 'occluder',
           x: 432,
-          y: 208,
+          y: 160,
           width: 48,
           height: 48,
         },
@@ -1902,7 +1902,7 @@ function buildShadowAlleyRaw(): TiledMapJson {
           id: 401,
           name: 'default_spawn',
           type: 'spawn',
-          x: 112,
+          x: 80,
           y: 256,
           width: 16,
           height: 16,
@@ -1912,7 +1912,7 @@ function buildShadowAlleyRaw(): TiledMapJson {
           id: 402,
           name: 'from_old_street',
           type: 'spawn',
-          x: 112,
+          x: 80,
           y: 256,
           width: 16,
           height: 16,
@@ -1923,7 +1923,7 @@ function buildShadowAlleyRaw(): TiledMapJson {
           name: 'from_small_pier',
           type: 'spawn',
           x: 352,
-          y: 400,
+          y: 432,
           width: 16,
           height: 16,
           properties: [{ name: 'facing', type: 'string', value: 'up' }],
@@ -1932,7 +1932,7 @@ function buildShadowAlleyRaw(): TiledMapJson {
           id: 404,
           name: 'from_archive_courtyard',
           type: 'spawn',
-          x: 576,
+          x: 624,
           y: 256,
           width: 16,
           height: 16,
@@ -1942,7 +1942,7 @@ function buildShadowAlleyRaw(): TiledMapJson {
           id: 405,
           name: 'portal_to_old_street_from_alley',
           type: 'portal',
-          x: 32,
+          x: 16,
           y: 256,
           width: 32,
           height: 32,
@@ -1972,7 +1972,7 @@ function buildShadowAlleyRaw(): TiledMapJson {
           id: 407,
           name: 'portal_to_archive_courtyard',
           type: 'portal',
-          x: 640,
+          x: 656,
           y: 256,
           width: 32,
           height: 32,
@@ -1989,18 +1989,18 @@ function buildShadowAlleyRaw(): TiledMapJson {
           id: 501,
           name: 'patrol_alley_1',
           type: 'patrol',
-          x: 208,
-          y: 304,
-          width: 288,
+          x: 256,
+          y: 240,
+          width: 224,
           height: 32,
           polyline: [
             { x: 0, y: 0 },
-            { x: 288, y: 0 },
+            { x: 224, y: 0 },
           ],
           properties: [
             { name: 'speed', type: 'float', value: 52 },
-            { name: 'coneLength', type: 'float', value: 104 },
-            { name: 'coneAngleRad', type: 'float', value: 0.78 },
+            { name: 'coneLength', type: 'float', value: 96 },
+            { name: 'coneAngleRad', type: 'float', value: 0.72 },
             { name: 'label', type: 'string', value: 'Mật Thám Tuần Tra Hẻm Tối' },
             {
               name: 'warningToast',
@@ -2083,13 +2083,23 @@ function buildArchiveCourtyardRaw(): TiledMapJson {
       lightOccluders: [
         {
           id: 101,
-          name: 'shelter_courtyard_porch',
+          name: 'shelter_courtyard_west',
           type: 'shelter',
-          x: 256,
-          y: 176,
-          width: 192,
+          x: 160,
+          y: 192,
+          width: 96,
           height: 48,
-          properties: [{ name: 'label', type: 'string', value: 'Hiên Sân Kho Lưu Trữ' }],
+          properties: [{ name: 'label', type: 'string', value: 'Mái Hiên Tây Sân Kho Lưu Trữ' }],
+        },
+        {
+          id: 102,
+          name: 'shelter_courtyard_east',
+          type: 'shelter',
+          x: 448,
+          y: 192,
+          width: 96,
+          height: 48,
+          properties: [{ name: 'label', type: 'string', value: 'Mái Hiên Đông Sân Kho Lưu Trữ' }],
         },
       ],
       npcs: [
@@ -2155,7 +2165,7 @@ function buildArchiveCourtyardRaw(): TiledMapJson {
           name: 'from_secret_archive',
           type: 'spawn',
           x: 352,
-          y: 224,
+          y: 216,
           width: 16,
           height: 16,
           properties: [{ name: 'facing', type: 'string', value: 'down' }],
@@ -2188,6 +2198,32 @@ function buildArchiveCourtyardRaw(): TiledMapJson {
             { name: 'destinationSpawn', type: 'string', value: 'from_archive_courtyard' },
             { name: 'transition', type: 'string', value: 'fade' },
             { name: 'label', type: 'string', value: 'Phòng Lưu Trữ Bí Mật' },
+          ],
+        },
+      ],
+      patrolPaths: [
+        {
+          id: 501,
+          name: 'patrol_courtyard_1',
+          type: 'patrol',
+          x: 288,
+          y: 256,
+          width: 160,
+          height: 32,
+          polyline: [
+            { x: 0, y: 0 },
+            { x: 160, y: 0 },
+          ],
+          properties: [
+            { name: 'speed', type: 'float', value: 44 },
+            { name: 'coneLength', type: 'float', value: 84 },
+            { name: 'coneAngleRad', type: 'float', value: 0.65 },
+            { name: 'label', type: 'string', value: 'Lính Gác Sân Kho Lưu Trữ' },
+            {
+              name: 'warningToast',
+              type: 'string',
+              value: 'Lính gác Sân Lưu Trữ phát hiện! Hãy ẩn vào mái hiên!',
+            },
           ],
         },
       ],
@@ -2261,37 +2297,41 @@ function buildSecretArchiveRaw(): TiledMapJson {
       interactables: [
         {
           id: 301,
-          name: 'ev_ch1_unification_appeal',
-          type: 'evidence',
-          x: 192,
+          name: 'puzzle_ch1_unification_dossier',
+          type: 'puzzle',
+          x: 240,
           y: 176,
-          width: 16,
-          height: 16,
+          width: 32,
+          height: 24,
           properties: [
-            { name: 'kind', type: 'string', value: 'evidence' },
+            { name: 'kind', type: 'string', value: 'puzzle' },
             {
               name: 'label',
               type: 'string',
-              value: 'Chính Cương Vắn Tắt & Sách Lược Vắn Tắt (2/1930)',
+              value: 'Bàn Đối Chiếu Cương Lĩnh Hợp Nhất (02/1930)',
             },
-            { name: 'actionId', type: 'string', value: 'inspect_unification_appeal' },
-            { name: 'grantsFlag', type: 'string', value: 'ch1.appeal_collected' },
-            { name: 'milestoneId', type: 'string', value: 'III' },
+            { name: 'actionId', type: 'string', value: 'open_dossier_puzzle' },
+            { name: 'grantsFlag', type: 'string', value: 'ch1_dossier_verified' },
             { name: 'evidenceId', type: 'string', value: 'ev_ch1_unification_appeal' },
+            { name: 'milestoneId', type: 'string', value: 'III' },
           ],
         },
         {
           id: 302,
           name: 'climax_gate_1930',
           type: 'climax_gate',
-          x: 240,
-          y: 96,
+          x: 368,
+          y: 176,
           width: 32,
           height: 32,
           properties: [
             { name: 'kind', type: 'string', value: 'climax_gate' },
-            { name: 'label', type: 'string', value: 'Bàn Hội Nghị Hợp Nhất 3/2/1930' },
-            { name: 'actionId', type: 'string', value: 'open_climax' },
+            {
+              name: 'label',
+              type: 'string',
+              value: 'Cổng Thời Gian 1930 — Ngọn Đuốc Cương Lĩnh',
+            },
+            { name: 'actionId', type: 'string', value: 'trigger_climax' },
             { name: 'milestoneId', type: 'string', value: 'III' },
           ],
         },
@@ -2307,6 +2347,27 @@ function buildSecretArchiveRaw(): TiledMapJson {
             { name: 'kind', type: 'string', value: 'checkpoint' },
             { name: 'label', type: 'string', value: 'Bàn Lưu Trữ Mật' },
             { name: 'actionId', type: 'string', value: 'activate_checkpoint' },
+          ],
+        },
+        {
+          id: 304,
+          name: 'ev_ch1_unification_appeal',
+          type: 'evidence',
+          x: 160,
+          y: 176,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'evidence' },
+            {
+              name: 'label',
+              type: 'string',
+              value: 'Chính Cương Vắn Tắt & Sách Lược Vắn Tắt (2/1930)',
+            },
+            { name: 'actionId', type: 'string', value: 'inspect_unification_appeal' },
+            { name: 'grantsFlag', type: 'string', value: 'ch1.appeal_collected' },
+            { name: 'milestoneId', type: 'string', value: 'III' },
+            { name: 'evidenceId', type: 'string', value: 'ev_ch1_unification_appeal' },
           ],
         },
       ],

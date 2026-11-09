@@ -403,6 +403,51 @@ export interface EvidenceItem {
   grantsFlag?: string;
 }
 
+export type StealthAlertState = 'calm' | 'suspicious' | 'alert';
+
+export interface PatrolActorRenderState {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  facingAngleRad: number;
+  coneLength: number;
+  coneAngleRad: number;
+  alertState: StealthAlertState;
+  suspicionLevel: number; // 0..1
+}
+
+export interface DossierFragmentOption {
+  id: string;
+  slotId: string;
+  text: string;
+  isAuthentic: boolean;
+  explanation: string;
+}
+
+export interface DossierSlotDefinition {
+  id: string;
+  label: string;
+  prompt: string;
+  options: DossierFragmentOption[];
+}
+
+export interface DossierPuzzleDefinition {
+  id: string;
+  eraId: EraId;
+  zoneId: string;
+  title: string;
+  subtitle: string;
+  instruction: string;
+  slots: DossierSlotDefinition[];
+  progressiveHint: string;
+  textbookCitation: string;
+  provenance: ProvenanceMetadata;
+  rewardFlag: string;
+  rewardEvidenceId?: string;
+  rewardMilestone?: RomanMilestoneId;
+}
+
 export interface GameSettings {
   muted: boolean;
   reducedMotion: boolean;
@@ -452,5 +497,12 @@ export interface HudCallbacks {
   onManualSave?: () => void;
   onResetSave?: () => void;
   onUpdateSettings?: (partial: Partial<GameSettings>) => void;
+  onSubmitDossierPuzzle?: (puzzleId: string, selectedOptionIds: Record<string, string>) => {
+    solved: boolean;
+    attemptCount: number;
+    feedback: string;
+    showProgressiveHint: boolean;
+  };
 }
+
 

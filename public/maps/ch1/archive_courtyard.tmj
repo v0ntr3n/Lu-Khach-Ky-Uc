@@ -9095,17 +9095,33 @@
       "objects": [
         {
           "id": 101,
-          "name": "shelter_courtyard_porch",
+          "name": "shelter_courtyard_west",
           "type": "shelter",
-          "x": 256,
-          "y": 176,
-          "width": 192,
+          "x": 160,
+          "y": 192,
+          "width": 96,
           "height": 48,
           "properties": [
             {
               "name": "label",
               "type": "string",
-              "value": "Hiên Sân Kho Lưu Trữ"
+              "value": "Mái Hiên Tây Sân Kho Lưu Trữ"
+            }
+          ]
+        },
+        {
+          "id": 102,
+          "name": "shelter_courtyard_east",
+          "type": "shelter",
+          "x": 448,
+          "y": 192,
+          "width": 96,
+          "height": 48,
+          "properties": [
+            {
+              "name": "label",
+              "type": "string",
+              "value": "Mái Hiên Đông Sân Kho Lưu Trữ"
             }
           ]
         }
@@ -9250,7 +9266,7 @@
           "name": "from_secret_archive",
           "type": "spawn",
           "x": 352,
-          "y": 224,
+          "y": 216,
           "width": 16,
           "height": 16,
           "properties": [
@@ -9331,7 +9347,54 @@
       "type": "objectgroup",
       "visible": true,
       "opacity": 1,
-      "objects": []
+      "objects": [
+        {
+          "id": 501,
+          "name": "patrol_courtyard_1",
+          "type": "patrol",
+          "x": 288,
+          "y": 256,
+          "width": 160,
+          "height": 32,
+          "polyline": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 160,
+              "y": 0
+            }
+          ],
+          "properties": [
+            {
+              "name": "speed",
+              "type": "float",
+              "value": 44
+            },
+            {
+              "name": "coneLength",
+              "type": "float",
+              "value": 84
+            },
+            {
+              "name": "coneAngleRad",
+              "type": "float",
+              "value": 0.65
+            },
+            {
+              "name": "label",
+              "type": "string",
+              "value": "Lính Gác Sân Kho Lưu Trữ"
+            },
+            {
+              "name": "warningToast",
+              "type": "string",
+              "value": "Lính gác Sân Lưu Trữ phát hiện! Hãy ẩn vào mái hiên!"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": 12,
