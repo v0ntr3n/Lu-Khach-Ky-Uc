@@ -486,7 +486,7 @@ export class PixelRenderer {
     const { ctx } = this;
     ctx.save();
 
-    // 1. Vầng sáng đèn lồng ấm (Warm Lantern & Lamp Pools) quanh Checkpoints và Portals
+    // 1. Vầng sáng đèn lồng ấm (Warm Lantern & Lamp Pools) quanh Checkpoints và Puzzles
     for (const inter of mapData.interactables) {
       if (inter.kind !== 'checkpoint' && inter.kind !== 'puzzle') continue;
       const lx = Math.round(inter.x - cameraX);
@@ -499,19 +499,42 @@ export class PixelRenderer {
       ctx.fillRect(lx - 24, ly - 24, 48, 48);
     }
 
-    // 2. Vòng gợn mưa 3-frame trên mặt đá (PixelFX Rain Splash Ripples) khi ngoài trời & không giảm chuyển động
+    // 2. Hiệu ứng môi trường theo từng Thời kỳ Lịch sử (chỉ khi ngoài trời & không bật giảm chuyển động)
     if (!isInterior && !reducedMotion) {
       for (let i = 0; i < 10; i++) {
         const phase = (timeSec * 2.4 + i * 0.37) % 1;
         const rx = Math.round(((i * 97 + 44) % mapData.widthPx) - cameraX);
         const ry = Math.round(((i * 61 + 120) % mapData.heightPx) - cameraY);
         if (rx < 4 || rx > INTERNAL_WIDTH - 4 || ry < 4 || ry > INTERNAL_HEIGHT - 4) continue;
-        const radius = phase < 0.33 ? 1 : phase < 0.66 ? 2 : 3;
-        ctx.fillStyle =
-          phase < 0.66 ? 'rgba(230, 229, 220, 0.35)' : 'rgba(212, 165, 93, 0.22)';
-        ctx.fillRect(rx - radius, ry, 1, 1);
-        ctx.fillRect(rx + radius, ry, 1, 1);
-        ctx.fillRect(rx, ry - 1, 1, 1);
+
+        if (mapData.eraId === '1930') {
+          // 1930: Vòng gợn mưa 3-frame trên mặt đá Cửu Long (Hương Cảng)
+          const radius = phase < 0.33 ? 1 : phase < 0.66 ? 2 : 3;
+          ctx.fillStyle =
+            phase < 0.66 ? 'rgba(230, 229, 220, 0.35)' : 'rgba(212, 165, 93, 0.22)';
+          ctx.fillRect(rx - radius, ry, 1, 1);
+          ctx.fillRect(rx + radius, ry, 1, 1);
+          ctx.fillRect(rx, ry - 1, 1, 1);
+        } else if (mapData.eraId === '1945') {
+          // 1945: Lá đa vàng thu Tân Trào & Nắng thu Ba Đình (#D4A55D)
+          const driftX = Math.round(Math.sin(timeSec * 1.8 + i) * 3);
+          ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+          ctx.fillRect(rx + driftX, ry, 2, 1);
+          ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+          ctx.fillRect(rx + driftX + 1, ry + 1, 1, 1);
+        } else if (mapData.eraId === '1954_1975') {
+          // 1954–1975: Sương núi Pha Đin & Tàn lửa đuốc hành quân (#DF6B57 / #8A5A2B)
+          const riseY = Math.round(phase * 6);
+          ctx.fillStyle =
+            i % 2 === 0 ? PALETTE_12.CRIMSON_VERMILION : PALETTE_12.BRONZE_ANTIQUE;
+          ctx.fillRect(rx, ry - riseY, 2, 1);
+        } else {
+          // 1986–2045: Hạt sáng lưu trữ số vàng đồng Sơn Mài (#D4A55D / #F4EFE4)
+          ctx.fillStyle =
+            phase < 0.5 ? PALETTE_12.BRONZE_BRIGHT : PALETTE_12.PARCHMENT_LIGHT;
+          ctx.fillRect(rx, ry, 1, 2);
+          ctx.fillRect(rx - 1, ry + 1, 3, 1);
+        }
       }
     }
 

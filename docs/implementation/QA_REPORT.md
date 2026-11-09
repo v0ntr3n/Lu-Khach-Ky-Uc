@@ -157,6 +157,32 @@ Tài liệu này cập nhật liên tục kết quả kiểm thử tự động 
 - **Browser E2E Tests (`npm run test:e2e`)**: **20/20 passed** trên Chromium (`m0_stabilization`: 5, `m1_topdown`: 4, `m2_exploration`: 3, `m3_systems_ui`: 3, `m4_chapter1_playthrough`: 2, `m5_polish_accessibility`: 3).
 - **Visual Audit Screenshots**: Đã kiểm tra trực quan `m5_desktop_polished.png` (`1280×800`) và `m5_mobile_landscape.png` (`844×390`).
 
+---
 
+## Milestone M6 — Additional Chapters (II, III, IV), CI & Final QA (Hoàn tất)
 
+### 1. Hạng mục đã kiểm chứng
 
+1. **Mở rộng Bản đồ Tiled 2D Top-Down cho Chương II, III, IV (`14` bản đồ liên thông trên 4 Thời kỳ)**:
+   - **Chương II (1945)**: `public/maps/ch2/tan_trao_banyan.tmj` (`44×32` ô) ⇄ `public/maps/ch2/ba_dinh_square.tmj` (`48×34` ô).
+   - **Chương III (1954–1975)**: `public/maps/ch3/pha_din_pass.tmj` (`46×32` ô) ⇄ `public/maps/ch3/spring_1975_corridor.tmj` (`48×34` ô).
+   - **Chương IV (1986–2045)**: `public/maps/ch4/doi_moi_avenue.tmj` (`46×32` ô) ⇄ `public/maps/ch4/nexus_2045_plaza.tmj` (`48×34` ô).
+   - Công cụ `npm run validate:maps` kiểm định toàn bộ **14/14 bản đồ** và đồ thị `ALL_ERA_ZONES` với **0 lỗi** (100% điểm xuất phát hợp lệ, khoảng cách an toàn với portal `>= 20px`, BFS `16×16` tiếp cận được mọi lối ra và vật thể tương tác).
+2. **Cơ chế Gameplay Đặc trưng Theo Từng Thời kỳ (`src/data/chapters/ch2_3_4_mechanics.ts`)**:
+   - **Chương II (1945 — Mạng Lưới Giao Liên Khẩn & Cửa Sổ Thời Cơ)**: Bàn điều phối Quân lệnh số 1 (`CH2_DISPATCH_NETWORK_PUZZLE`, mở khóa Mốc V + `ev_ch2_military_order_no1`).
+   - **Chương III (1954–1975 — Điều Phối Tuyến Hậu Cần Pha Đin & Hai Chiến Lược Cách Mạng)**:Sa bàn điều phối hậu cần chiến dịch (`CH3_SUPPLY_LOGISTICS_PUZZLE`, mở khóa Mốc VIII + `ev_ch3_two_strategies_directive`).
+   - **Chương IV (1986–2045 — Ma Trận Quyết Sách Đổi Mới & Kiến Trúc Tầm Nhìn 2045)**: Bàn quy hoạch nhân quả từ Đại hội VI (1986), Cương lĩnh 2011 đến Đại hội XIII (2021) (`CH4_CAUSAL_POLICY_PUZZLE`, mở khóa Mốc XI + `ev_ch4_industrial_blueprint`).
+3. **Kiểm định Nguồn sử liệu & Phân định Viễn cảnh 2045 (`tests/unit/m6_chapters_provenance.test.ts`)**:
+   - 100% sự kiện lịch sử (`historical_fact`) đều trích dẫn đúng chương, mục và số trang của *Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021)*.
+   - Nhân vật dẫn đường được gắn nhãn `fictional_npc`, và bối cảnh kiến trúc năm 2045 (`dlg_archivist_2045`) được gắn nhãn `speculative_2045` (`Viễn cảnh Nghệ thuật 2045 dựa trên Văn kiện Đại hội XIII`).
+4. **Hiệu năng & CI Tự động (`.github/workflows/ci.yml`)**:
+   - Thời gian tính toán bước vật lý/logic trung bình trong 30 khung hình liên tiếp đạt **< 1.5ms/frame** (ngưỡng yêu cầu `< 8ms/frame`, đảm bảo 60 FPS ổn định).
+   - Thiết lập quy trình GitHub Actions CI chạy tự động `validate:maps`, `build`, `test:unit` và `test:e2e` (Playwright Chromium).
+
+### 2. Kết quả thực thi kiểm thử tổng thể cuối dự án (M0 → M6)
+
+- **Map & Multi-Era WorldGraph Validator (`npm run validate:maps`)**: **14/14 zones PASS** (0 lỗi).
+- **Build & Typecheck (`npm run build`)**: Pass (`dist/index.html` 47.17 kB, `dist/assets/index-*.js` 299.06 kB / gzip 77.34 kB).
+- **Unit & Map Validation Tests (`npm run test:unit`)**: **36/36 passed** across 8 test files (`m0_stabilization`: 12, `m1_runtime`: 4, `m1_maps`: 4, `m2_world_graph`: 4, `m3_rpg_systems`: 4, `m4_vertical_slice`: 2, `m5_art_accessibility`: 3, `m6_chapters_provenance`: 3).
+- **Browser E2E Tests (`npm run test:e2e`)**: **23/23 passed** trên Chromium (`m0_stabilization`: 5, `m1_topdown`: 4, `m2_exploration`: 3, `m3_systems_ui`: 3, `m4_chapter1_playthrough`: 2, `m5_polish_accessibility`: 3, `m6_full_game_qa`: 3).
+- **Visual Audit Screenshots**: Đã kiểm tra trực quan `m6_ch2_ba_dinh_1945.png`, `m6_ch3_spring_1975.png` và `m6_ch4_nexus_2045.png`.

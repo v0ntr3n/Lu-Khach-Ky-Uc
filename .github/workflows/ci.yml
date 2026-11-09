@@ -1,0 +1,42 @@
+name: Lữ Khách Ký Ức (1930 – 2045) CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'feat/**'
+  pull_request:
+
+jobs:
+  qa-build-and-test:
+    name: Map Validation, TypeScript Build, Vitest & Playwright E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate Tiled maps & WorldGraph (14 maps across Chapters I–IV)
+        run: npm run validate:maps
+
+      - name: TypeScript typecheck & production build
+        run: npm run build
+
+      - name: Run unit & map validation tests (Vitest)
+        run: npm run test:unit
+
+      - name: Install Playwright Chromium browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run end-to-end browser tests (Playwright)
+        run: npm run test:e2e

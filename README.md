@@ -1,57 +1,68 @@
-# Lữ Khách Ký Ức (1930 – 2045) — HD-2D Historical Pixel Game
+# Lữ Khách Ký Ức: Biên Niên Sử Sơn Mài (1930 – 2045)
 
-Tựa game **Đi Cảnh Giải Đố & Điện Ảnh Pixel HD-2D (Side-Scrolling Narrative Puzzle)** lấy cảm hứng từ *Valiant Hearts* và *Octopath Traveler*, được xây dựng trên hệ thống thiết kế **Sơn Mài & Giấy Dó** (`pbakaus/impeccable`) và bám sát **Giáo trình Lịch sử Đảng Cộng sản Việt Nam** (Bộ GD&ĐT, NXB Chính trị quốc gia Sự thật, 2021 — 440 trang).
+Tựa game **2D Top-Down RPG Exploration & Giải Đố Lịch Sử (3/4 Overhead Perspective, 320×180 Integer-Scaled)** lấy cảm hứng từ cấu trúc bản đồ liên thông của *WorkAdventure* và phong cách thị giác **Sơn Mài & Giấy Dó** (`pbakaus/impeccable`), bám sát toàn văn **Giáo trình Lịch sử Đảng Cộng sản Việt Nam** (Bộ GD&ĐT, NXB Chính trị quốc gia Sự thật, 2021 — 440 trang).
 
 ---
 
-## 1. Cốt Truyện & Lối Chơi ("Lữ Khách Ký Ức 2045")
+## 1. Bối Cảnh & 4 Chương Lịch Sử (14 Bản Đồ Tiled `.tmj` Liên Thông)
 
-Năm **2045** (Kỷ niệm 100 năm thành lập nước Việt Nam Dân chủ Cộng hòa / Cộng hòa Xã hội chủ nghĩa Việt Nam), một **Lữ Khách Ký Ức** bước qua **Vết Nứt Không Gian – Thời Gian (16-Shard Tectonic Rift)** để quay ngược về 4 thời kỳ lịch sử trọng đại:
+Năm **2045** (Kỷ niệm 100 năm thành lập nước), một **Lữ Khách Ký Ức** bước qua **Vết Nứt Không Gian – Thời Gian (16-Shard Tectonic Rift)** để khám phá 14 khu vực liên thông qua 4 thời kỳ lịch sử trọng đại và khôi phục **12 Cột Mốc La Mã (`I – XII`)**:
 
-| Chương | Thời Kỳ & Bối Cảnh Pixel HD-2D | Tương Tác Đi Cảnh (Mức 1 — Điện ảnh) | Climax Cuối Chương (A: Quyết Sách + B: Đại Cảnh) |
+| Chương | Thời Kỳ & Cụm Bản Đồ Tiled (`.tmj`) | Cơ Chế RPG & Giải Đố Lịch Sử | Climax Cuối Chương (Bước A + Bước B) |
 | :--- | :--- | :--- | :--- |
-| **Chương I** | **1930 · Đêm Mưa Cửu Long (Hương Cảng)** | Ẩn mình dưới bóng hiên nhà tránh đèn rọi mật thám để thu thập 3 mảnh văn kiện hợp nhất. | **A:** Xác lập *Cương lĩnh chính trị đầu tiên* (`tr. 36–43`).<br>**B:** Đại cảnh thắp đuốc Cương lĩnh & bão táp Xô Viết Nghệ Tĩnh. |
-| **Chương II** | **1945 · Tân Trào → Quảng Trường Ba Đình** | Kích hoạt các trạm truyền tin thần tốc từ Tân Trào về Hà Nội – Huế – Sài Gòn trước khi quân Đồng minh vào. | **A:** Giải mã *Chỉ thị Nhật – Pháp bắn nhau* (`tr. 101–124`).<br>**B:** Đại cảnh kéo Quốc kỳ tại Quảng trường Ba Đình ngày 2/9/1945. |
-| **Chương III** | **1945–1975 · Điện Biên Phủ & Mùa Xuân 1975** | Đẩy xe đạp thồ vượt đèo dưới pháo sáng và kết nối 5 cánh quân thần tốc mùa xuân 1975. | **A:** Quyết sách *"Đánh chắc, tiến chắc"* & *Đại thắng 1975* (`tr. 172–237`).<br>**B:** Cờ tung bay trên hầm Đờ Cát & Xe tăng tiến vào Dinh Độc Lập 30/4/1975. |
-| **Chương IV** | **1986–2045 · Đại Lộ Đổi Mới → Kỷ Nguyên Số** | Bước dọc con phố năm 1986, kích hoạt các trụ cột Đổi Mới để biến đổi kiến trúc thành siêu đô thị 2045. | **A:** Đường lối *Đổi Mới toàn diện* Đại hội VI–XIII (`tr. 256–395`).<br>**B:** Đại cảnh đoàn tàu cao tốc & bầu trời pháo hoa Kỷ nguyên vươn mình 2045. |
+| **Chương I** | **1930 · Đêm Mưa Cửu Long (Hương Cảng)**<br>8 bản đồ: `harbor_square`, `warehouse_interior`, `old_street`, `small_pier`, `safehouse_interior`, `shadow_alley`, `archive_courtyard`, `secret_archive` | Khám phá đa khu vực, đối thoại NPC đa lựa chọn, thu thập 6 tư liệu mật, ẩn nấp dưới mái hiên tránh góc nhìn nón tuần tra (`StealthSystem`), và đối chiếu 3 mảnh ghép *Cương lĩnh chính trị đầu tiên* trên Bàn Kiểm Định Hồ Sơ (`PuzzlePanel`). | **A:** Xác lập *Cương lĩnh chính trị đầu tiên* (`tr. 36–43`).<br>**B:** Đại cảnh thắp đuốc Cương lĩnh & bão táp Xô Viết Nghệ Tĩnh. |
+| **Chương II** | **1945 · Tân Trào → Quảng Trường Ba Đình**<br>2 bản đồ: `tan_trao_banyan`, `ba_dinh_square` | Khôi phục các mốc chuyển hướng chiến lược (1936–1939, Trung ương 8 năm 1941) và phát lệnh Tổng khởi nghĩa Tháng Tám từ Cây đa Tân Trào về Ba Đình. | **A:** Giải mã *Chỉ thị Nhật – Pháp bắn nhau* & Thời cơ Tháng Tám (`tr. 101–124`).<br>**B:** Đại cảnh kéo Quốc kỳ tại Quảng trường Ba Đình 2/9/1945. |
+| **Chương III** | **1954–1975 · Đèo Pha Đin → Mùa Xuân 1975**<br>2 bản đồ: `pha_din_pass`, `spring_1975_corridor` | Kết nối tuyến lửa xe đạp thồ Điện Biên Phủ (1954), Nghị quyết 15 (1959) và bản đồ tác chiến 5 cánh quân thần tốc mùa xuân 1975. | **A:** Quyết sách *"Đánh chắc, tiến chắc"* & *Đại thắng Mùa Xuân 1975* (`tr. 172–237`).<br>**B:** Cờ chiến thắng tung bay & Xe tăng tiến vào Dinh Độc Lập 30/4/1975. |
+| **Chương IV** | **1986–2045 · Đại Lộ Đổi Mới → Kỷ Nguyên Số**<br>2 bản đồ: `doi_moi_avenue`, `nexus_2045_plaza` | Khám phá bước ngoặt Đổi Mới Đại hội VI (1986), Cương lĩnh 1991/2011 và hoàn thiện hệ thống lưu trữ quốc gia hướng tới mục tiêu 2030 – 2045. | **A:** Đường lối *Đổi Mới toàn diện* Đại hội VI–XIII (`tr. 256–395`).<br>**B:** Đại cảnh đoàn tàu cao tốc & bầu trời pháo hoa Kỷ nguyên vươn mình 2045. |
 
 ---
 
-## 2. Điều Khiển & Công Cụ Hỗ Trợ Giảng Viên
+## 2. Bảng Điều Khiển & Phím Tắt
 
-- **Di chuyển**: Phím `A / D` hoặc `← / →` (hoặc nút cảm ứng trên màn hình).
-- **Tương tác / Thu thập Di vật / Trò chuyện NPC**: Phím `E` hoặc `Space`.
-- **Ẩn mình vào bóng tối / Trạm trú ẩn**: Phím `S` hoặc `↓` (hoặc đứng dưới mái hiên có biểu tượng bóng râm).
-- **Tra cứu Cố vấn Sử học (AI Lookup kèm số trang Giáo trình 2021)**: Phím `Q`.
-- **Chế độ Giảng Viên (`⚡ Mở Khóa Toàn Bộ / Tự Động Dẫn Đường`)**: Nút trên thanh Topbar cho phép nhảy tức thì tới bất kỳ mốc nào trong **12 Mốc La Mã (`I – XII`)** hoặc tự động điều khiển Lữ Khách đi qua toàn bộ 4 chương.
+| Phím / Thao tác | Chức năng |
+| :--- | :--- |
+| `W / A / S / D` hoặc `↑ / ← / ↓ / →` | Di chuyển 8 hướng chuẩn hóa vận tốc chéo (`1 / √2`) trên mặt phẳng 2D |
+| `Shift` (hoặc đứng dưới mái hiên / tán đa) | Ẩn mình trong vùng bóng tối (`ShelterZone`) tránh nón tầm nhìn tuần tra |
+| `E` hoặc `Space` (Nhấn 1 lần) | Tương tác ngữ cảnh: Trò chuyện NPC, Thu thập Tư liệu, Mở Cổng/Cửa, Kích hoạt Đèn An Toàn, Mở Bàn Kiểm Định |
+| `J` | Mở / Đóng **Nhật Ký Hành Trình & Nhiệm Vụ Lịch Sử** (`#journal-modal`) |
+| `I` | Mở / Đóng **Túi Tư Liệu & Bằng Chứng Lịch Sử** (`#inventory-modal`) |
+| `M` | Mở / Đóng **Sơ Đồ Liên Thông Khu Vực & Dịch Chuyển Nhanh** (`#world-map-modal`) |
+| `Q` | Mở / Đóng **Bàn Cố Vấn Sử Học AI** kèm số trang Giáo trình 2021 (`#lookup-drawer`) |
+| `H` | Bật / Tắt nhanh dòng gợi ý dẫn đường trên HUD (`#hud-active-objective-hint`) |
+| `F3` | Bật / Tắt **Lớp Phủ Kiểm Định Bản Đồ (Debug Overlay)** hiển thị hộp va chạm, cổng, lộ trình tuần tra |
+| `Tab` hoặc `Esc` | Mở **Tạm Dừng & Thiết Lập Trợ Năng** (`#pause-modal`) / Đóng cửa sổ đang mở |
+| `1 .. 4` | Chọn nhanh nhánh hội thoại NPC hoặc phương án Quyết sách Climax |
 
 ---
 
-## 3. Chạy Dự Án & Kiến Trúc Thư Mục (`Vite + TypeScript`)
+## 3. Cài Đặt, Kiểm Định Bản Đồ & Chạy Kiểm Thử
 
 ```bash
 npm install
-npm run dev      # Chạy máy chủ phát triển Vite
-npm run build    # Kiểm tra kiểu TypeScript & đóng gói ra thư mục dist/
-```
 
-- `src/types/game.ts`: Định nghĩa cấu trúc dữ liệu Chương, Cột mốc La Mã (`I – XII`), Cổ vật, Vùng tương tác và Đại cảnh Climax.
-- `src/data/chronicles.ts`: Toàn bộ dữ liệu lịch sử, câu hỏi quyết sách và trích dẫn số trang *Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021)*.
-- `src/engine/OpeningFracture.ts`: Hiệu ứng mở màn 4.8 giây nứt vỡ màng đen 16 mảnh đa giác (`mulberry32`).
-- `src/engine/SpriteAtlas.ts`: Ma trận điểm ảnh 16-bit vẽ thủ tục cho Lữ Khách 2045, NPC lịch sử, xe đạp thồ, xe tăng 390, tàu điện 2045.
-- `src/engine/PixelRenderer.ts`: Bộ dựng hình Canvas 2D `320×180` Integer-Scaled với 4 lớp Parallax và ánh sáng Chiaroscuro Sơn Mài.
-- `src/engine/SoundSynth.ts`: Bộ tổng hợp âm thanh Chiptune Ngũ Cung 8-bit bằng Web Audio API (0KB tài nguyên ngoài).
-- `src/ui/HudController.ts`: Điều khiển cột mục lục `1/5` (`I – XII`), hộp thoại RPG, Climax Modal và Bàn Cố vấn Sử học.
+# 1. Chạy máy chủ phát triển Vite
+npm run dev
+
+# 2. Kiểm định toàn bộ 14 bản đồ Tiled (.tmj) và đồ thị liên thông
+npm run validate:maps
+
+# 3. Kiểm tra kiểu TypeScript & đóng gói bản dựng sản xuất (dist/)
+npm run build
+
+# 4. Chạy bộ kiểm thử đơn vị Vitest (M0 -> M6)
+npm run test:unit
+
+# 5. Chạy bộ kiểm thử End-to-End Playwright Chromium trên trình duyệt thực
+npm run test:e2e
+```
 
 ---
 
-## Kế hoạch phát triển RPG Exploration — map kiểu Avatar / WorkAdventure
+## 4. Nguyên Tắc Minh Bạch Nguồn Sử Liệu & Tài Nguyên Đồ Họa
 
-**Lưu ý:** Code hiện tại vẫn là side-scroller Canvas 2D; các mục bên dưới là **kế hoạch chưa triển khai**.
-
-- [Bản quyết định kiến trúc top-down, bản đồ, tương tác và roadmap](docs/plans/WORKADVENTURE_TOPDOWN.md) — tham khảo WorkAdventure; thiết kế game chơi đơn, local-first.
-- [RPG Exploration và gameplay từng chương](docs/plans/RPG_EXPLORATION.md)
-- [Bản đồ cũ, lưu để đối chiếu khi chuyển kiến trúc](docs/plans/WORLD_MAP.md)
-- [Kế hoạch chọn sprite từ Pixel Art Atlas](docs/plans/SPRITE_ATLAS.md)
-
-Mốc kiểm chứng đầu tiên: Phaser 3 + Tiled, nhân vật di chuyển 8 hướng, camera, vật cản, một map ngoài trời và một map bên trong nhà có cổng trở về. Không đưa multiplayer hoặc server WorkAdventure vào game.
+1. **Phân định rõ ràng 3 cấp độ nguồn dữ liệu (`ProvenanceType`)**:
+   - `historical_fact` (**Sử liệu xác thực**): Sự kiện, ngày tháng, văn kiện và ý nghĩa lịch sử trích dẫn trực tiếp kèm số trang từ *Giáo trình Lịch sử Đảng Cộng sản Việt Nam (Bộ GD&ĐT, NXB Chính trị quốc gia Sự thật, 2021)*.
+   - `fictional_npc` (**Nhân vật / tình tiết hư cấu dẫn chuyện**): Các nhân vật giao liên, công nhân bến cảng, học giả lưu trữ được gắn nhãn minh bạch trên hộp thoại và nhật ký.
+   - `speculative_2045` (**Khung viễn tưởng Kỷ nguyên số 2045**): Bối cảnh Lữ Khách Lưu Trữ Quốc Gia năm 2045 kỷ niệm 100 năm lập nước.
+2. **Tài nguyên Pixel Art & Sprite Atlas (`src/data/provenance/sprite_atlas_manifest.ts`)**:
+   - Toàn bộ nhân vật 4 hướng (`down`, `up`, `left`, `right`) và tĩnh vật 16×16 tuân thủ nghiêm ngặt bảng 12 sắc độ **Sơn Mài & Giấy Dó** (`DESIGN.md`) và quy tắc `imageSmoothingEnabled = false` (`docs/plans/SPRITE_ATLAS.md`).

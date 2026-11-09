@@ -548,6 +548,346 @@ export const DIALOGUE_TREES: readonly DialogueTree[] = [
       },
     },
   },
+  {
+    id: 'dlg_tan_trao_messenger',
+    eraId: '1945',
+    npcId: 'npc_tan_trao_messenger',
+    rootNodeId: 'root',
+    nodes: {
+      root: {
+        id: 'root',
+        speaker: 'Giao Liên Việt Minh Hoàng Quốc Bảo',
+        role: 'Liên lạc viên Khu Giải phóng Việt Bắc (Nhân vật hư cấu)',
+        text: '“Chào đồng chí! Từ Hội nghị Trung ương 8 tại Pác Bó (05/1941), Đảng đã đặt nhiệm vụ giải phóng dân tộc lên hàng đầu và thành lập Mặt trận Việt Minh. Nay tại Tân Trào (08/1945), lệnh Tổng khởi nghĩa đang chờ phát đi khắp cả nước!”',
+        provenance: {
+          type: 'historical_fact',
+          label: 'Sự kiện Lịch sử (Giáo trình 2021, Chương I, tr. 88–112)',
+          citation:
+            'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục II.2–II.3, tr. 88–112',
+          historicalNote:
+            'Nhân vật Hoàng Quốc Bảo là giao liên hư cấu đại diện cho lực lượng liên lạc Việt Minh năm 1941–1945.',
+        },
+        choices: [
+          {
+            id: 'c_ch2_ask_tw8',
+            text: 'Hỏi về sự chuyển hướng chiến lược tại Hội nghị Trung ương 8 (05/1941)',
+            nextNodeId: 'tw8_detail',
+            grantsFlag: 'ch2_met_messenger',
+            grantsMilestone: 'IV',
+            responseToast: '✓ Đã khôi phục Cột mốc IV: Hội nghị Trung ương 8 (05/1941)!',
+          },
+          {
+            id: 'c_ch2_leave',
+            text: 'Tôi sẽ tới Bàn Điều Phối Mạng Lưới Giao Liên ngay (Kết thúc)',
+            nextNodeId: null,
+            grantsFlag: 'ch2_met_messenger',
+            grantsMilestone: 'IV',
+          },
+        ],
+      },
+      tw8_detail: {
+        id: 'tw8_detail',
+        speaker: 'Giao Liên Việt Minh Hoàng Quốc Bảo',
+        role: 'Tư liệu Giáo trình Lịch sử Đảng (2021, tr. 88–95)',
+        text: '“Hội nghị Trung ương 8 khẳng định: ‘Trong lúc này quyền lợi của bộ phận, của giai cấp phải đặt dưới sự sinh tử, tồn vong của quốc gia, của dân tộc.’ Hãy lại Bàn Điều Phối Mạng Lưới Giao Liên phía đông để phát Quân lệnh số 1!”',
+        provenance: {
+          type: 'historical_fact',
+          label: 'Văn kiện Lịch sử Gốc (Giáo trình 2021, tr. 88–95)',
+          citation:
+            'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục II.2.b, tr. 88–95',
+        },
+        choices: [
+          {
+            id: 'c_ch2_done',
+            text: 'Rõ rồi, tôi tới Bàn Điều Phối ngay (Kết thúc)',
+            nextNodeId: null,
+          },
+        ],
+      },
+    },
+  },
+  {
+    id: 'dlg_ba_dinh_witness',
+    eraId: '1945',
+    npcId: 'npc_ba_dinh_witness',
+    rootNodeId: 'root',
+    nodes: {
+      root: {
+        id: 'root',
+        speaker: 'Đội Viên Tự Vệ Thành Hoàng Diệu',
+        role: 'Nhân chứng Ngày Độc Lập 02/09/1945 (Nhân vật hư cấu)',
+        text: '“Giữa rừng cờ đỏ sao vàng tại Quảng trường Ba Đình ngày 02/09/1945, Chủ tịch Hồ Chí Minh thay mặt Chính phủ lâm thời đọc bản Tuyên ngôn Độc lập, trịnh trọng tuyên bố với thế giới sự ra đời của nước Việt Nam Dân chủ Cộng hòa!”',
+        provenance: {
+          type: 'historical_fact',
+          label: 'Sự kiện Lịch sử (Giáo trình 2021, Chương I, tr. 117–124)',
+          citation:
+            'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục II.3.c, tr. 117–124',
+        },
+        choices: [
+          {
+            id: 'c_badinh_ask_significance',
+            text: 'Hỏi về ý nghĩa lịch sử của Cách mạng Tháng Tám năm 1945',
+            nextNodeId: 'badinh_significance',
+            grantsFlag: 'ch2_met_witness',
+            grantsMilestone: 'VI',
+            responseToast: '✓ Đã khôi phục Cột mốc VI: Tuyên ngôn Độc lập (02/09/1945)!',
+          },
+          {
+            id: 'c_badinh_leave',
+            text: 'Tôi sẽ tiến tới Cổng Thời Gian Chương II ngay (Kết thúc)',
+            nextNodeId: null,
+            grantsFlag: 'ch2_met_witness',
+            grantsMilestone: 'VI',
+          },
+        ],
+      },
+      badinh_significance: {
+        id: 'badinh_significance',
+        speaker: 'Đội Viên Tự Vệ Thành Hoàng Diệu',
+        role: 'Tư liệu Giáo trình Lịch sử Đảng (2021, tr. 119–124)',
+        text: '“Cách mạng Tháng Tám năm 1945 đã đập tan xiềng xích nô lệ của thực dân đế quốc trong gần một thế kỷ, chấm dứt sự tồn tại của chế độ quân chủ chuyên chế ngót nghìn năm, đưa nhân dân ta từ thân phận nô lệ lên địa vị người làm chủ đất nước.”',
+        provenance: {
+          type: 'historical_fact',
+          label: 'Tư liệu Lịch sử (Giáo trình 2021, tr. 119–124)',
+          citation:
+            'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục II.3.d, tr. 119–124',
+        },
+        choices: [
+          {
+            id: 'c_badinh_done',
+            text: 'Cảm ơn đồng chí, tôi tới Cổng Thời Gian đây (Kết thúc)',
+            nextNodeId: null,
+          },
+        ],
+      },
+    },
+  },
+  {
+    id: 'dlg_pha_din_quartermaster',
+    eraId: '1954_1975',
+    npcId: 'npc_pha_din_quartermaster',
+    rootNodeId: 'root',
+    nodes: {
+      root: {
+        id: 'root',
+        speaker: 'Đội Trưởng Dân Công Hậu Cần',
+        role: 'Chỉ huy Đội Xe thồ Đèo Pha Đin (Nhân vật hư cấu)',
+        text: '“Từ Lời kêu gọi Toàn quốc kháng chiến (19/12/1946) với đường lối kháng chiến toàn dân, toàn diện, lâu dài và dựa vào sức mình là chính, hôm nay hàng vạn dân công và xe đạp thồ đang vượt đèo Pha Đin tiếp lửa cho chiến trường Điện Biên Phủ!”',
+        provenance: {
+          type: 'historical_fact',
+          label: 'Sự kiện Lịch sử (Giáo trình 2021, Chương II, tr. 142–182)',
+          citation:
+            'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương II, mục I.1–I.3, tr. 142–182',
+        },
+        choices: [
+          {
+            id: 'c_phadin_ask_1946',
+            text: 'Hỏi về đường lối kháng chiến chống thực dân Pháp (1946–1954)',
+            nextNodeId: 'phadin_doctrine',
+            grantsFlag: 'ch3_met_quartermaster',
+            grantsMilestone: 'VII',
+            responseToast: '✓ Đã khôi phục Cột mốc VII: Đường lối Kháng chiến Toàn dân!',
+          },
+          {
+            id: 'c_phadin_leave',
+            text: 'Tôi sẽ tới Sa Bàn Tiếp Vận Pha Đin ngay (Kết thúc)',
+            nextNodeId: null,
+            grantsFlag: 'ch3_met_quartermaster',
+            grantsMilestone: 'VII',
+          },
+        ],
+      },
+      phadin_doctrine: {
+        id: 'phadin_doctrine',
+        speaker: 'Đội Trưởng Dân Công Hậu Cần',
+        role: 'Tư liệu Giáo trình Lịch sử Đảng (2021, tr. 142–182)',
+        text: '“Đường lối kháng chiến của Đảng được kết tinh trong Lời kêu gọi Toàn quốc kháng chiến của Hồ Chí Minh, Chỉ thị Toàn dân kháng chiến của Trung ương Đảng và tác phẩm Kháng chiến nhất định thắng lợi của Tổng Bí thư Trường Chinh.”',
+        provenance: {
+          type: 'historical_fact',
+          label: 'Văn kiện Lịch sử Gốc (Giáo trình 2021, tr. 142–150)',
+          citation:
+            'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương II, mục I.1.b, tr. 142–150',
+        },
+        choices: [
+          {
+            id: 'c_phadin_done',
+            text: 'Tôi sẽ tới Sa Bàn Tiếp Vận để điều phối chiến dịch (Kết thúc)',
+            nextNodeId: null,
+          },
+        ],
+      },
+    },
+  },
+  {
+    id: 'dlg_1975_signal_officer',
+    eraId: '1954_1975',
+    npcId: 'npc_1975_signal_officer',
+    rootNodeId: 'root',
+    nodes: {
+      root: {
+        id: 'root',
+        speaker: 'Chiến Sĩ Thông Tin Chiến Dịch Hồ Chí Minh',
+        role: 'Binh chủng Thông tin Liên lạc Mùa Xuân 1975 (Nhân vật hư cấu)',
+        text: '“Bức công điện lịch sử của Đại tướng Võ Nguyên Giáp vừa truyền đi trên toàn mặt trận: ‘Thần tốc, thần tốc hơn nữa; táo bạo, táo bạo hơn nữa... Quyết chiến và toàn thắng!’ Ngày 30/04/1975 đã thu non sông về một mối!”',
+        provenance: {
+          type: 'historical_fact',
+          label: 'Sự kiện Lịch sử (Giáo trình 2021, Chương II, tr. 228–238)',
+          citation:
+            'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương II, mục II.2.c, tr. 228–238',
+        },
+        choices: [
+          {
+            id: 'c_1975_ask_victory',
+            text: 'Hỏi về ý nghĩa của Đại thắng mùa Xuân năm 1975',
+            nextNodeId: 'victory_1975_node',
+            grantsFlag: 'ch3_met_signal',
+            grantsMilestone: 'IX',
+            responseToast: '✓ Đã khôi phục Cột mốc IX: Đại thắng mùa Xuân 30/04/1975!',
+          },
+          {
+            id: 'c_1975_leave',
+            text: 'Tôi sẽ tiến tới Cổng Thời Gian Chương III ngay (Kết thúc)',
+            nextNodeId: null,
+            grantsFlag: 'ch3_met_signal',
+            grantsMilestone: 'IX',
+          },
+        ],
+      },
+      victory_1975_node: {
+        id: 'victory_1975_node',
+        speaker: 'Chiến Sĩ Thông Tin Chiến Dịch Hồ Chí Minh',
+        role: 'Tư liệu Giáo trình Lịch sử Đảng (2021, tr. 232–238)',
+        text: '“Thắng lợi của cuộc kháng chiến chống Mỹ, cứu nước đã kết thúc 21 năm chiến đấu kiên cường, hoàn thành cuộc cách mạng dân tộc dân chủ nhân dân trên phạm vi cả nước, mở ra kỷ nguyên cả nước độc lập, thống nhất, đi lên chủ nghĩa xã hội.”',
+        provenance: {
+          type: 'historical_fact',
+          label: 'Tư liệu Lịch sử (Giáo trình 2021, tr. 232–238)',
+          citation:
+            'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương II, mục II.3, tr. 232–238',
+        },
+        choices: [
+          {
+            id: 'c_1975_done',
+            text: 'Cảm ơn đồng chí, tôi tới Cổng Thời Gian ngay (Kết thúc)',
+            nextNodeId: null,
+          },
+        ],
+      },
+    },
+  },
+  {
+    id: 'dlg_doi_moi_economist',
+    eraId: '1986_2045',
+    npcId: 'npc_doi_moi_economist',
+    rootNodeId: 'root',
+    nodes: {
+      root: {
+        id: 'root',
+        speaker: 'Chuyên Gia Nghiên Cứu Đổi Mới',
+        role: 'Cán bộ Nghiên cứu Chính sách Kinh tế 1986 (Nhân vật hư cấu)',
+        text: '“Tháng 12/1986, Đại hội đại biểu toàn quốc lần thứ VI của Đảng đã họp tại Hà Nội với tinh thần ‘nhìn thẳng vào sự thật, đánh giá đúng sự thật, nói rõ sự thật’, khởi xướng đường lối Đổi mới toàn diện đất nước!”',
+        provenance: {
+          type: 'historical_fact',
+          label: 'Sự kiện Lịch sử (Giáo trình 2021, Chương III, tr. 261–268)',
+          citation:
+            'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương III, mục I.2.a, tr. 261–268',
+        },
+        choices: [
+          {
+            id: 'c_ch4_ask_doimoi',
+            text: 'Hỏi về trọng tâm đổi mới kinh tế tại Đại hội VI (1986)',
+            nextNodeId: 'doimoi_detail',
+            grantsFlag: 'ch4_met_economist',
+            grantsMilestone: 'X',
+            responseToast: '✓ Đã khôi phục Cột mốc X: Đại hội VI Khởi xướng Đổi mới (12/1986)!',
+          },
+          {
+            id: 'c_ch4_leave',
+            text: 'Tôi sẽ tới Bàn Ma Trận Quyết Sách Đổi Mới ngay (Kết thúc)',
+            nextNodeId: null,
+            grantsFlag: 'ch4_met_economist',
+            grantsMilestone: 'X',
+          },
+        ],
+      },
+      doimoi_detail: {
+        id: 'doimoi_detail',
+        speaker: 'Chuyên Gia Nghiên Cứu Đổi Mới',
+        role: 'Tư liệu Giáo trình Lịch sử Đảng (2021, tr. 261–268)',
+        text: '“Đại hội VI chủ trương thực hiện Ba chương trình kinh tế lớn (Lương thực - thực phẩm, Hàng tiêu dùng, Hàng xuất khẩu), xóa bỏ cơ chế tập trung quan liêu bao cấp và phát triển nền kinh tế nhiều thành phần.”',
+        provenance: {
+          type: 'historical_fact',
+          label: 'Văn kiện Lịch sử Gốc (Giáo trình 2021, tr. 261–268)',
+          citation:
+            'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương III, mục I.2.a, tr. 261–268',
+        },
+        choices: [
+          {
+            id: 'c_ch4_done',
+            text: 'Tôi sẽ tới giải Ma Trận Quyết Sách ngay (Kết thúc)',
+            nextNodeId: null,
+          },
+        ],
+      },
+    },
+  },
+  {
+    id: 'dlg_archivist_2045',
+    eraId: '1986_2045',
+    npcId: 'npc_archivist_2045',
+    rootNodeId: 'root',
+    nodes: {
+      root: {
+        id: 'root',
+        speaker: 'Giám Tuyển Lưu Trữ Quốc Gia 2045',
+        role: 'Điều phối viên Trung tâm Ký Ức Số (Bối cảnh Viễn cảnh 2045)',
+        text: '“Chào mừng Lữ Khách trở về Quảng trường Kỷ Nguyên Số năm 2045! Không gian kiến trúc bạn đang đứng là hình ảnh viễn cảnh nghệ thuật (speculative_2045), được kiến tạo từ mục tiêu phát triển đất nước đến năm 2030, tầm nhìn 2045 trong Nghị quyết Đại hội XIII (2021).”',
+        provenance: {
+          type: 'speculative_2045',
+          label: 'Viễn cảnh Nghệ thuật 2045 dựa trên Văn kiện Đại hội XIII',
+          citation:
+            'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương III, mục II.4, tr. 385–393',
+          historicalNote:
+            'Không gian năm 2045 là bối cảnh dẫn truyện tương lai; còn mục tiêu năm 2030 và 2045 là nội dung văn kiện lịch sử Đại hội XIII (01/2021).',
+        },
+        choices: [
+          {
+            id: 'c_2045_ask_xii',
+            text: 'Đối chiếu mục tiêu cụ thể năm 2030 và 2045 của Đại hội XIII (01/2021)',
+            nextNodeId: 'congress_xiii_fact',
+            grantsFlag: 'ch4_met_archivist_2045',
+            grantsMilestone: 'XII',
+            responseToast: '✓ Đã khôi phục Cột mốc XII: Đại hội XIII & Tầm nhìn Việt Nam 2045!',
+          },
+          {
+            id: 'c_2045_leave',
+            text: 'Tôi đã sẵn sàng bước tới Cổng Thời Gian 2045 (Kết thúc)',
+            nextNodeId: null,
+            grantsFlag: 'ch4_met_archivist_2045',
+            grantsMilestone: 'XII',
+          },
+        ],
+      },
+      congress_xiii_fact: {
+        id: 'congress_xiii_fact',
+        speaker: 'Giám Tuyển Lưu Trữ Quốc Gia 2045',
+        role: 'Tư liệu Giáo trình Lịch sử Đảng (2021, tr. 385–393)',
+        text: '“Nghị quyết Đại hội XIII xác định mục tiêu đến năm 2030 (kỷ niệm 100 năm thành lập Đảng) là nước đang phát triển, có công nghiệp hiện đại, thu nhập trung bình cao; và đến năm 2045 (kỷ niệm 100 năm thành lập nước) trở thành nước phát triển, thu nhập cao.”',
+        provenance: {
+          type: 'historical_fact',
+          label: 'Văn kiện Lịch sử Gốc (Giáo trình 2021, tr. 385–393)',
+          citation:
+            'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương III, mục II.4, tr. 385–393',
+        },
+        choices: [
+          {
+            id: 'c_2045_done',
+            text: 'Hoàn tất đối chiếu và mở Cổng Thời Gian 2045 (Kết thúc)',
+            nextNodeId: null,
+          },
+        ],
+      },
+    },
+  },
 ];
 
 const DIALOGUE_ID_ALIASES: Record<string, string> = {
@@ -570,6 +910,12 @@ const DIALOGUE_ID_ALIASES: Record<string, string> = {
   ch1_boatman_shortcut: 'dlg_pier_boatman',
   npc_archive_keeper: 'dlg_archive_keeper',
   ch1_keeper_gate: 'dlg_archive_keeper',
+  npc_tan_trao_messenger: 'dlg_tan_trao_messenger',
+  npc_ba_dinh_witness: 'dlg_ba_dinh_witness',
+  npc_pha_din_quartermaster: 'dlg_pha_din_quartermaster',
+  npc_1975_signal_officer: 'dlg_1975_signal_officer',
+  npc_doi_moi_economist: 'dlg_doi_moi_economist',
+  npc_archivist_2045: 'dlg_archivist_2045',
 };
 
 export class DialogueSystem {

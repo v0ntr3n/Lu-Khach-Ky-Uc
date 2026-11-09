@@ -126,7 +126,7 @@ export const EVIDENCE_CATALOG: readonly EvidenceItem[] = [
     eraId: '1945',
     title: 'Quân Lệnh Số 1 & Thư Kêu Gọi Tổng Khởi Nghĩa (08/1945)',
     category: 'document',
-    zoneId: 'harbor_square',
+    zoneId: 'tan_trao_banyan',
     shortSummary:
       'Bản Quân lệnh số 1 của Ủy ban Khởi nghĩa toàn quốc phát đi từ Tân Trào và Lời kêu gọi Tổng khởi nghĩa của Hồ Chí Minh.',
     historicalQuote:
@@ -149,7 +149,7 @@ export const EVIDENCE_CATALOG: readonly EvidenceItem[] = [
     eraId: '1954_1975',
     title: 'Công Điện Chiến Dịch Điện Biên Phủ & Đại Thắng Mùa Xuân (1954–1975)',
     category: 'dispatch',
-    zoneId: 'harbor_square',
+    zoneId: 'pha_din_pass',
     shortSummary:
       'Tập lưu trữ quyết định phương châm “Đánh chắc, tiến chắc” tại Điện Biên Phủ (1954) và mệnh lệnh “Thần tốc, táo bạo” trong Chiến dịch Hồ Chí Minh (1975).',
     historicalQuote:
@@ -164,7 +164,7 @@ export const EVIDENCE_CATALOG: readonly EvidenceItem[] = [
       citation:
         'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương II, tr. 176–235',
     },
-    relatedMilestone: 'IX',
+    relatedMilestone: 'VIII',
     grantsFlag: 'ch3_dispatch_collected',
   },
   {
@@ -172,7 +172,7 @@ export const EVIDENCE_CATALOG: readonly EvidenceItem[] = [
     eraId: '1986_2045',
     title: 'Văn Kiện Đại Hội VI (1986) & Tầm Nhìn Đại Hội XIII (2030–2045)',
     category: 'artifact',
-    zoneId: 'harbor_square',
+    zoneId: 'doi_moi_avenue',
     shortSummary:
       'Hồ sơ đối chiếu đường lối Đổi mới toàn diện tại Đại hội VI (12/1986) với mục tiêu phát triển đất nước đến năm 2030 và tầm nhìn 2045 tại Đại hội XIII (2021).',
     historicalQuote:
@@ -189,7 +189,7 @@ export const EVIDENCE_CATALOG: readonly EvidenceItem[] = [
       historicalNote:
         'Mục tiêu 2045 dựa trên Nghị quyết Đại hội XIII (2021, tr. 385–393); bối cảnh Trung tâm Lưu trữ Số 2045 là khung dẫn truyện giả tưởng (speculative_2045).',
     },
-    relatedMilestone: 'XII',
+    relatedMilestone: 'XI',
     grantsFlag: 'ch4_resolution_collected',
   },
 ];
