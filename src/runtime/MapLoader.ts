@@ -1,8 +1,8 @@
 /**
  * @file src/runtime/MapLoader.ts
  * @description Bộ nạp và chuẩn hóa bản đồ Tiled JSON (.tmj) sang NormalizedMapData & ValidatableMap
- * cho Lữ Khách Ký Ức (M1+). Hỗ trợ cả nạp bất đồng bộ qua fetch() trên trình duyệt và truy xuất
- * đồng bộ (built-in) phục vụ khởi tạo nhanh hoặc kiểm thử tự động.
+ * cho Lữ Khách Ký Ức (M1 – M6). Bao gồm toàn bộ 8 khu vực liên thông của Chương I (Hương Cảng 1930)
+ * và hỗ trợ nạp trước các khu vực kề cận (`preloadConnectedMaps`).
  */
 
 import type {
@@ -11,6 +11,7 @@ import type {
   InteractableDefinition,
   NormalizedMapData,
   NpcMapPlacement,
+  NpcRoutePoint,
   PatrolDefinition,
   PortalDefinition,
   ProvenanceType,
@@ -22,7 +23,11 @@ import type {
   TiledObject,
   TiledProperty,
 } from '../types/game';
-import type { ValidatableMap } from '../world/MapValidator';
+import {
+  registerValidatableMapFallback,
+  type ValidatableMap,
+} from '../world/MapValidator';
+import { CHAPTER1_WORLD_GRAPH } from '../world/WorldGraph';
 
 function extractProps(
   rawProps?: TiledProperty[] | Record<string, string | number | boolean>
@@ -105,6 +110,12 @@ export function parseTiledMap(id: string, raw: TiledMapJson): NormalizedMapData 
   const mapId = String(mapProps.id || id).trim() || id;
   const title = String(mapProps.title || mapId);
   const eraId = (String(mapProps.eraId || '1930') as EraId) || '1930';
+  const districtType = mapProps.districtType
+    ? (String(mapProps.districtType) as NormalizedMapData['districtType'])
+    : undefined;
+  const description = mapProps.description
+    ? String(mapProps.description)
+    : undefined;
 
   const tileLayers: Record<string, number[]> = {};
   const obstacles: Rect2D[] = [];
@@ -204,6 +215,7 @@ export function parseTiledMap(id: string, raw: TiledMapJson): NormalizedMapData 
               x: obj.x,
               y: obj.y,
               facing: (p.facing as Facing4) || 'down',
+              label: p.label ? String(p.label) : undefined,
             });
           }
         }
@@ -217,6 +229,22 @@ export function parseTiledMap(id: string, raw: TiledMapJson): NormalizedMapData 
           const milestoneRoman = p.milestoneRoman
             ? (String(p.milestoneRoman) as RomanMilestoneId)
             : undefined;
+
+          let route: NpcRoutePoint[] | undefined;
+          if (typeof p.routeJson === 'string' && p.routeJson.trim().length > 0) {
+            try {
+              route = JSON.parse(p.routeJson) as NpcRoutePoint[];
+            } catch {
+              route = undefined;
+            }
+          } else if (Array.isArray(obj.polyline) && obj.polyline.length > 0) {
+            route = obj.polyline.map((pt) => ({
+              x: obj.x + pt.x,
+              y: obj.y + pt.y,
+              waitSec: Number(p.waitSec) || 1.0,
+            }));
+          }
+
           const npc: NpcMapPlacement = {
             id: npcId,
             npcId: String(p.npcId || npcId),
@@ -225,14 +253,15 @@ export function parseTiledMap(id: string, raw: TiledMapJson): NormalizedMapData 
             x: obj.x,
             y: obj.y,
             facing: (p.facing as Facing4) || 'down',
-            dialogueId: String(p.dialogueId || `${ npcId }_dialogue`),
+            dialogueId: String(p.dialogueId || `${npcId}_dialogue`),
             fictionTag: (p.fictionTag as ProvenanceType) || 'fictional_npc',
             approachRadius: Number(p.approachRadius) || 36,
             milestoneRoman,
+            route,
+            moveSpeed: p.moveSpeed ? Number(p.moveSpeed) : undefined,
           };
           npcs.push(npc);
 
-          // Đồng bộ NPC sang danh sách interactables để kiểm tra Reachability và tương tác phím [E]
           if (!interactables.some((it) => it.id === npc.id)) {
             interactables.push({
               id: npc.id,
@@ -257,9 +286,10 @@ export function parseTiledMap(id: string, raw: TiledMapJson): NormalizedMapData 
           const p = extractProps(obj.properties);
           const itemId = String(obj.name || obj.id).trim();
           const existingIdx = interactables.findIndex((it) => it.id === itemId);
-          const milestoneId = (p.milestoneId || p.milestoneRoman)
-            ? (String(p.milestoneId || p.milestoneRoman) as RomanMilestoneId)
-            : undefined;
+          const milestoneId =
+            p.milestoneId || p.milestoneRoman
+              ? (String(p.milestoneId || p.milestoneRoman) as RomanMilestoneId)
+              : undefined;
 
           const item: InteractableDefinition = {
             id: itemId,
@@ -268,7 +298,9 @@ export function parseTiledMap(id: string, raw: TiledMapJson): NormalizedMapData 
             width: obj.width || 16,
             height: obj.height || 16,
             radius: Number(p.radius) || 36,
-            kind: (p.kind || obj.type || 'prop') as InteractableDefinition['kind'],
+            kind: (p.kind ||
+              obj.type ||
+              'prop') as InteractableDefinition['kind'],
             label: String(p.label || obj.name || itemId),
             actionId: String(p.actionId || `interact_${itemId}`),
             requiresFlag: p.requiresFlag ? String(p.requiresFlag) : undefined,
@@ -276,14 +308,31 @@ export function parseTiledMap(id: string, raw: TiledMapJson): NormalizedMapData 
             milestoneId,
             dialogueId: p.dialogueId ? String(p.dialogueId) : undefined,
             evidenceId: p.evidenceId ? String(p.evidenceId) : undefined,
-            destinationMap: p.destinationMap ? String(p.destinationMap) : undefined,
-            destinationSpawn: p.destinationSpawn ? String(p.destinationSpawn) : undefined,
+            destinationMap: p.destinationMap
+              ? String(p.destinationMap)
+              : undefined,
+            destinationSpawn: p.destinationSpawn
+              ? String(p.destinationSpawn)
+              : undefined,
           };
 
           if (existingIdx >= 0) {
             interactables[existingIdx] = item;
           } else {
             interactables.push(item);
+          }
+
+          if (
+            item.kind === 'checkpoint' &&
+            !checkpoints.some((cp) => cp.id === item.id)
+          ) {
+            checkpoints.push({
+              id: item.id,
+              x: item.x,
+              y: item.y,
+              facing: 'down',
+              label: item.label,
+            });
           }
         }
         continue;
@@ -292,12 +341,13 @@ export function parseTiledMap(id: string, raw: TiledMapJson): NormalizedMapData 
       if (layer.name === 'PatrolPaths') {
         for (const obj of objects) {
           const p = extractProps(obj.properties);
-          const poly = Array.isArray(obj.polyline) && obj.polyline.length > 0
-            ? obj.polyline.map((pt) => ({ x: obj.x + pt.x, y: obj.y + pt.y }))
-            : [
-                { x: obj.x, y: obj.y },
-                { x: obj.x + (obj.width || 64), y: obj.y },
-              ];
+          const poly =
+            Array.isArray(obj.polyline) && obj.polyline.length > 0
+              ? obj.polyline.map((pt) => ({ x: obj.x + pt.x, y: obj.y + pt.y }))
+              : [
+                  { x: obj.x, y: obj.y },
+                  { x: obj.x + (obj.width || 64), y: obj.y },
+                ];
           patrols.push({
             id: String(obj.name || obj.id),
             waypoints: poly,
@@ -306,7 +356,8 @@ export function parseTiledMap(id: string, raw: TiledMapJson): NormalizedMapData 
             coneAngleRad: Number(p.coneAngleRad) || 0.75,
             label: String(p.label || obj.name || 'Tuần Tra'),
             warningToast: String(
-              p.warningToast || 'Ánh đèn tuần tra phát hiện! Hãy tìm chỗ ẩn nấp!'
+              p.warningToast ||
+                'Ánh đèn tuần tra phát hiện! Hãy tìm chỗ ẩn nấp!'
             ),
           });
         }
@@ -316,12 +367,16 @@ export function parseTiledMap(id: string, raw: TiledMapJson): NormalizedMapData 
       if (layer.name === 'Checkpoints') {
         for (const obj of objects) {
           const p = extractProps(obj.properties);
-          checkpoints.push({
-            id: String(obj.name || obj.id),
-            x: obj.x,
-            y: obj.y,
-            facing: (p.facing as Facing4) || 'down',
-          });
+          const cpId = String(obj.name || obj.id);
+          if (!checkpoints.some((c) => c.id === cpId)) {
+            checkpoints.push({
+              id: cpId,
+              x: obj.x,
+              y: obj.y,
+              facing: (p.facing as Facing4) || 'down',
+              label: p.label ? String(p.label) : obj.name,
+            });
+          }
         }
       }
     }
@@ -338,6 +393,8 @@ export function parseTiledMap(id: string, raw: TiledMapJson): NormalizedMapData 
     id: mapId,
     title,
     eraId,
+    districtType,
+    description,
     widthInTiles,
     heightInTiles,
     widthPx,
@@ -358,9 +415,29 @@ export function parseTiledMap(id: string, raw: TiledMapJson): NormalizedMapData 
 }
 
 /**
+ * Bí danh linh hoạt của `parseTiledMap`, hỗ trợ cả `(id, raw)` và `(raw, id?)`.
+ */
+export function parseTiledMapJson(
+  idOrRaw: string | TiledMapJson,
+  rawOrId?: TiledMapJson | string
+): NormalizedMapData {
+  if (typeof idOrRaw === 'string') {
+    return parseTiledMap(idOrRaw, rawOrId as TiledMapJson);
+  }
+  const props = extractProps(idOrRaw.properties);
+  const resolvedId =
+    typeof rawOrId === 'string' && rawOrId.trim().length > 0
+      ? rawOrId
+      : String(props.id || 'unknown_map');
+  return parseTiledMap(resolvedId, idOrRaw);
+}
+
+/**
  * Chuyển đổi NormalizedMapData sang ValidatableMap để kiểm tra bằng MapValidator.
  */
 export function toValidatableMap(norm: NormalizedMapData): ValidatableMap {
+  // Đảm bảo bộ đệm dự phòng cho 8 bản đồ Chương I luôn sẵn sàng
+  ensureFallbackRegistryInitialized();
   return {
     id: norm.id,
     width: norm.widthPx,
@@ -400,6 +477,136 @@ function fillRect(
   }
 }
 
+function makeStandardLayers(
+  cols: number,
+  rows: number,
+  layersInput: {
+    ground: number[];
+    groundDetails?: number[];
+    lowProps?: number[];
+    structures?: number[];
+    foreground?: number[];
+    collision: number[];
+    lightOccluders?: TiledObject[];
+    npcs?: TiledObject[];
+    interactables?: TiledObject[];
+    entrances: TiledObject[];
+    patrolPaths?: TiledObject[];
+    checkpoints?: TiledObject[];
+  }
+): TiledMapJson['layers'] {
+  return [
+    {
+      id: 1,
+      name: 'Ground',
+      type: 'tilelayer',
+      width: cols,
+      height: rows,
+      visible: true,
+      opacity: 1,
+      data: layersInput.ground,
+    },
+    {
+      id: 2,
+      name: 'GroundDetails',
+      type: 'tilelayer',
+      width: cols,
+      height: rows,
+      visible: true,
+      opacity: 1,
+      data: layersInput.groundDetails ?? createGrid(cols, rows, 0),
+    },
+    {
+      id: 3,
+      name: 'LowProps',
+      type: 'tilelayer',
+      width: cols,
+      height: rows,
+      visible: true,
+      opacity: 1,
+      data: layersInput.lowProps ?? createGrid(cols, rows, 0),
+    },
+    {
+      id: 4,
+      name: 'Structures',
+      type: 'tilelayer',
+      width: cols,
+      height: rows,
+      visible: true,
+      opacity: 1,
+      data: layersInput.structures ?? createGrid(cols, rows, 0),
+    },
+    {
+      id: 5,
+      name: 'Foreground',
+      type: 'tilelayer',
+      width: cols,
+      height: rows,
+      visible: true,
+      opacity: 1,
+      data: layersInput.foreground ?? createGrid(cols, rows, 0),
+    },
+    {
+      id: 6,
+      name: 'Collision',
+      type: 'tilelayer',
+      width: cols,
+      height: rows,
+      visible: false,
+      opacity: 0.5,
+      data: layersInput.collision,
+    },
+    {
+      id: 7,
+      name: 'LightOccluders',
+      type: 'objectgroup',
+      visible: true,
+      opacity: 1,
+      objects: layersInput.lightOccluders ?? [],
+    },
+    {
+      id: 8,
+      name: 'NPCs',
+      type: 'objectgroup',
+      visible: true,
+      opacity: 1,
+      objects: layersInput.npcs ?? [],
+    },
+    {
+      id: 9,
+      name: 'Interactables',
+      type: 'objectgroup',
+      visible: true,
+      opacity: 1,
+      objects: layersInput.interactables ?? [],
+    },
+    {
+      id: 10,
+      name: 'Entrances',
+      type: 'objectgroup',
+      visible: true,
+      opacity: 1,
+      objects: layersInput.entrances,
+    },
+    {
+      id: 11,
+      name: 'PatrolPaths',
+      type: 'objectgroup',
+      visible: true,
+      opacity: 1,
+      objects: layersInput.patrolPaths ?? [],
+    },
+    {
+      id: 12,
+      name: 'Checkpoints',
+      type: 'objectgroup',
+      visible: true,
+      opacity: 1,
+      objects: layersInput.checkpoints ?? [],
+    },
+  ];
+}
+
 function buildHarborSquareRaw(): TiledMapJson {
   const cols = 64;
   const rows = 48;
@@ -407,8 +614,9 @@ function buildHarborSquareRaw(): TiledMapJson {
 
   const ground = createGrid(cols, rows, 1);
   fillRect(ground, cols, rows, 0, 336, 1024, 96, ts, 2);
-  fillRect(ground, cols, rows, 64, 192, 896, 96, ts, 2);
+  fillRect(ground, cols, rows, 64, 192, 960, 96, ts, 2);
   fillRect(ground, cols, rows, 384, 160, 64, 272, ts, 2);
+  fillRect(ground, cols, rows, 800, 336, 96, 304, ts, 2);
   fillRect(ground, cols, rows, 0, 576, 1024, 96, ts, 3);
   fillRect(ground, cols, rows, 0, 672, 1024, 96, ts, 4);
 
@@ -454,6 +662,7 @@ function buildHarborSquareRaw(): TiledMapJson {
       { name: 'id', type: 'string', value: 'harbor_square' },
       { name: 'title', type: 'string', value: 'Quảng Trường Bến Cảng Hương Cảng (1930)' },
       { name: 'eraId', type: 'string', value: '1930' },
+      { name: 'districtType', type: 'string', value: 'hub' },
       { name: 'defaultSpawnId', type: 'string', value: 'default_spawn' },
     ],
     tilesets: [
@@ -467,263 +676,327 @@ function buildHarborSquareRaw(): TiledMapJson {
         columns: 8,
       },
     ],
-    layers: [
-      { id: 1, name: 'Ground', type: 'tilelayer', width: cols, height: rows, visible: true, opacity: 1, data: ground },
-      { id: 2, name: 'GroundDetails', type: 'tilelayer', width: cols, height: rows, visible: true, opacity: 1, data: groundDetails },
-      { id: 3, name: 'LowProps', type: 'tilelayer', width: cols, height: rows, visible: true, opacity: 1, data: lowProps },
-      { id: 4, name: 'Structures', type: 'tilelayer', width: cols, height: rows, visible: true, opacity: 1, data: structures },
-      { id: 5, name: 'Foreground', type: 'tilelayer', width: cols, height: rows, visible: true, opacity: 1, data: foreground },
-      { id: 6, name: 'Collision', type: 'tilelayer', width: cols, height: rows, visible: false, opacity: 0.5, data: collision },
-      {
-        id: 7,
-        name: 'LightOccluders',
-        type: 'objectgroup',
-        visible: true,
-        opacity: 1,
-        objects: [
-          {
-            id: 101,
-            name: 'shelter_awning_west',
-            type: 'shelter',
-            x: 128,
-            y: 160,
-            width: 128,
-            height: 48,
-            properties: [{ name: 'label', type: 'string', value: 'Mái Hiên Hiệu Sách Cửu Long' }],
-          },
-          {
-            id: 102,
-            name: 'shelter_warehouse_eaves',
-            type: 'shelter',
-            x: 464,
-            y: 400,
-            width: 128,
-            height: 48,
-            properties: [{ name: 'label', type: 'string', value: 'Mái Hiên Kho Hàng Bến Cảng' }],
-          },
-          {
-            id: 103,
-            name: 'shelter_pier_shed',
-            type: 'shelter',
-            x: 704,
-            y: 336,
-            width: 96,
-            height: 64,
-            properties: [{ name: 'label', type: 'string', value: 'Lán Tàu Cảng Hương Cảng' }],
-          },
-          {
-            id: 104,
-            name: 'occluder_warehouse_wall',
-            type: 'occluder',
-            x: 464,
-            y: 304,
-            width: 128,
-            height: 96,
-            properties: [{ name: 'label', type: 'string', value: 'Tường Kho Hàng' }],
-          },
-        ],
-      },
-      {
-        id: 8,
-        name: 'NPCs',
-        type: 'objectgroup',
-        visible: true,
-        opacity: 1,
-        objects: [
-          {
-            id: 201,
-            name: 'npc_courier',
-            type: 'npc',
-            x: 256,
-            y: 368,
-            width: 16,
-            height: 16,
-            properties: [
-              { name: 'npcId', type: 'string', value: 'npc_courier' },
-              { name: 'name', type: 'string', value: 'Lâm Văn Bính (Giao Liên)' },
-              { name: 'role', type: 'string', value: 'Giao liên bí mật Hương Cảng' },
-              { name: 'facing', type: 'string', value: 'down' },
-              { name: 'dialogueId', type: 'string', value: 'ch1_courier_intro' },
-              { name: 'fictionTag', type: 'string', value: 'fictional_npc' },
-              { name: 'approachRadius', type: 'int', value: 36 },
-              { name: 'milestoneRoman', type: 'string', value: 'I' },
-            ],
-          },
-          {
-            id: 202,
-            name: 'npc_archivist',
-            type: 'npc',
-            x: 480,
-            y: 272,
-            width: 16,
-            height: 16,
-            properties: [
-              { name: 'npcId', type: 'string', value: 'npc_archivist' },
-              { name: 'name', type: 'string', value: 'Ông Tư Lưu Trữ' },
-              { name: 'role', type: 'string', value: 'Người giữ kho tư liệu Phố Cổ' },
-              { name: 'facing', type: 'string', value: 'down' },
-              { name: 'dialogueId', type: 'string', value: 'ch1_archivist_sources' },
-              { name: 'fictionTag', type: 'string', value: 'fictional_npc' },
-              { name: 'approachRadius', type: 'int', value: 36 },
-              { name: 'milestoneRoman', type: 'string', value: 'II' },
-            ],
-          },
-          {
-            id: 203,
-            name: 'npc_observer',
-            type: 'npc',
-            x: 736,
-            y: 368,
-            width: 16,
-            height: 16,
-            properties: [
-              { name: 'npcId', type: 'string', value: 'npc_observer' },
-              { name: 'name', type: 'string', value: 'Chú Bảy Hoa Tiêu' },
-              { name: 'role', type: 'string', value: 'Người quan sát bến tàu' },
-              { name: 'facing', type: 'string', value: 'left' },
-              { name: 'dialogueId', type: 'string', value: 'ch1_observer_patrol' },
-              { name: 'fictionTag', type: 'string', value: 'fictional_npc' },
-              { name: 'approachRadius', type: 'int', value: 36 },
-              { name: 'milestoneRoman', type: 'string', value: 'III' },
-            ],
-          },
-        ],
-      },
-      {
-        id: 9,
-        name: 'Interactables',
-        type: 'objectgroup',
-        visible: true,
-        opacity: 1,
-        objects: [
-          {
-            id: 301,
-            name: 'climax_gate_1930',
-            type: 'climax_gate',
-            x: 928,
-            y: 368,
-            width: 32,
-            height: 32,
-            properties: [
-              { name: 'kind', type: 'string', value: 'climax_gate' },
-              { name: 'label', type: 'string', value: 'Cổng Thời Gian 1930' },
-              { name: 'actionId', type: 'string', value: 'open_climax' },
-              { name: 'requiresFlag', type: 'string', value: 'ch1.all_milestones' },
-            ],
-          },
-          {
-            id: 302,
-            name: 'prop_harbor_notice',
-            type: 'prop',
-            x: 384,
-            y: 208,
-            width: 16,
-            height: 16,
-            properties: [
-              { name: 'kind', type: 'string', value: 'prop' },
-              { name: 'label', type: 'string', value: 'Bảng Cáo Thị Bến Cảng' },
-              { name: 'actionId', type: 'string', value: 'inspect_harbor_notice' },
-            ],
-          },
-        ],
-      },
-      {
-        id: 10,
-        name: 'Entrances',
-        type: 'objectgroup',
-        visible: true,
-        opacity: 1,
-        objects: [
-          {
-            id: 401,
-            name: 'default_spawn',
-            type: 'spawn',
-            x: 160,
-            y: 384,
-            width: 16,
-            height: 16,
-            properties: [{ name: 'facing', type: 'string', value: 'right' }],
-          },
-          {
-            id: 402,
-            name: 'from_warehouse',
-            type: 'spawn',
-            x: 512,
-            y: 432,
-            width: 16,
-            height: 16,
-            properties: [{ name: 'facing', type: 'string', value: 'down' }],
-          },
-          {
-            id: 403,
-            name: 'exit_harbor_to_warehouse',
-            type: 'portal',
-            x: 512,
-            y: 400,
-            width: 32,
-            height: 16,
-            properties: [
-              { name: 'destinationMap', type: 'string', value: 'warehouse_interior' },
-              { name: 'destinationSpawn', type: 'string', value: 'warehouse_south_door' },
-              { name: 'transition', type: 'string', value: 'fade' },
-              { name: 'label', type: 'string', value: 'Kho Hàng Bến Cảng' },
-            ],
-          },
-        ],
-      },
-      {
-        id: 11,
-        name: 'PatrolPaths',
-        type: 'objectgroup',
-        visible: true,
-        opacity: 1,
-        objects: [
-          {
-            id: 501,
-            name: 'patrol_harbor_alley',
-            type: 'patrol',
-            x: 560,
-            y: 224,
-            width: 160,
-            height: 32,
-            polyline: [
-              { x: 0, y: 0 },
-              { x: 160, y: 0 },
-            ],
-            properties: [
-              { name: 'speed', type: 'float', value: 48 },
-              { name: 'coneLength', type: 'float', value: 96 },
-              { name: 'coneAngleRad', type: 'float', value: 0.75 },
-              { name: 'label', type: 'string', value: 'Lính Tuần Tra Hương Cảng' },
-              {
-                name: 'warningToast',
-                type: 'string',
-                value: 'Ánh đèn tuần tra thực dân phát hiện bóng người! Hãy nấp vào mái hiên!',
-              },
-            ],
-          },
-        ],
-      },
-      {
-        id: 12,
-        name: 'Checkpoints',
-        type: 'objectgroup',
-        visible: true,
-        opacity: 1,
-        objects: [
-          {
-            id: 601,
-            name: 'checkpoint_harbor_hub',
-            type: 'checkpoint',
-            x: 160,
-            y: 384,
-            width: 16,
-            height: 16,
-            properties: [{ name: 'facing', type: 'string', value: 'right' }],
-          },
-        ],
-      },
-    ],
+    layers: makeStandardLayers(cols, rows, {
+      ground,
+      groundDetails,
+      lowProps,
+      structures,
+      foreground,
+      collision,
+      lightOccluders: [
+        {
+          id: 101,
+          name: 'shelter_awning_west',
+          type: 'shelter',
+          x: 128,
+          y: 160,
+          width: 128,
+          height: 48,
+          properties: [{ name: 'label', type: 'string', value: 'Mái Hiên Hiệu Sách Cửu Long' }],
+        },
+        {
+          id: 102,
+          name: 'shelter_warehouse_eaves',
+          type: 'shelter',
+          x: 464,
+          y: 400,
+          width: 128,
+          height: 48,
+          properties: [{ name: 'label', type: 'string', value: 'Mái Hiên Kho Hàng Bến Cảng' }],
+        },
+        {
+          id: 103,
+          name: 'shelter_pier_shed',
+          type: 'shelter',
+          x: 704,
+          y: 336,
+          width: 96,
+          height: 64,
+          properties: [{ name: 'label', type: 'string', value: 'Lán Tàu Cảng Hương Cảng' }],
+        },
+        {
+          id: 104,
+          name: 'occluder_warehouse_wall',
+          type: 'occluder',
+          x: 464,
+          y: 304,
+          width: 128,
+          height: 96,
+          properties: [{ name: 'label', type: 'string', value: 'Tường Kho Hàng' }],
+        },
+      ],
+      npcs: [
+        {
+          id: 201,
+          name: 'npc_courier',
+          type: 'npc',
+          x: 256,
+          y: 368,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'npcId', type: 'string', value: 'npc_courier' },
+            { name: 'name', type: 'string', value: 'Lâm Văn Bính (Giao Liên)' },
+            { name: 'role', type: 'string', value: 'Giao liên bí mật Hương Cảng' },
+            { name: 'facing', type: 'string', value: 'down' },
+            { name: 'dialogueId', type: 'string', value: 'ch1_courier_intro' },
+            { name: 'fictionTag', type: 'string', value: 'fictional_npc' },
+            { name: 'approachRadius', type: 'int', value: 36 },
+            { name: 'milestoneRoman', type: 'string', value: 'I' },
+          ],
+        },
+        {
+          id: 202,
+          name: 'npc_archivist',
+          type: 'npc',
+          x: 480,
+          y: 272,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'npcId', type: 'string', value: 'npc_archivist' },
+            { name: 'name', type: 'string', value: 'Ông Tư Lưu Trữ' },
+            { name: 'role', type: 'string', value: 'Người giữ kho tư liệu Phố Cổ' },
+            { name: 'facing', type: 'string', value: 'down' },
+            { name: 'dialogueId', type: 'string', value: 'ch1_archivist_sources' },
+            { name: 'fictionTag', type: 'string', value: 'fictional_npc' },
+            { name: 'approachRadius', type: 'int', value: 36 },
+            { name: 'milestoneRoman', type: 'string', value: 'II' },
+          ],
+        },
+        {
+          id: 203,
+          name: 'npc_observer',
+          type: 'npc',
+          x: 736,
+          y: 368,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'npcId', type: 'string', value: 'npc_observer' },
+            { name: 'name', type: 'string', value: 'Chú Bảy Hoa Tiêu' },
+            { name: 'role', type: 'string', value: 'Người quan sát bến tàu' },
+            { name: 'facing', type: 'string', value: 'left' },
+            { name: 'dialogueId', type: 'string', value: 'ch1_observer_patrol' },
+            { name: 'fictionTag', type: 'string', value: 'fictional_npc' },
+            { name: 'approachRadius', type: 'int', value: 36 },
+            { name: 'milestoneRoman', type: 'string', value: 'III' },
+          ],
+        },
+        {
+          id: 204,
+          name: 'npc_old_worker',
+          type: 'npc',
+          x: 304,
+          y: 480,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'npcId', type: 'string', value: 'npc_old_worker' },
+            { name: 'name', type: 'string', value: 'Bác Khuân Vác Bến Cảng' },
+            { name: 'role', type: 'string', value: 'Công nhân bốc xếp Cửu Long' },
+            { name: 'facing', type: 'string', value: 'right' },
+            { name: 'dialogueId', type: 'string', value: 'ch1_worker_rumor' },
+            { name: 'fictionTag', type: 'string', value: 'fictional_npc' },
+            { name: 'approachRadius', type: 'int', value: 36 },
+            { name: 'moveSpeed', type: 'float', value: 36 },
+            {
+              name: 'routeJson',
+              type: 'string',
+              value: JSON.stringify([
+                { x: 304, y: 480, waitSec: 1.0, facing: 'right' },
+                { x: 432, y: 480, waitSec: 1.0, facing: 'left' },
+              ]),
+            },
+          ],
+        },
+      ],
+      interactables: [
+        {
+          id: 301,
+          name: 'climax_gate_1930',
+          type: 'climax_gate',
+          x: 928,
+          y: 368,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'kind', type: 'string', value: 'climax_gate' },
+            { name: 'label', type: 'string', value: 'Cổng Thời Gian 1930' },
+            { name: 'actionId', type: 'string', value: 'open_climax' },
+            { name: 'requiresFlag', type: 'string', value: 'ch1.all_milestones' },
+          ],
+        },
+        {
+          id: 302,
+          name: 'prop_harbor_notice',
+          type: 'prop',
+          x: 384,
+          y: 208,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'prop' },
+            { name: 'label', type: 'string', value: 'Bảng Cáo Thị Bến Cảng' },
+            { name: 'actionId', type: 'string', value: 'inspect_harbor_notice' },
+          ],
+        },
+        {
+          id: 303,
+          name: 'cp_harbor_lantern',
+          type: 'checkpoint',
+          x: 192,
+          y: 384,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'checkpoint' },
+            { name: 'label', type: 'string', value: 'Đèn Báo An Toàn Bến Cảng' },
+            { name: 'actionId', type: 'string', value: 'activate_checkpoint' },
+          ],
+        },
+      ],
+      entrances: [
+        {
+          id: 401,
+          name: 'default_spawn',
+          type: 'spawn',
+          x: 160,
+          y: 384,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+        {
+          id: 402,
+          name: 'from_warehouse',
+          type: 'spawn',
+          x: 512,
+          y: 432,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'down' }],
+        },
+        {
+          id: 403,
+          name: 'from_old_street',
+          type: 'spawn',
+          x: 912,
+          y: 240,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'left' }],
+        },
+        {
+          id: 404,
+          name: 'from_small_pier',
+          type: 'spawn',
+          x: 832,
+          y: 544,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'up' }],
+        },
+        {
+          id: 405,
+          name: 'exit_harbor_to_warehouse',
+          type: 'portal',
+          x: 512,
+          y: 400,
+          width: 32,
+          height: 16,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'warehouse_interior' },
+            { name: 'destinationSpawn', type: 'string', value: 'warehouse_south_door' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Kho Hàng Bến Cảng' },
+          ],
+        },
+        {
+          id: 406,
+          name: 'portal_to_warehouse',
+          type: 'portal',
+          x: 512,
+          y: 400,
+          width: 32,
+          height: 16,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'warehouse_interior' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_harbor' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Kho Hàng Số 4' },
+          ],
+        },
+        {
+          id: 407,
+          name: 'portal_to_old_street',
+          type: 'portal',
+          x: 960,
+          y: 240,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'old_street' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_harbor' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Phố Cổ Cửu Long' },
+          ],
+        },
+        {
+          id: 408,
+          name: 'portal_to_small_pier',
+          type: 'portal',
+          x: 832,
+          y: 608,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'small_pier' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_harbor' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Bến Thuyền Nhỏ (Tuyến Phụ)' },
+          ],
+        },
+      ],
+      patrolPaths: [
+        {
+          id: 501,
+          name: 'patrol_harbor_alley',
+          type: 'patrol',
+          x: 560,
+          y: 224,
+          width: 160,
+          height: 32,
+          polyline: [
+            { x: 0, y: 0 },
+            { x: 160, y: 0 },
+          ],
+          properties: [
+            { name: 'speed', type: 'float', value: 48 },
+            { name: 'coneLength', type: 'float', value: 96 },
+            { name: 'coneAngleRad', type: 'float', value: 0.75 },
+            { name: 'label', type: 'string', value: 'Lính Tuần Tra Hương Cảng' },
+            {
+              name: 'warningToast',
+              type: 'string',
+              value: 'Ánh đèn tuần tra thực dân phát hiện bóng người! Hãy nấp vào mái hiên!',
+            },
+          ],
+        },
+      ],
+      checkpoints: [
+        {
+          id: 601,
+          name: 'cp_harbor_lantern',
+          type: 'checkpoint',
+          x: 192,
+          y: 384,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+      ],
+    }),
   };
 }
 
@@ -772,8 +1045,13 @@ function buildWarehouseInteriorRaw(): TiledMapJson {
     renderorder: 'right-down',
     properties: [
       { name: 'id', type: 'string', value: 'warehouse_interior' },
-      { name: 'title', type: 'string', value: 'Kho Hàng Bến Cảng (Nội Thất)' },
+      {
+        name: 'title',
+        type: 'string',
+        value: 'Kho Hàng Số 4 — Kho Hàng Bến Cảng (Nội Thất)',
+      },
       { name: 'eraId', type: 'string', value: '1930' },
+      { name: 'districtType', type: 'string', value: 'interior' },
       { name: 'defaultSpawnId', type: 'string', value: 'warehouse_south_door' },
     ],
     tilesets: [
@@ -787,164 +1065,1346 @@ function buildWarehouseInteriorRaw(): TiledMapJson {
         columns: 8,
       },
     ],
-    layers: [
-      { id: 1, name: 'Ground', type: 'tilelayer', width: cols, height: rows, visible: true, opacity: 1, data: ground },
-      { id: 2, name: 'GroundDetails', type: 'tilelayer', width: cols, height: rows, visible: true, opacity: 1, data: groundDetails },
-      { id: 3, name: 'LowProps', type: 'tilelayer', width: cols, height: rows, visible: true, opacity: 1, data: lowProps },
-      { id: 4, name: 'Structures', type: 'tilelayer', width: cols, height: rows, visible: true, opacity: 1, data: structures },
-      { id: 5, name: 'Foreground', type: 'tilelayer', width: cols, height: rows, visible: true, opacity: 1, data: foreground },
-      { id: 6, name: 'Collision', type: 'tilelayer', width: cols, height: rows, visible: false, opacity: 0.5, data: collision },
+    layers: makeStandardLayers(cols, rows, {
+      ground,
+      groundDetails,
+      lowProps,
+      structures,
+      foreground,
+      collision,
+      lightOccluders: [
+        {
+          id: 101,
+          name: 'shelter_crate_shadow',
+          type: 'shelter',
+          x: 160,
+          y: 160,
+          width: 64,
+          height: 64,
+          properties: [{ name: 'label', type: 'string', value: 'Bóng Khuất Kiện Hàng' }],
+        },
+      ],
+      interactables: [
+        {
+          id: 301,
+          name: 'evidence_shipping_ledger',
+          type: 'evidence',
+          x: 272,
+          y: 208,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'evidence' },
+            { name: 'label', type: 'string', value: 'Sổ Vận Đơn Cửu Long' },
+            { name: 'actionId', type: 'string', value: 'inspect_shipping_ledger' },
+            { name: 'grantsFlag', type: 'string', value: 'ch1.ledger_inspected' },
+            { name: 'milestoneId', type: 'string', value: 'II' },
+            { name: 'evidenceId', type: 'string', value: 'ev_ch1_shipping_ledger' },
+          ],
+        },
+        {
+          id: 302,
+          name: 'prop_cargo_manifest_crate',
+          type: 'prop',
+          x: 208,
+          y: 272,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'prop' },
+            { name: 'label', type: 'string', value: 'Thùng Hàng Hương Cảng' },
+            { name: 'actionId', type: 'string', value: 'inspect_cargo_crate' },
+          ],
+        },
+        {
+          id: 303,
+          name: 'cp_warehouse_desk',
+          type: 'checkpoint',
+          x: 320,
+          y: 272,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'checkpoint' },
+            { name: 'label', type: 'string', value: 'Bàn Kiểm Kê Kho Hàng Số 4' },
+            { name: 'actionId', type: 'string', value: 'activate_checkpoint' },
+          ],
+        },
+      ],
+      entrances: [
+        {
+          id: 401,
+          name: 'warehouse_south_door',
+          type: 'spawn',
+          x: 272,
+          y: 384,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'up' }],
+        },
+        {
+          id: 402,
+          name: 'default_spawn',
+          type: 'spawn',
+          x: 272,
+          y: 384,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'up' }],
+        },
+        {
+          id: 403,
+          name: 'from_harbor',
+          type: 'spawn',
+          x: 272,
+          y: 384,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'up' }],
+        },
+        {
+          id: 404,
+          name: 'exit_warehouse_to_harbor',
+          type: 'portal',
+          x: 272,
+          y: 416,
+          width: 32,
+          height: 16,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'harbor_square' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_warehouse' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Quảng Trường Bến Cảng' },
+          ],
+        },
+        {
+          id: 405,
+          name: 'portal_to_harbor',
+          type: 'portal',
+          x: 272,
+          y: 416,
+          width: 32,
+          height: 16,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'harbor_square' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_warehouse' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Quảng Trường Bến Cảng' },
+          ],
+        },
+      ],
+      checkpoints: [
+        {
+          id: 601,
+          name: 'cp_warehouse_desk',
+          type: 'checkpoint',
+          x: 320,
+          y: 272,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'up' }],
+        },
+      ],
+    }),
+  };
+}
+
+function buildOldStreetRaw(): TiledMapJson {
+  const cols = 48;
+  const rows = 40;
+  const ts = 16;
+
+  const ground = createGrid(cols, rows, 1);
+  fillRect(ground, cols, rows, 0, 272, 768, 128, ts, 2);
+  fillRect(ground, cols, rows, 352, 160, 96, 128, ts, 2);
+
+  const structures = createGrid(cols, rows, 0);
+  fillRect(structures, cols, rows, 64, 64, 256, 96, ts, 9);
+  fillRect(structures, cols, rows, 352, 64, 128, 96, ts, 10);
+  fillRect(structures, cols, rows, 512, 64, 192, 96, ts, 9);
+  fillRect(structures, cols, rows, 128, 464, 512, 96, ts, 9);
+
+  const foreground = createGrid(cols, rows, 0);
+  fillRect(foreground, cols, rows, 64, 48, 256, 24, ts, 12);
+  fillRect(foreground, cols, rows, 352, 48, 128, 24, ts, 12);
+  fillRect(foreground, cols, rows, 512, 48, 192, 24, ts, 12);
+
+  const collision = createGrid(cols, rows, 0);
+  fillRect(collision, cols, rows, 64, 64, 256, 96, ts, 16);
+  fillRect(collision, cols, rows, 352, 64, 128, 96, ts, 16);
+  fillRect(collision, cols, rows, 512, 64, 192, 96, ts, 16);
+  fillRect(collision, cols, rows, 128, 464, 512, 96, ts, 16);
+
+  return {
+    width: cols,
+    height: rows,
+    tilewidth: ts,
+    tileheight: ts,
+    orientation: 'orthogonal',
+    renderorder: 'right-down',
+    properties: [
+      { name: 'id', type: 'string', value: 'old_street' },
+      { name: 'title', type: 'string', value: 'Phố Cổ Cửu Long (1930)' },
+      { name: 'eraId', type: 'string', value: '1930' },
+      { name: 'districtType', type: 'string', value: 'outdoor' },
+      { name: 'defaultSpawnId', type: 'string', value: 'default_spawn' },
+    ],
+    tilesets: [
       {
-        id: 7,
-        name: 'LightOccluders',
-        type: 'objectgroup',
-        visible: true,
-        opacity: 1,
-        objects: [
-          {
-            id: 101,
-            name: 'shelter_crate_shadow',
-            type: 'shelter',
-            x: 160,
-            y: 160,
-            width: 64,
-            height: 64,
-            properties: [{ name: 'label', type: 'string', value: 'Bóng Khuất Kiện Hàng' }],
-          },
-        ],
-      },
-      {
-        id: 8,
-        name: 'NPCs',
-        type: 'objectgroup',
-        visible: true,
-        opacity: 1,
-        objects: [],
-      },
-      {
-        id: 9,
-        name: 'Interactables',
-        type: 'objectgroup',
-        visible: true,
-        opacity: 1,
-        objects: [
-          {
-            id: 301,
-            name: 'evidence_shipping_ledger',
-            type: 'evidence',
-            x: 272,
-            y: 208,
-            width: 16,
-            height: 16,
-            properties: [
-              { name: 'kind', type: 'string', value: 'evidence' },
-              { name: 'label', type: 'string', value: 'Sổ Vận Đơn Cửu Long' },
-              { name: 'actionId', type: 'string', value: 'inspect_shipping_ledger' },
-              { name: 'grantsFlag', type: 'string', value: 'ch1.ledger_inspected' },
-              { name: 'milestoneId', type: 'string', value: 'II' },
-              { name: 'evidenceId', type: 'string', value: 'ev_ch1_shipping_ledger' },
-            ],
-          },
-          {
-            id: 302,
-            name: 'prop_cargo_manifest_crate',
-            type: 'prop',
-            x: 208,
-            y: 272,
-            width: 16,
-            height: 16,
-            properties: [
-              { name: 'kind', type: 'string', value: 'prop' },
-              { name: 'label', type: 'string', value: 'Thùng Hàng Hương Cảng' },
-              { name: 'actionId', type: 'string', value: 'inspect_cargo_crate' },
-            ],
-          },
-        ],
-      },
-      {
-        id: 10,
-        name: 'Entrances',
-        type: 'objectgroup',
-        visible: true,
-        opacity: 1,
-        objects: [
-          {
-            id: 401,
-            name: 'warehouse_south_door',
-            type: 'spawn',
-            x: 272,
-            y: 384,
-            width: 16,
-            height: 16,
-            properties: [{ name: 'facing', type: 'string', value: 'up' }],
-          },
-          {
-            id: 402,
-            name: 'default_spawn',
-            type: 'spawn',
-            x: 272,
-            y: 384,
-            width: 16,
-            height: 16,
-            properties: [{ name: 'facing', type: 'string', value: 'up' }],
-          },
-          {
-            id: 403,
-            name: 'exit_warehouse_to_harbor',
-            type: 'portal',
-            x: 272,
-            y: 416,
-            width: 32,
-            height: 16,
-            properties: [
-              { name: 'destinationMap', type: 'string', value: 'harbor_square' },
-              { name: 'destinationSpawn', type: 'string', value: 'from_warehouse' },
-              { name: 'transition', type: 'string', value: 'fade' },
-              { name: 'label', type: 'string', value: 'Quảng Trường Bến Cảng' },
-            ],
-          },
-        ],
-      },
-      {
-        id: 11,
-        name: 'PatrolPaths',
-        type: 'objectgroup',
-        visible: true,
-        opacity: 1,
-        objects: [],
-      },
-      {
-        id: 12,
-        name: 'Checkpoints',
-        type: 'objectgroup',
-        visible: true,
-        opacity: 1,
-        objects: [
-          {
-            id: 601,
-            name: 'checkpoint_warehouse_entry',
-            type: 'checkpoint',
-            x: 272,
-            y: 384,
-            width: 16,
-            height: 16,
-            properties: [{ name: 'facing', type: 'string', value: 'up' }],
-          },
-        ],
+        firstgid: 1,
+        name: 'harbor_tiles',
+        image: '/tilesets/ch1/harbor_tiles.png',
+        tilewidth: 16,
+        tileheight: 16,
+        tilecount: 64,
+        columns: 8,
       },
     ],
+    layers: makeStandardLayers(cols, rows, {
+      ground,
+      structures,
+      foreground,
+      collision,
+      lightOccluders: [
+        {
+          id: 101,
+          name: 'shelter_tea_stall',
+          type: 'shelter',
+          x: 160,
+          y: 400,
+          width: 128,
+          height: 48,
+          properties: [{ name: 'label', type: 'string', value: 'Mái Hiên Quán Trà Phố Cổ' }],
+        },
+      ],
+      npcs: [
+        {
+          id: 201,
+          name: 'npc_street_vendor',
+          type: 'npc',
+          x: 224,
+          y: 384,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'npcId', type: 'string', value: 'npc_street_vendor' },
+            { name: 'name', type: 'string', value: 'Bà Năm Quán Nước' },
+            { name: 'role', type: 'string', value: 'Chủ quán trà Phố Cổ' },
+            { name: 'facing', type: 'string', value: 'up' },
+            { name: 'dialogueId', type: 'string', value: 'ch1_vendor_talk' },
+            { name: 'fictionTag', type: 'string', value: 'fictional_npc' },
+            { name: 'approachRadius', type: 'int', value: 36 },
+            { name: 'milestoneRoman', type: 'string', value: 'II' },
+          ],
+        },
+        {
+          id: 202,
+          name: 'npc_liaison_inner',
+          type: 'npc',
+          x: 320,
+          y: 288,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'npcId', type: 'string', value: 'npc_liaison_inner' },
+            { name: 'name', type: 'string', value: 'Đồng Chí Thanh (Liên Lạc Nội Tuyến)' },
+            { name: 'role', type: 'string', value: 'Giao liên dẫn đường khu Phố Cổ' },
+            { name: 'facing', type: 'string', value: 'right' },
+            { name: 'dialogueId', type: 'string', value: 'ch1_liaison_inner_talk' },
+            { name: 'fictionTag', type: 'string', value: 'fictional_npc' },
+            { name: 'approachRadius', type: 'int', value: 36 },
+            { name: 'moveSpeed', type: 'float', value: 40 },
+            {
+              name: 'routeJson',
+              type: 'string',
+              value: JSON.stringify([
+                { x: 320, y: 288, waitSec: 0.8, facing: 'right' },
+                { x: 480, y: 288, waitSec: 0.8, facing: 'left' },
+              ]),
+            },
+          ],
+        },
+      ],
+      interactables: [
+        {
+          id: 301,
+          name: 'cp_old_street_tea',
+          type: 'checkpoint',
+          x: 192,
+          y: 416,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'checkpoint' },
+            { name: 'label', type: 'string', value: 'Quán Trà Phố Cổ (Điểm Lưu)' },
+            { name: 'actionId', type: 'string', value: 'activate_checkpoint' },
+          ],
+        },
+        {
+          id: 302,
+          name: 'evidence_old_street_leaflet',
+          type: 'evidence',
+          x: 528,
+          y: 224,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'evidence' },
+            { name: 'label', type: 'string', value: 'Truyền Đơn Bến Cảng 1930' },
+            { name: 'actionId', type: 'string', value: 'inspect_leaflet' },
+            { name: 'grantsFlag', type: 'string', value: 'ch1.leaflet_read' },
+            { name: 'milestoneId', type: 'string', value: 'II' },
+            { name: 'evidenceId', type: 'string', value: 'ev_ch1_street_leaflet' },
+          ],
+        },
+      ],
+      entrances: [
+        {
+          id: 401,
+          name: 'default_spawn',
+          type: 'spawn',
+          x: 112,
+          y: 320,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+        {
+          id: 402,
+          name: 'from_harbor',
+          type: 'spawn',
+          x: 112,
+          y: 320,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+        {
+          id: 403,
+          name: 'from_safehouse',
+          type: 'spawn',
+          x: 384,
+          y: 208,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'down' }],
+        },
+        {
+          id: 404,
+          name: 'from_shadow_alley',
+          type: 'spawn',
+          x: 640,
+          y: 320,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'left' }],
+        },
+        {
+          id: 405,
+          name: 'portal_to_harbor_from_street',
+          type: 'portal',
+          x: 32,
+          y: 320,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'harbor_square' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_old_street' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Quảng Trường Bến Cảng' },
+          ],
+        },
+        {
+          id: 406,
+          name: 'portal_to_safehouse',
+          type: 'portal',
+          x: 384,
+          y: 160,
+          width: 32,
+          height: 16,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'safehouse_interior' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_old_street' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Nhà An Toàn Giao Liên' },
+          ],
+        },
+        {
+          id: 407,
+          name: 'portal_to_shadow_alley',
+          type: 'portal',
+          x: 704,
+          y: 320,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'shadow_alley' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_old_street' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Hẻm Tối Tuần Tra' },
+          ],
+        },
+      ],
+      checkpoints: [
+        {
+          id: 601,
+          name: 'cp_old_street_tea',
+          type: 'checkpoint',
+          x: 192,
+          y: 416,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'up' }],
+        },
+      ],
+    }),
+  };
+}
+
+function buildSmallPierRaw(): TiledMapJson {
+  const cols = 40;
+  const rows = 30;
+  const ts = 16;
+
+  const ground = createGrid(cols, rows, 3);
+  fillRect(ground, cols, rows, 0, 384, 640, 96, ts, 4);
+
+  const structures = createGrid(cols, rows, 0);
+  fillRect(structures, cols, rows, 256, 160, 96, 64, ts, 10);
+
+  const collision = createGrid(cols, rows, 0);
+  fillRect(collision, cols, rows, 256, 160, 96, 64, ts, 16);
+  fillRect(collision, cols, rows, 0, 384, 640, 96, ts, 16);
+
+  return {
+    width: cols,
+    height: rows,
+    tilewidth: ts,
+    tileheight: ts,
+    orientation: 'orthogonal',
+    renderorder: 'right-down',
+    properties: [
+      { name: 'id', type: 'string', value: 'small_pier' },
+      { name: 'title', type: 'string', value: 'Bến Thuyền Nhỏ — Cảng Thơm (1930)' },
+      { name: 'eraId', type: 'string', value: '1930' },
+      { name: 'districtType', type: 'string', value: 'optional' },
+      { name: 'defaultSpawnId', type: 'string', value: 'default_spawn' },
+    ],
+    tilesets: [
+      {
+        firstgid: 1,
+        name: 'harbor_tiles',
+        image: '/tilesets/ch1/harbor_tiles.png',
+        tilewidth: 16,
+        tileheight: 16,
+        tilecount: 64,
+        columns: 8,
+      },
+    ],
+    layers: makeStandardLayers(cols, rows, {
+      ground,
+      structures,
+      collision,
+      lightOccluders: [
+        {
+          id: 101,
+          name: 'shelter_pier_canopy',
+          type: 'shelter',
+          x: 160,
+          y: 240,
+          width: 80,
+          height: 48,
+          properties: [{ name: 'label', type: 'string', value: 'Mái Bạt Bến Thuyền' }],
+        },
+      ],
+      npcs: [
+        {
+          id: 201,
+          name: 'npc_pier_boatman',
+          type: 'npc',
+          x: 384,
+          y: 272,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'npcId', type: 'string', value: 'npc_pier_boatman' },
+            { name: 'name', type: 'string', value: 'Ông Sáu Đò Đêm' },
+            { name: 'role', type: 'string', value: 'Người chèo thuyền tam bản' },
+            { name: 'facing', type: 'string', value: 'right' },
+            { name: 'dialogueId', type: 'string', value: 'ch1_boatman_shortcut' },
+            { name: 'fictionTag', type: 'string', value: 'fictional_npc' },
+            { name: 'approachRadius', type: 'int', value: 36 },
+            { name: 'moveSpeed', type: 'float', value: 36 },
+            {
+              name: 'routeJson',
+              type: 'string',
+              value: JSON.stringify([
+                { x: 384, y: 272, waitSec: 1.0, facing: 'right' },
+                { x: 480, y: 272, waitSec: 1.0, facing: 'left' },
+              ]),
+            },
+          ],
+        },
+      ],
+      interactables: [
+        {
+          id: 301,
+          name: 'cp_small_pier_post',
+          type: 'checkpoint',
+          x: 160,
+          y: 224,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'checkpoint' },
+            { name: 'label', type: 'string', value: 'Cọc Neo Bến Thuyền Nhỏ' },
+            { name: 'actionId', type: 'string', value: 'activate_checkpoint' },
+          ],
+        },
+        {
+          id: 302,
+          name: 'prop_pier_schedule',
+          type: 'evidence',
+          x: 416,
+          y: 208,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'evidence' },
+            { name: 'label', type: 'string', value: 'Lịch Trình Tuần Tra Đêm' },
+            { name: 'actionId', type: 'string', value: 'inspect_pier_schedule' },
+            { name: 'grantsFlag', type: 'string', value: 'ch1.patrol_timing_known' },
+            { name: 'evidenceId', type: 'string', value: 'ev_ch1_patrol_schedule' },
+          ],
+        },
+      ],
+      entrances: [
+        {
+          id: 401,
+          name: 'default_spawn',
+          type: 'spawn',
+          x: 112,
+          y: 224,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+        {
+          id: 402,
+          name: 'from_harbor',
+          type: 'spawn',
+          x: 112,
+          y: 224,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+        {
+          id: 403,
+          name: 'from_shadow_alley',
+          type: 'spawn',
+          x: 512,
+          y: 128,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'down' }],
+        },
+        {
+          id: 404,
+          name: 'portal_to_harbor_from_pier',
+          type: 'portal',
+          x: 32,
+          y: 224,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'harbor_square' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_small_pier' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Quảng Trường Bến Cảng' },
+          ],
+        },
+        {
+          id: 405,
+          name: 'portal_to_alley_from_pier',
+          type: 'portal',
+          x: 512,
+          y: 64,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'shadow_alley' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_small_pier' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Lối Tắt Hẻm Tối' },
+          ],
+        },
+      ],
+      checkpoints: [
+        {
+          id: 601,
+          name: 'cp_small_pier_post',
+          type: 'checkpoint',
+          x: 160,
+          y: 224,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+      ],
+    }),
+  };
+}
+
+function buildSafehouseInteriorRaw(): TiledMapJson {
+  const cols = 32;
+  const rows = 24;
+  const ts = 16;
+
+  const ground = createGrid(cols, rows, 21);
+  fillRect(ground, cols, rows, 192, 128, 128, 224, ts, 22);
+
+  const structures = createGrid(cols, rows, 0);
+  fillRect(structures, cols, rows, 0, 0, 512, 48, ts, 25);
+  fillRect(structures, cols, rows, 0, 48, 32, 336, ts, 25);
+  fillRect(structures, cols, rows, 480, 48, 32, 336, ts, 25);
+  fillRect(structures, cols, rows, 32, 352, 192, 32, ts, 25);
+  fillRect(structures, cols, rows, 288, 352, 192, 32, ts, 25);
+
+  const collision = createGrid(cols, rows, 0);
+  fillRect(collision, cols, rows, 0, 0, 512, 48, ts, 32);
+  fillRect(collision, cols, rows, 0, 48, 32, 336, ts, 32);
+  fillRect(collision, cols, rows, 480, 48, 32, 336, ts, 32);
+  fillRect(collision, cols, rows, 32, 352, 192, 32, ts, 32);
+  fillRect(collision, cols, rows, 288, 352, 192, 32, ts, 32);
+
+  return {
+    width: cols,
+    height: rows,
+    tilewidth: ts,
+    tileheight: ts,
+    orientation: 'orthogonal',
+    renderorder: 'right-down',
+    properties: [
+      { name: 'id', type: 'string', value: 'safehouse_interior' },
+      { name: 'title', type: 'string', value: 'Nhà An Toàn Giao Liên — Cửu Long (1930)' },
+      { name: 'eraId', type: 'string', value: '1930' },
+      { name: 'districtType', type: 'string', value: 'interior' },
+      { name: 'defaultSpawnId', type: 'string', value: 'default_spawn' },
+    ],
+    tilesets: [
+      {
+        firstgid: 1,
+        name: 'interior_tiles',
+        image: '/tilesets/ch1/interior_tiles.png',
+        tilewidth: 16,
+        tileheight: 16,
+        tilecount: 64,
+        columns: 8,
+      },
+    ],
+    layers: makeStandardLayers(cols, rows, {
+      ground,
+      structures,
+      collision,
+      interactables: [
+        {
+          id: 301,
+          name: 'evidence_safehouse_cipher',
+          type: 'evidence',
+          x: 240,
+          y: 160,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'evidence' },
+            { name: 'label', type: 'string', value: 'Bản Mật Mã Liên Lạc Cửu Long' },
+            { name: 'actionId', type: 'string', value: 'inspect_cipher_note' },
+            { name: 'grantsFlag', type: 'string', value: 'ch1_safehouse_cipher' },
+            { name: 'milestoneId', type: 'string', value: 'II' },
+            { name: 'evidenceId', type: 'string', value: 'ev_ch1_cipher_note' },
+          ],
+        },
+        {
+          id: 302,
+          name: 'cp_safehouse_lamp',
+          type: 'checkpoint',
+          x: 160,
+          y: 224,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'checkpoint' },
+            { name: 'label', type: 'string', value: 'Đèn Dầu Nhà An Toàn' },
+            { name: 'actionId', type: 'string', value: 'activate_checkpoint' },
+          ],
+        },
+      ],
+      entrances: [
+        {
+          id: 401,
+          name: 'default_spawn',
+          type: 'spawn',
+          x: 240,
+          y: 304,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'up' }],
+        },
+        {
+          id: 402,
+          name: 'from_old_street',
+          type: 'spawn',
+          x: 240,
+          y: 304,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'up' }],
+        },
+        {
+          id: 403,
+          name: 'portal_to_old_street_from_safehouse',
+          type: 'portal',
+          x: 240,
+          y: 352,
+          width: 32,
+          height: 16,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'old_street' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_safehouse' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Phố Cổ Cửu Long' },
+          ],
+        },
+      ],
+      checkpoints: [
+        {
+          id: 601,
+          name: 'cp_safehouse_lamp',
+          type: 'checkpoint',
+          x: 160,
+          y: 224,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'up' }],
+        },
+      ],
+    }),
+  };
+}
+
+function buildShadowAlleyRaw(): TiledMapJson {
+  const cols = 44;
+  const rows = 32;
+  const ts = 16;
+
+  const ground = createGrid(cols, rows, 1);
+  fillRect(ground, cols, rows, 32, 240, 640, 96, ts, 2);
+  fillRect(ground, cols, rows, 336, 240, 64, 240, ts, 2);
+
+  const structures = createGrid(cols, rows, 0);
+  fillRect(structures, cols, rows, 64, 48, 576, 64, ts, 9);
+  fillRect(structures, cols, rows, 224, 208, 48, 48, ts, 10);
+  fillRect(structures, cols, rows, 432, 208, 48, 48, ts, 10);
+
+  const collision = createGrid(cols, rows, 0);
+  fillRect(collision, cols, rows, 64, 48, 576, 64, ts, 16);
+  fillRect(collision, cols, rows, 224, 208, 48, 48, ts, 16);
+  fillRect(collision, cols, rows, 432, 208, 48, 48, ts, 16);
+
+  return {
+    width: cols,
+    height: rows,
+    tilewidth: ts,
+    tileheight: ts,
+    orientation: 'orthogonal',
+    renderorder: 'right-down',
+    properties: [
+      { name: 'id', type: 'string', value: 'shadow_alley' },
+      { name: 'title', type: 'string', value: 'Hẻm Tối Tuần Tra — Cửu Long (1930)' },
+      { name: 'eraId', type: 'string', value: '1930' },
+      { name: 'districtType', type: 'string', value: 'stealth' },
+      { name: 'defaultSpawnId', type: 'string', value: 'default_spawn' },
+    ],
+    tilesets: [
+      {
+        firstgid: 1,
+        name: 'harbor_tiles',
+        image: '/tilesets/ch1/harbor_tiles.png',
+        tilewidth: 16,
+        tileheight: 16,
+        tilecount: 64,
+        columns: 8,
+      },
+    ],
+    layers: makeStandardLayers(cols, rows, {
+      ground,
+      structures,
+      collision,
+      lightOccluders: [
+        {
+          id: 101,
+          name: 'shelter_alley_alcove_1',
+          type: 'shelter',
+          x: 192,
+          y: 144,
+          width: 96,
+          height: 48,
+          properties: [{ name: 'label', type: 'string', value: 'Hốc Tường Khuất Sáng Tây' }],
+        },
+        {
+          id: 102,
+          name: 'shelter_alley_alcove_2',
+          type: 'shelter',
+          x: 400,
+          y: 144,
+          width: 96,
+          height: 48,
+          properties: [{ name: 'label', type: 'string', value: 'Hốc Tường Khuất Sáng Đông' }],
+        },
+        {
+          id: 103,
+          name: 'occluder_pillar_west',
+          type: 'occluder',
+          x: 224,
+          y: 208,
+          width: 48,
+          height: 48,
+        },
+        {
+          id: 104,
+          name: 'occluder_pillar_east',
+          type: 'occluder',
+          x: 432,
+          y: 208,
+          width: 48,
+          height: 48,
+        },
+      ],
+      interactables: [
+        {
+          id: 301,
+          name: 'cp_shadow_alley_arch',
+          type: 'checkpoint',
+          x: 144,
+          y: 192,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'checkpoint' },
+            { name: 'label', type: 'string', value: 'Vòm Đá Hẻm Tối' },
+            { name: 'actionId', type: 'string', value: 'activate_checkpoint' },
+          ],
+        },
+      ],
+      entrances: [
+        {
+          id: 401,
+          name: 'default_spawn',
+          type: 'spawn',
+          x: 112,
+          y: 256,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+        {
+          id: 402,
+          name: 'from_old_street',
+          type: 'spawn',
+          x: 112,
+          y: 256,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+        {
+          id: 403,
+          name: 'from_small_pier',
+          type: 'spawn',
+          x: 352,
+          y: 400,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'up' }],
+        },
+        {
+          id: 404,
+          name: 'from_archive_courtyard',
+          type: 'spawn',
+          x: 576,
+          y: 256,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'left' }],
+        },
+        {
+          id: 405,
+          name: 'portal_to_old_street_from_alley',
+          type: 'portal',
+          x: 32,
+          y: 256,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'old_street' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_shadow_alley' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Phố Cổ Cửu Long' },
+          ],
+        },
+        {
+          id: 406,
+          name: 'portal_to_pier_from_alley',
+          type: 'portal',
+          x: 352,
+          y: 464,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'small_pier' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_shadow_alley' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Bến Thuyền Nhỏ' },
+          ],
+        },
+        {
+          id: 407,
+          name: 'portal_to_archive_courtyard',
+          type: 'portal',
+          x: 640,
+          y: 256,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'archive_courtyard' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_shadow_alley' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Sân Kho Lưu Trữ' },
+          ],
+        },
+      ],
+      patrolPaths: [
+        {
+          id: 501,
+          name: 'patrol_alley_1',
+          type: 'patrol',
+          x: 208,
+          y: 304,
+          width: 288,
+          height: 32,
+          polyline: [
+            { x: 0, y: 0 },
+            { x: 288, y: 0 },
+          ],
+          properties: [
+            { name: 'speed', type: 'float', value: 52 },
+            { name: 'coneLength', type: 'float', value: 104 },
+            { name: 'coneAngleRad', type: 'float', value: 0.78 },
+            { name: 'label', type: 'string', value: 'Mật Thám Tuần Tra Hẻm Tối' },
+            {
+              name: 'warningToast',
+              type: 'string',
+              value: 'Cảnh giác! Đèn tuần tra Hẻm Tối đang quét qua!',
+            },
+          ],
+        },
+      ],
+      checkpoints: [
+        {
+          id: 601,
+          name: 'cp_shadow_alley_arch',
+          type: 'checkpoint',
+          x: 144,
+          y: 192,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+      ],
+    }),
+  };
+}
+
+function buildArchiveCourtyardRaw(): TiledMapJson {
+  const cols = 44;
+  const rows = 34;
+  const ts = 16;
+
+  const ground = createGrid(cols, rows, 1);
+  fillRect(ground, cols, rows, 32, 256, 640, 96, ts, 2);
+  fillRect(ground, cols, rows, 320, 176, 96, 128, ts, 2);
+
+  const structures = createGrid(cols, rows, 0);
+  fillRect(structures, cols, rows, 224, 64, 256, 112, ts, 9);
+  fillRect(structures, cols, rows, 192, 320, 16, 16, ts, 11);
+  fillRect(structures, cols, rows, 496, 320, 16, 16, ts, 11);
+
+  const foreground = createGrid(cols, rows, 0);
+  fillRect(foreground, cols, rows, 224, 48, 256, 24, ts, 12);
+  fillRect(foreground, cols, rows, 176, 288, 48, 48, ts, 13);
+  fillRect(foreground, cols, rows, 480, 288, 48, 48, ts, 13);
+
+  const collision = createGrid(cols, rows, 0);
+  fillRect(collision, cols, rows, 224, 64, 256, 112, ts, 16);
+  fillRect(collision, cols, rows, 192, 320, 16, 16, ts, 16);
+  fillRect(collision, cols, rows, 496, 320, 16, 16, ts, 16);
+
+  return {
+    width: cols,
+    height: rows,
+    tilewidth: ts,
+    tileheight: ts,
+    orientation: 'orthogonal',
+    renderorder: 'right-down',
+    properties: [
+      { name: 'id', type: 'string', value: 'archive_courtyard' },
+      { name: 'title', type: 'string', value: 'Sân Kho Lưu Trữ Hương Cảng (1930)' },
+      { name: 'eraId', type: 'string', value: '1930' },
+      { name: 'districtType', type: 'string', value: 'outdoor' },
+      { name: 'defaultSpawnId', type: 'string', value: 'default_spawn' },
+    ],
+    tilesets: [
+      {
+        firstgid: 1,
+        name: 'harbor_tiles',
+        image: '/tilesets/ch1/harbor_tiles.png',
+        tilewidth: 16,
+        tileheight: 16,
+        tilecount: 64,
+        columns: 8,
+      },
+    ],
+    layers: makeStandardLayers(cols, rows, {
+      ground,
+      structures,
+      foreground,
+      collision,
+      lightOccluders: [
+        {
+          id: 101,
+          name: 'shelter_courtyard_porch',
+          type: 'shelter',
+          x: 256,
+          y: 176,
+          width: 192,
+          height: 48,
+          properties: [{ name: 'label', type: 'string', value: 'Hiên Sân Kho Lưu Trữ' }],
+        },
+      ],
+      npcs: [
+        {
+          id: 201,
+          name: 'npc_archive_keeper',
+          type: 'npc',
+          x: 416,
+          y: 240,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'npcId', type: 'string', value: 'npc_archive_keeper' },
+            { name: 'name', type: 'string', value: 'Cụ Đồ Nho (Thủ Từ)' },
+            { name: 'role', type: 'string', value: 'Người trông coi Sân Lưu Trữ' },
+            { name: 'facing', type: 'string', value: 'down' },
+            { name: 'dialogueId', type: 'string', value: 'ch1_keeper_gate' },
+            { name: 'fictionTag', type: 'string', value: 'fictional_npc' },
+            { name: 'approachRadius', type: 'int', value: 36 },
+            { name: 'milestoneRoman', type: 'string', value: 'III' },
+          ],
+        },
+      ],
+      interactables: [
+        {
+          id: 301,
+          name: 'cp_archive_courtyard_bench',
+          type: 'checkpoint',
+          x: 256,
+          y: 320,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'checkpoint' },
+            { name: 'label', type: 'string', value: 'Ghế Đá Sân Kho Lưu Trữ' },
+            { name: 'actionId', type: 'string', value: 'activate_checkpoint' },
+          ],
+        },
+      ],
+      entrances: [
+        {
+          id: 401,
+          name: 'default_spawn',
+          type: 'spawn',
+          x: 112,
+          y: 288,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+        {
+          id: 402,
+          name: 'from_shadow_alley',
+          type: 'spawn',
+          x: 112,
+          y: 288,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+        {
+          id: 403,
+          name: 'from_secret_archive',
+          type: 'spawn',
+          x: 352,
+          y: 224,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'down' }],
+        },
+        {
+          id: 404,
+          name: 'portal_to_alley_from_courtyard',
+          type: 'portal',
+          x: 32,
+          y: 288,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'shadow_alley' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_archive_courtyard' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Hẻm Tối Tuần Tra' },
+          ],
+        },
+        {
+          id: 405,
+          name: 'portal_to_secret_archive',
+          type: 'portal',
+          x: 352,
+          y: 176,
+          width: 32,
+          height: 16,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'secret_archive' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_archive_courtyard' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Phòng Lưu Trữ Bí Mật' },
+          ],
+        },
+      ],
+      checkpoints: [
+        {
+          id: 601,
+          name: 'cp_archive_courtyard_bench',
+          type: 'checkpoint',
+          x: 256,
+          y: 320,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'up' }],
+        },
+      ],
+    }),
+  };
+}
+
+function buildSecretArchiveRaw(): TiledMapJson {
+  const cols = 32;
+  const rows = 24;
+  const ts = 16;
+
+  const ground = createGrid(cols, rows, 21);
+  fillRect(ground, cols, rows, 176, 80, 160, 272, ts, 22);
+
+  const structures = createGrid(cols, rows, 0);
+  fillRect(structures, cols, rows, 0, 0, 512, 48, ts, 25);
+  fillRect(structures, cols, rows, 0, 48, 32, 336, ts, 25);
+  fillRect(structures, cols, rows, 480, 48, 32, 336, ts, 25);
+  fillRect(structures, cols, rows, 32, 352, 192, 32, ts, 25);
+  fillRect(structures, cols, rows, 288, 352, 192, 32, ts, 25);
+
+  const collision = createGrid(cols, rows, 0);
+  fillRect(collision, cols, rows, 0, 0, 512, 48, ts, 32);
+  fillRect(collision, cols, rows, 0, 48, 32, 336, ts, 32);
+  fillRect(collision, cols, rows, 480, 48, 32, 336, ts, 32);
+  fillRect(collision, cols, rows, 32, 352, 192, 32, ts, 32);
+  fillRect(collision, cols, rows, 288, 352, 192, 32, ts, 32);
+
+  return {
+    width: cols,
+    height: rows,
+    tilewidth: ts,
+    tileheight: ts,
+    orientation: 'orthogonal',
+    renderorder: 'right-down',
+    properties: [
+      { name: 'id', type: 'string', value: 'secret_archive' },
+      { name: 'title', type: 'string', value: 'Phòng Lưu Trữ Bí Mật — Hội Nghị Hợp Nhất (1930)' },
+      { name: 'eraId', type: 'string', value: '1930' },
+      { name: 'districtType', type: 'string', value: 'finale' },
+      { name: 'defaultSpawnId', type: 'string', value: 'default_spawn' },
+    ],
+    tilesets: [
+      {
+        firstgid: 1,
+        name: 'interior_tiles',
+        image: '/tilesets/ch1/interior_tiles.png',
+        tilewidth: 16,
+        tileheight: 16,
+        tilecount: 64,
+        columns: 8,
+      },
+    ],
+    layers: makeStandardLayers(cols, rows, {
+      ground,
+      structures,
+      collision,
+      interactables: [
+        {
+          id: 301,
+          name: 'ev_ch1_unification_appeal',
+          type: 'evidence',
+          x: 192,
+          y: 176,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'evidence' },
+            {
+              name: 'label',
+              type: 'string',
+              value: 'Chính Cương Vắn Tắt & Sách Lược Vắn Tắt (2/1930)',
+            },
+            { name: 'actionId', type: 'string', value: 'inspect_unification_appeal' },
+            { name: 'grantsFlag', type: 'string', value: 'ch1.appeal_collected' },
+            { name: 'milestoneId', type: 'string', value: 'III' },
+            { name: 'evidenceId', type: 'string', value: 'ev_ch1_unification_appeal' },
+          ],
+        },
+        {
+          id: 302,
+          name: 'climax_gate_1930',
+          type: 'climax_gate',
+          x: 240,
+          y: 96,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'kind', type: 'string', value: 'climax_gate' },
+            { name: 'label', type: 'string', value: 'Bàn Hội Nghị Hợp Nhất 3/2/1930' },
+            { name: 'actionId', type: 'string', value: 'open_climax' },
+            { name: 'milestoneId', type: 'string', value: 'III' },
+          ],
+        },
+        {
+          id: 303,
+          name: 'cp_secret_archive_table',
+          type: 'checkpoint',
+          x: 320,
+          y: 224,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'checkpoint' },
+            { name: 'label', type: 'string', value: 'Bàn Lưu Trữ Mật' },
+            { name: 'actionId', type: 'string', value: 'activate_checkpoint' },
+          ],
+        },
+      ],
+      entrances: [
+        {
+          id: 401,
+          name: 'default_spawn',
+          type: 'spawn',
+          x: 240,
+          y: 304,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'up' }],
+        },
+        {
+          id: 402,
+          name: 'from_archive_courtyard',
+          type: 'spawn',
+          x: 240,
+          y: 304,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'up' }],
+        },
+        {
+          id: 403,
+          name: 'portal_to_courtyard_from_secret',
+          type: 'portal',
+          x: 240,
+          y: 352,
+          width: 32,
+          height: 16,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'archive_courtyard' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_secret_archive' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Sân Kho Lưu Trữ' },
+          ],
+        },
+      ],
+      checkpoints: [
+        {
+          id: 601,
+          name: 'cp_secret_archive_table',
+          type: 'checkpoint',
+          x: 320,
+          y: 224,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'up' }],
+        },
+      ],
+    }),
   };
 }
 
 const BUILTIN_RAW_MAPS: Record<string, TiledMapJson> = {
   harbor_square: buildHarborSquareRaw(),
   warehouse_interior: buildWarehouseInteriorRaw(),
+  old_street: buildOldStreetRaw(),
+  small_pier: buildSmallPierRaw(),
+  safehouse_interior: buildSafehouseInteriorRaw(),
+  shadow_alley: buildShadowAlleyRaw(),
+  archive_courtyard: buildArchiveCourtyardRaw(),
+  secret_archive: buildSecretArchiveRaw(),
 };
 
 const BUILTIN_PARSED_CACHE: Record<string, NormalizedMapData> = {};
+let fallbackRegistryInitialized = false;
+
+function ensureFallbackRegistryInitialized(): void {
+  if (fallbackRegistryInitialized) return;
+  fallbackRegistryInitialized = true;
+  for (const id of Object.keys(BUILTIN_RAW_MAPS)) {
+    const norm = getBuiltInMap(id);
+    registerValidatableMapFallback({
+      id: norm.id,
+      width: norm.widthPx,
+      height: norm.heightPx,
+      tileSize: norm.tileSize,
+      defaultSpawnId: norm.defaultSpawnId,
+      spawns: norm.spawns,
+      portals: norm.portals,
+      interactables: norm.interactables,
+      obstacles: norm.obstacles,
+    });
+  }
+}
 
 /**
- * Truy xuất đồng bộ bản đồ tích hợp sẵn (`harbor_square` hoặc `warehouse_interior`).
+ * Trả về dữ liệu JSON Tiled gốc của 8 bản đồ Chương I.
+ */
+export function getAllBuiltInRawMaps(): Record<string, TiledMapJson> {
+  return { ...BUILTIN_RAW_MAPS };
+}
+
+/**
+ * Truy xuất đồng bộ một bản đồ tích hợp sẵn của Chương I.
  */
 export function getBuiltInMap(id: string): NormalizedMapData {
   if (!BUILTIN_PARSED_CACHE[id]) {
@@ -958,9 +2418,10 @@ export function getBuiltInMap(id: string): NormalizedMapData {
 }
 
 /**
- * Trả về toàn bộ tập bản đồ tích hợp sẵn đã chuẩn hóa.
+ * Trả về toàn bộ 8 bản đồ tích hợp sẵn của Chương I đã chuẩn hóa.
  */
 export function getAllBuiltInMaps(): Record<string, NormalizedMapData> {
+  ensureFallbackRegistryInitialized();
   const out: Record<string, NormalizedMapData> = {};
   for (const id of Object.keys(BUILTIN_RAW_MAPS)) {
     out[id] = getBuiltInMap(id);
@@ -985,8 +2446,23 @@ export async function fetchAndParseMap(
         return parsed;
       }
     } catch {
-      // Fallback sang bản đồ tích hợp sẵn khi chạy trong môi trường không có HTTP server (Vitest / file://)
+      // Fallback sang bản đồ tích hợp sẵn khi chạy trong môi trường không có HTTP server (Vitest / CLI)
     }
   }
   return getBuiltInMap(id);
+}
+
+/**
+ * Nạp trước (preload) tất cả các bản đồ kề cận với `currentMapId` dựa trên đồ thị `CHAPTER1_WORLD_GRAPH`.
+ */
+export async function preloadConnectedMaps(
+  currentMapId: string
+): Promise<NormalizedMapData[]> {
+  const connectedZones = CHAPTER1_WORLD_GRAPH.getConnectedZones(currentMapId);
+  const loaded: NormalizedMapData[] = [];
+  for (const zone of connectedZones) {
+    const mapData = await fetchAndParseMap(zone.id);
+    loaded.push(mapData);
+  }
+  return loaded;
 }

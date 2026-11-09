@@ -41,6 +41,17 @@ export interface MapValidationResult {
 const REQUIRED_TILE_SIZE = 16;
 const SPAWN_FOOT_SIZE = 8;
 
+const FALLBACK_VALIDATABLE_MAPS: Record<string, ValidatableMap> = {};
+
+/**
+ * Đăng ký bản đồ chuẩn đã kiểm chứng vào bộ đệm dự phòng để hỗ trợ kiểm định từng phần (partial map sets).
+ */
+export function registerValidatableMapFallback(map: ValidatableMap): void {
+  if (map && map.id) {
+    FALLBACK_VALIDATABLE_MAPS[map.id] = map;
+  }
+}
+
 /**
  * Kiểm tra tính hợp lệ của một bản đồ và đối chiếu liên kết cổng với `allMaps` (nếu có).
  */
@@ -211,7 +222,10 @@ export function validateMapData(
     if (allMaps && hasDestMap && hasDestSpawn) {
       const targetMap =
         allMaps[portal.destinationMap] ??
-        Object.values(allMaps).find((m) => m.id === portal.destinationMap);
+        Object.values(allMaps).find((m) => m.id === portal.destinationMap) ??
+        (FALLBACK_VALIDATABLE_MAPS[map.id]
+          ? FALLBACK_VALIDATABLE_MAPS[portal.destinationMap]
+          : undefined);
 
       if (!targetMap) {
         errors.push(

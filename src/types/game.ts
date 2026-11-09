@@ -170,6 +170,14 @@ export interface SpawnPointDefinition {
   x: number;
   y: number;
   facing?: Facing4;
+  label?: string;
+}
+
+export interface NpcRoutePoint {
+  x: number;
+  y: number;
+  waitSec?: number;
+  facing?: Facing4;
 }
 
 export interface NpcMapPlacement {
@@ -184,6 +192,8 @@ export interface NpcMapPlacement {
   fictionTag: ProvenanceType;
   approachRadius: number;
   milestoneRoman?: RomanMilestoneId;
+  route?: NpcRoutePoint[];
+  moveSpeed?: number;
 }
 
 export interface InteractableDefinition {
@@ -277,6 +287,8 @@ export interface NormalizedMapData {
   id: string;
   title: string;
   eraId: EraId;
+  districtType?: 'hub' | 'outdoor' | 'interior' | 'optional' | 'stealth' | 'finale';
+  description?: string;
   widthInTiles: number;
   heightInTiles: number;
   widthPx: number;
@@ -293,6 +305,29 @@ export interface NormalizedMapData {
   interactables: InteractableDefinition[];
   patrols: PatrolDefinition[];
   checkpoints: SpawnPointDefinition[];
+}
+
+export interface WorldZoneEdge {
+  fromZoneId: string;
+  toZoneId: string;
+  portalId: string;
+  destinationSpawn: string;
+  requiresFlag?: string;
+  isOptionalRoute?: boolean;
+  label: string;
+}
+
+export interface WorldZoneNode {
+  id: string;
+  title: string;
+  eraId: EraId;
+  districtType: 'hub' | 'outdoor' | 'interior' | 'optional' | 'stealth' | 'finale';
+  description: string;
+  gridPos: Vec2; // Tọa độ hiển thị trên sơ đồ World Map (M)
+  checkpointId?: string;
+  checkpointSpawnId?: string;
+  objectiveCount: number;
+  edges: WorldZoneEdge[];
 }
 
 export interface SaveDataV1 {
@@ -326,4 +361,6 @@ export interface HudCallbacks {
   onToggleLecturerUnlockAll: () => void;
   onToggleMute: () => boolean;
   onOverlayStateChange?: (isOpen: boolean, overlayName: GameMode) => void;
+  onFastTravelToZone?: (zoneId: string, spawnId: string) => void;
+  onToggleDebugOverlay?: () => boolean;
 }

@@ -15,6 +15,7 @@ export interface InputCallbacks {
   onToggleMap?: () => void;
   onToggleInventory?: () => void;
   onTogglePause?: () => void;
+  onToggleDebugOverlay?: () => void;
   onActionKey?: (key: string) => void;
 }
 
@@ -38,6 +39,7 @@ const ACTION_KEYS = new Set<string>([
   'i',
   'escape',
   'tab',
+  'f3',
 ]);
 
 const VIRTUAL_HOLD_BUTTONS: ReadonlyArray<{ id: string; key: string }> = [
@@ -110,6 +112,7 @@ export class InputManager {
     const tag = target?.tagName;
     if (
       key !== 'escape' &&
+      key !== 'f3' &&
       (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable)
     ) {
       return;
@@ -141,6 +144,9 @@ export class InputManager {
       } else if (key === 'tab') {
         e.preventDefault();
         this.callbacks.onTogglePause?.();
+      } else if (key === 'f3') {
+        e.preventDefault();
+        this.callbacks.onToggleDebugOverlay?.();
       }
 
       this.callbacks.onActionKey?.(key);

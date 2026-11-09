@@ -43,6 +43,123 @@ export function computeEntityDepth(footY: number): number {
   return LAYER_DEPTHS.EntitiesBase + Math.round(footY);
 }
 
+export interface NpcRouteState {
+  waypointIndex: number;
+  waitRemainingSec: number;
+}
+
+/**
+ * Cập nhật vị trí và hướng nhìn của NPC di chuyển tuần tra theo danh sách `npc.route`.
+ * Tự động dừng nghỉ `waitSec` tại mỗi điểm mốc và đổi hướng nhìn 4 chiều (`Facing4`).
+ */
+export function stepNpcAlongRoute(
+  npc: NpcMapPlacement,
+  state: NpcRouteState,
+  dtSec: number
+): { x: number; y: number; facing: Facing4; isMoving: boolean } {
+  const route = npc.route;
+  if (!route || route.length === 0 || dtSec <= 0 || !Number.isFinite(dtSec)) {
+    return {
+      x: npc.x,
+      y: npc.y,
+      facing: npc.facing,
+      isMoving: false,
+    };
+  }
+
+  state.waypointIndex =
+    ((state.waypointIndex % route.length) + route.length) % route.length;
+
+  let remainingDt = dtSec;
+
+  if (state.waitRemainingSec > 0) {
+    if (remainingDt < state.waitRemainingSec) {
+      state.waitRemainingSec -= remainingDt;
+      return {
+        x: npc.x,
+        y: npc.y,
+        facing: npc.facing,
+        isMoving: false,
+      };
+    }
+    remainingDt -= state.waitRemainingSec;
+    state.waitRemainingSec = 0;
+    if (remainingDt <= 1e-6) {
+      return {
+        x: npc.x,
+        y: npc.y,
+        facing: npc.facing,
+        isMoving: false,
+      };
+    }
+  }
+
+  let target = route[state.waypointIndex];
+  let dx = target.x - npc.x;
+  let dy = target.y - npc.y;
+  let dist = Math.hypot(dx, dy);
+
+  // Nếu đang đứng sẵn tại waypoint hiện tại và có nhiều hơn 1 điểm, chuyển sang điểm tiếp theo
+  if (dist < 0.5 && route.length > 1) {
+    state.waypointIndex = (state.waypointIndex + 1) % route.length;
+    target = route[state.waypointIndex];
+    dx = target.x - npc.x;
+    dy = target.y - npc.y;
+    dist = Math.hypot(dx, dy);
+  }
+
+  if (dist < 0.5) {
+    npc.x = target.x;
+    npc.y = target.y;
+    if (target.facing) {
+      npc.facing = target.facing;
+    }
+    return {
+      x: npc.x,
+      y: npc.y,
+      facing: npc.facing,
+      isMoving: false,
+    };
+  }
+
+  const speed = npc.moveSpeed && npc.moveSpeed > 0 ? npc.moveSpeed : 36;
+  const maxStep = speed * remainingDt;
+
+  const moveFacing: Facing4 =
+    Math.abs(dx) >= Math.abs(dy)
+      ? dx >= 0
+        ? 'right'
+        : 'left'
+      : dy >= 0
+        ? 'down'
+        : 'up';
+
+  if (maxStep >= dist) {
+    npc.x = target.x;
+    npc.y = target.y;
+    npc.facing = target.facing ?? moveFacing;
+    state.waitRemainingSec = Math.max(0, target.waitSec ?? 0);
+    state.waypointIndex = (state.waypointIndex + 1) % route.length;
+    return {
+      x: npc.x,
+      y: npc.y,
+      facing: npc.facing,
+      isMoving: false,
+    };
+  }
+
+  npc.x += (dx / dist) * maxStep;
+  npc.y += (dy / dist) * maxStep;
+  npc.facing = moveFacing;
+
+  return {
+    x: npc.x,
+    y: npc.y,
+    facing: npc.facing,
+    isMoving: true,
+  };
+}
+
 /**
  * Thực thể đồ họa nhẹ tương thích API của Phaser GameObject phục vụ kiểm thử Scene và kết xuất.
  */

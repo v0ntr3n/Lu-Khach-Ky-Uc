@@ -139,15 +139,19 @@
       }
 
       .era-tab-btn.is-active,
-      .utility-btn.is-presenter-active {
+      .utility-btn.is-presenter-active,
+      .utility-btn.is-active,
+      .lacquer-button.is-active {
         background: var(--crimson-seal);
         color: var(--parchment-light);
         border-color: var(--bronze-bright);
       }
 
-      .utility-cluster {
+      .utility-cluster,
+      .topbar-actions {
         display: flex;
         gap: 8px;
+        flex-wrap: wrap;
       }
 
       /* 3. BỐ CỤC ĐIỆN ẢNH 1/5 + 4/5 */
@@ -654,6 +658,167 @@
         font-weight: 600;
       }
 
+      /* SƠ ĐỒ LIÊN THÔNG KHU VỰC (#world-map-modal — PHÍM M) */
+      #world-map-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 320;
+        background: rgba(17, 14, 11, 0.88);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+
+      #world-map-modal.is-open {
+        display: flex;
+      }
+
+      .world-map-dialog {
+        background: var(--lacquer-deep);
+        color: var(--parchment-light);
+        border: 2px solid var(--bronze-bright);
+        max-width: 960px;
+        width: 100%;
+        max-height: 88vh;
+        padding: 20px 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        overflow-y: auto;
+      }
+
+      .world-map-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        border-bottom: 1px solid rgba(212, 165, 93, 0.28);
+        padding-bottom: 10px;
+      }
+
+      .world-map-header h3 {
+        font-family: 'Cormorant Garamond', serif;
+        font-size: 1.45rem;
+        color: var(--bronze-bright);
+      }
+
+      #world-map-summary {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.74rem;
+        color: var(--parchment-warm);
+        margin-top: 4px;
+      }
+
+      #world-map-graph {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(180px, 1fr));
+        gap: 10px;
+      }
+
+      .world-map-node {
+        padding: 10px 12px;
+        border: 1px solid var(--bronze-muted);
+        background: var(--lacquer-elevated);
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      .world-map-node.is-discovered {
+        background: var(--parchment-warm);
+        color: var(--ink-primary);
+        border-color: var(--bronze-antique);
+      }
+
+      .world-map-node.is-current {
+        border: 2px solid var(--bronze-bright);
+        outline: 2px solid var(--crimson-seal);
+      }
+
+      .world-map-node.is-locked {
+        background: var(--lacquer-void);
+        color: rgba(230, 229, 220, 0.55);
+        border-style: dashed;
+      }
+
+      .wm-node-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 6px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.68rem;
+      }
+
+      .wm-district-badge {
+        background: var(--lacquer-elevated);
+        color: var(--bronze-bright);
+        padding: 2px 6px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.66rem;
+      }
+
+      .wm-current-seal {
+        background: var(--crimson-seal);
+        color: var(--parchment-light);
+        padding: 2px 6px;
+        font-weight: 600;
+      }
+
+      .wm-node-title {
+        font-family: 'Cormorant Garamond', serif;
+        font-size: 1.05rem;
+      }
+
+      .wm-node-links,
+      .wm-node-cp {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.68rem;
+      }
+
+      #world-map-zone-detail {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        border-top: 1px solid rgba(212, 165, 93, 0.25);
+        padding-top: 12px;
+      }
+
+      .wm-zone-card {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        border: 1px solid var(--bronze-muted);
+        background: var(--lacquer-elevated);
+      }
+
+      .wm-zone-card.is-discovered {
+        background: var(--parchment-light);
+        color: var(--ink-primary);
+        border-color: var(--bronze-antique);
+      }
+
+      .wm-zone-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .wm-zone-desc {
+        font-size: 0.9rem;
+        margin-top: 3px;
+      }
+
+      .wm-lock-reason {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.72rem;
+        color: var(--crimson-seal);
+      }
+
       @media (max-width: 900px) {
         .chronicle-layout {
           grid-template-columns: 1fr;
@@ -699,14 +864,30 @@
         </button>
       </nav>
 
-      <div class="utility-cluster">
-        <button type="button" id="btn-lecturer-unlock" class="utility-btn">
+      <div class="utility-cluster topbar-actions">
+        <button
+          type="button"
+          id="btn-open-map"
+          class="utility-btn lacquer-button"
+          title="Sơ Đồ Khu Vực Hương Cảng (Phím M)"
+        >
+          🗺️ Bản Đồ [M]
+        </button>
+        <button
+          type="button"
+          id="btn-debug-overlay"
+          class="utility-btn lacquer-button"
+          title="Bật/Tắt Lớp Phủ Kiểm Định Bản Đồ (Phím F3)"
+        >
+          📐 Debug [F3]
+        </button>
+        <button type="button" id="btn-lecturer-unlock" class="utility-btn lacquer-button">
           ⚡ Mở Khóa 12 Mốc (Giảng Viên)
         </button>
-        <button type="button" id="btn-open-lookup" class="utility-btn">
+        <button type="button" id="btn-open-lookup" class="utility-btn lacquer-button">
           🔍 Cố Vấn Sử Học (Q)
         </button>
-        <button type="button" id="btn-audio-toggle" class="utility-btn">
+        <button type="button" id="btn-audio-toggle" class="utility-btn lacquer-button">
           🔊 Ngũ Cung 8-Bit
         </button>
       </div>
@@ -833,6 +1014,21 @@
       </div>
       <div id="lookup-results-list"></div>
     </aside>
+
+    <!-- 6. SƠ ĐỒ LIÊN THÔNG KHU VỰC (PHÍM M) -->
+    <div id="world-map-modal" role="dialog" aria-modal="true" aria-labelledby="world-map-title" hidden>
+      <div class="world-map-dialog">
+        <div class="world-map-header">
+          <div>
+            <h3 id="world-map-title">SƠ ĐỒ LIÊN THÔNG KHU VỰC — HƯƠNG CẢNG 1930</h3>
+            <p id="world-map-summary">Đã khám phá 1/8 khu vực · 1/8 Đèn Báo An Toàn</p>
+          </div>
+          <button type="button" id="btn-close-world-map" class="ctrl-btn">✕ Đóng [M/Esc]</button>
+        </div>
+        <div id="world-map-graph" aria-label="Sơ đồ lưới các khu vực Chương I"></div>
+        <div id="world-map-zone-detail" aria-label="Danh sách khu vực và Dịch chuyển nhanh"></div>
+      </div>
+    </div>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

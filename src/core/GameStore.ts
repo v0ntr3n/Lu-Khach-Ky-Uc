@@ -2,7 +2,8 @@
  * @file src/core/GameStore.ts
  * @description Kho trạng thái trung tâm có thẩm quyền duy nhất (Authoritative Serializable State)
  * cho "Lữ Khách Ký Ức (1930 – 2045)". Quản lý máy trạng thái GameMode, tọa độ 2D Top-Down,
- * bản đồ hiện tại (currentMapId / currentSpawnId), tiến trình Cột mốc La Mã,
+ * bản đồ hiện tại (currentMapId / currentSpawnId), các điểm lưu (unlockedCheckpoints),
+ * lớp phủ gỡ lỗi (debugOverlayEnabled), tiến trình Cột mốc La Mã,
  * sự cô lập hoàn toàn của Chế độ Giảng viên (Presenter Mode), điều kiện mở Cổng Thời Gian Climax,
  * kiểm tra vùng ẩn nấp (Shelter 1D/2D) và bộ đếm Transition Token chống timer cũ.
  */
@@ -56,6 +57,14 @@ export class GameStore {
   public readonly discoveredMaps = new Set<string>([DEFAULT_SAFE_MAP_ID]);
   public portalCooldownSec = 0;
 
+  // Trạng thái M2 World Exploration (Checkpoints & Debug Overlay)
+  public readonly unlockedCheckpoints = new Set<string>([
+    'harbor_square',
+    'default_spawn',
+    'cp_harbor_lantern',
+  ]);
+  public debugOverlayEnabled = false;
+
   public setMode(mode: GameMode): void {
     this.mode = mode;
   }
@@ -80,6 +89,56 @@ export class GameStore {
     this.playerFacing = facing;
     this.discoveredMaps.add(mapId);
     this.bumpTransitionToken();
+  }
+
+  public unlockCheckpoint(checkpointOrZoneId: string, mapId?: string): boolean {
+    const hadMain = this.unlockedCheckpoints.has(checkpointOrZoneId);
+    const hadMap = mapId ? this.unlockedCheckpoints.has(mapId) : true;
+    this.unlockedCheckpoints.add(checkpointOrZoneId);
+    if (mapId) {
+      this.unlockedCheckpoints.add(mapId);
+      this.discoveredMaps.add(mapId);
+    }
+    return !hadMain || !hadMap;
+  }
+
+  public hasCheckpointForZone(
+    zoneId: string,
+    checkpointId?: string,
+    checkpointSpawnId?: string
+  ): boolean {
+    if (this.isPresenterMode) {
+      return true;
+    }
+    if (this.unlockedCheckpoints.has(zoneId)) {
+      return true;
+    }
+    if (checkpointId && this.unlockedCheckpoints.has(checkpointId)) {
+      return true;
+    }
+    if (checkpointSpawnId && this.unlockedCheckpoints.has(checkpointSpawnId)) {
+      return true;
+    }
+    return false;
+  }
+
+  public canFastTravelToZone(
+    toZoneId: string,
+    checkpointId?: string,
+    checkpointSpawnId?: string
+  ): boolean {
+    if (this.isPresenterMode) {
+      return true;
+    }
+    if (!this.discoveredMaps.has(toZoneId)) {
+      return false;
+    }
+    return this.hasCheckpointForZone(toZoneId, checkpointId, checkpointSpawnId);
+  }
+
+  public toggleDebugOverlay(force?: boolean): boolean {
+    this.debugOverlayEnabled = force ?? !this.debugOverlayEnabled;
+    return this.debugOverlayEnabled;
   }
 
   public togglePresenterMode(): boolean {
@@ -182,7 +241,7 @@ export class GameStore {
       collectedEvidence: Array.from(this.collectedEvidence),
       questFlags: Array.from(this.questFlags),
       discoveredMaps: Array.from(this.discoveredMaps),
-      unlockedCheckpoints: [this.currentSpawnId || DEFAULT_SAFE_SPAWN_ID],
+      unlockedCheckpoints: Array.from(this.unlockedCheckpoints),
       completedChapters: [],
     };
   }
@@ -207,6 +266,14 @@ export class GameStore {
     this.discoveredMaps.add(DEFAULT_SAFE_MAP_ID);
     for (const m of save.discoveredMaps ?? []) {
       this.discoveredMaps.add(m);
+    }
+
+    this.unlockedCheckpoints.clear();
+    this.unlockedCheckpoints.add(DEFAULT_SAFE_MAP_ID);
+    this.unlockedCheckpoints.add(DEFAULT_SAFE_SPAWN_ID);
+    this.unlockedCheckpoints.add('cp_harbor_lantern');
+    for (const cp of save.unlockedCheckpoints ?? []) {
+      this.unlockedCheckpoints.add(cp);
     }
 
     this.currentMapId = save.currentMapId || DEFAULT_SAFE_MAP_ID;

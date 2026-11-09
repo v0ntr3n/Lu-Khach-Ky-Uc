@@ -3,12 +3,17 @@
  * @description Bộ điều phối vòng đời chính của "Lữ Khách Ký Ức (1930 – 2045)".
  * Kết nối GameStore, InputManager, SaveManager, MapLoader, CameraController,
  * SceneTransition, CollisionWorld, InteractionSystem, OpeningFracture,
- * PixelRenderer (Top-Down 2D & 1D Fallback), SoundSynth và HudController.
+ * PixelRenderer (Top-Down 2D, Debug Overlay & 1D Fallback), SoundSynth và HudController.
  */
 
 import { CHAPTERS } from '../data/chronicles';
 import { OpeningFractureController } from '../engine/OpeningFracture';
-import { INTERNAL_HEIGHT, INTERNAL_WIDTH, PixelRenderer } from '../engine/PixelRenderer';
+import {
+  INTERNAL_HEIGHT,
+  INTERNAL_WIDTH,
+  PixelRenderer,
+  type RenderState,
+} from '../engine/PixelRenderer';
 import { SoundSynth } from '../engine/SoundSynth';
 import { CameraController } from '../runtime/CameraController';
 import { getAllBuiltInMaps, getBuiltInMap } from '../runtime/MapLoader';
@@ -32,6 +37,17 @@ import { CollisionWorld } from '../world/CollisionWorld';
 import { GameStore } from './GameStore';
 import { InputManager } from './InputManager';
 import { SaveManager } from './SaveManager';
+
+interface HudExtendedMethods {
+  toggleWorldMapModal?: (forceOpen?: boolean) => void;
+  updateWorldMapState?: (
+    currentMapId: string,
+    discoveredMaps: Set<string>,
+    unlockedCheckpoints: Set<string>,
+    isPresenterMode: boolean
+  ) => void;
+  setDebugOverlayUI?: (enabled: boolean) => void;
+}
 
 export class LuKhachKyUcGame {
   public readonly store: GameStore;
@@ -64,6 +80,10 @@ export class LuKhachKyUcGame {
   private lastFrameMs = performance.now();
   private stepSoundCooldown = 0;
   private hazardCooldown = 0;
+  private npcRouteStates = new Map<
+    string,
+    { waypointIndex: number; waitRemainingSec: number }
+  >();
 
   constructor() {
     const canvas = document.getElementById('pixel-canvas') as HTMLCanvasElement | null;
@@ -154,6 +174,16 @@ export class LuKhachKyUcGame {
         }
         this.hud.toggleLookupDrawer();
       },
+      onToggleMap: () => {
+        if (this.store.getMode() === 'opening' || this.store.getMode() === 'climax') {
+          return;
+        }
+        this.syncHudWithState();
+        (this.hud as unknown as HudExtendedMethods).toggleWorldMapModal?.();
+      },
+      onToggleDebugOverlay: () => {
+        this.toggleDebugOverlay();
+      },
       onEscape: () => {
         if (this.store.getMode() === 'opening') {
           return;
@@ -161,6 +191,9 @@ export class LuKhachKyUcGame {
         this.hud.closeClimaxModal();
         if (document.getElementById('lookup-drawer')?.classList.contains('is-open')) {
           this.hud.toggleLookupDrawer(false);
+        }
+        if (document.getElementById('world-map-modal')?.classList.contains('is-open')) {
+          (this.hud as unknown as HudExtendedMethods).toggleWorldMapModal?.(false);
         }
       },
     });
@@ -176,6 +209,10 @@ export class LuKhachKyUcGame {
         this.store.setMode(isOpen ? overlayMode : 'exploring');
         this.input.clearKeys();
       },
+      onFastTravelToZone: (zoneId: string, spawnId: string) => {
+        this.fastTravelToZone(zoneId, spawnId);
+      },
+      onToggleDebugOverlay: () => this.toggleDebugOverlay(),
     });
 
     this.hud.setPresenterModeUI(this.store.isPresenterMode);
@@ -233,12 +270,24 @@ export class LuKhachKyUcGame {
     };
   }
 
+  public toggleDebugOverlay(force?: boolean): boolean {
+    const enabled = this.store.toggleDebugOverlay(force);
+    (this.hud as unknown as HudExtendedMethods).setDebugOverlayUI?.(enabled);
+    this.hud.showToast(
+      enabled
+        ? '🛠️ Đã bật Lớp Phủ Gỡ Lỗi (F3): Hiển thị vật cản, vùng ẩn nấp, cổng & lộ trình NPC.'
+        : '🛠️ Đã tắt Lớp Phủ Gỡ Lỗi (F3).'
+    );
+    return enabled;
+  }
+
   public loadMap(
     mapId: string,
     spawnId?: string,
     posOverride?: Vec2,
     facingOverride?: Facing4
   ): NormalizedMapData {
+    this.allMaps = getAllBuiltInMaps();
     const map = this.allMaps[mapId] ?? getBuiltInMap(mapId);
     this.currentMap = map;
     this.collisionWorld = new CollisionWorld(map.obstacles, map.shelters, {
@@ -285,6 +334,7 @@ export class LuKhachKyUcGame {
       return false;
     }
 
+    this.allMaps = getAllBuiltInMaps();
     const res = this.sceneTransition.transitionTo(
       portal.destinationMap,
       portal.destinationSpawn,
@@ -310,6 +360,44 @@ export class LuKhachKyUcGame {
     this.persistProgress();
     this.syncHudWithState();
     this.hud.showToast(`🚪 Đã chuyển tới: ${this.currentMap.title}`);
+    return true;
+  }
+
+  public fastTravelToZone(zoneId: string, spawnId?: string): boolean {
+    this.allMaps = getAllBuiltInMaps();
+    const targetMap = this.allMaps[zoneId];
+    if (!targetMap) {
+      return false;
+    }
+
+    const checkpointInteractable = targetMap.interactables.find(
+      (i) => i.kind === 'checkpoint'
+    );
+    const checkpointSpawnId =
+      spawnId ?? targetMap.checkpoints[0]?.id ?? targetMap.defaultSpawnId;
+
+    if (
+      !this.store.canFastTravelToZone(
+        zoneId,
+        checkpointInteractable?.id,
+        checkpointSpawnId
+      )
+    ) {
+      this.hud.showToast(
+        '🔒 Khu vực này chưa được khám phá hoặc chưa kích hoạt Đèn Báo An Toàn!'
+      );
+      return false;
+    }
+
+    this.loadMap(zoneId, checkpointSpawnId);
+    (this.hud as unknown as HudExtendedMethods).toggleWorldMapModal?.(false);
+    if (this.store.getMode() !== 'opening') {
+      this.store.setMode('exploring');
+    }
+    this.input.clearKeys();
+    this.persistProgress();
+    this.syncHudWithState();
+    this.hud.showToast(`🧭 Đã dịch chuyển nhanh tới: ${this.currentMap.title}`);
     return true;
   }
 
@@ -343,6 +431,9 @@ export class LuKhachKyUcGame {
     if (document.getElementById('lookup-drawer')?.classList.contains('is-open')) {
       this.hud.toggleLookupDrawer(false);
     }
+    if (document.getElementById('world-map-modal')?.classList.contains('is-open')) {
+      (this.hud as unknown as HudExtendedMethods).toggleWorldMapModal?.(false);
+    }
     if (this.store.getMode() !== 'opening') {
       this.store.setMode('exploring');
     }
@@ -375,6 +466,7 @@ export class LuKhachKyUcGame {
       this.isBurstAnimating = false;
     }
 
+    this.allMaps = getAllBuiltInMaps();
     if (m.mapId && this.allMaps[m.mapId] && this.currentMap.id !== m.mapId) {
       this.loadMap(m.mapId, undefined, { x: m.worldX, y: m.worldY ?? 384 });
     } else {
@@ -446,7 +538,20 @@ export class LuKhachKyUcGame {
       });
     }
 
-    // 2. Tương tác với Cột mốc lịch sử hoặc NPC / Tư liệu gắn với cột mốc
+    // 2. Kích hoạt Điểm Lưu / Đèn Báo An Toàn (Checkpoint)
+    if (candidate?.kind === 'checkpoint' && candidate.interactable) {
+      this.store.unlockCheckpoint(candidate.interactable.id, this.currentMap.id);
+      this.store.currentSpawnId = candidate.interactable.id;
+      this.persistProgress();
+      this.sound.playSealStamp();
+      this.syncHudWithState();
+      this.hud.showToast(
+        `🏮 Đã kích hoạt Điểm Lưu & Dịch Chuyển: ${candidate.interactable.label}`
+      );
+      return true;
+    }
+
+    // 3. Tương tác với Cột mốc lịch sử hoặc NPC / Tư liệu gắn với cột mốc
     const nearbyMilestone = candidate?.milestone ?? this.findNearbyMilestone();
     if (nearbyMilestone) {
       this.store.collectMilestone(nearbyMilestone.roman);
@@ -466,7 +571,7 @@ export class LuKhachKyUcGame {
       return true;
     }
 
-    // 3. Tương tác với vật thể / bảng tin / hòm hàng trong bản đồ 2D
+    // 4. Tương tác với vật thể / bảng tin / hòm hàng trong bản đồ 2D
     if (candidate?.interactable && candidate.kind !== 'climax_gate') {
       if (candidate.interactable.grantsFlag && !this.store.isPresenterMode) {
         this.store.questFlags.add(candidate.interactable.grantsFlag);
@@ -480,7 +585,7 @@ export class LuKhachKyUcGame {
       return true;
     }
 
-    // 4. Kiểm tra nếu đứng gần Cổng Thời Gian cuối màn
+    // 5. Kiểm tra nếu đứng gần Cổng Thời Gian cuối màn
     const nearClimaxGate =
       candidate?.kind === 'climax_gate' ||
       Math.abs(this.playerX - chapter.climax.gateWorldX) <= 38;
@@ -594,6 +699,61 @@ export class LuKhachKyUcGame {
       this.currentChapter.coordinates,
       candidate?.promptText ?? null
     );
+    (this.hud as unknown as HudExtendedMethods).updateWorldMapState?.(
+      this.currentMap.id,
+      this.store.discoveredMaps,
+      this.store.unlockedCheckpoints,
+      this.store.isPresenterMode
+    );
+  }
+
+  private updateNpcRoutes(dt: number): void {
+    if (dt <= 0) return;
+
+    for (const npc of this.currentMap.npcs) {
+      if (!npc.route || npc.route.length === 0) continue;
+
+      const stateKey = `${this.currentMap.id}:${npc.id}`;
+      let state = this.npcRouteStates.get(stateKey);
+      if (!state) {
+        state = { waypointIndex: 0, waitRemainingSec: 0 };
+        this.npcRouteStates.set(stateKey, state);
+      }
+
+      if (state.waitRemainingSec > 0) {
+        state.waitRemainingSec = Math.max(0, state.waitRemainingSec - dt);
+        continue;
+      }
+
+      const target = npc.route[state.waypointIndex % npc.route.length];
+      if (!target) continue;
+
+      const dx = target.x - npc.x;
+      const dy = target.y - npc.y;
+      const dist = Math.hypot(dx, dy);
+      const speed = npc.moveSpeed ?? 36;
+      const step = speed * dt;
+
+      if (dist <= step || dist < 0.5) {
+        npc.x = target.x;
+        npc.y = target.y;
+        if (target.facing) {
+          npc.facing = target.facing;
+        }
+        state.waitRemainingSec = target.waitSec ?? 1.2;
+        state.waypointIndex = (state.waypointIndex + 1) % npc.route.length;
+      } else {
+        const nx = dx / dist;
+        const ny = dy / dist;
+        npc.x += nx * step;
+        npc.y += ny * step;
+        if (Math.abs(dx) >= Math.abs(dy)) {
+          npc.facing = dx < 0 ? 'left' : 'right';
+        } else {
+          npc.facing = dy < 0 ? 'up' : 'down';
+        }
+      }
+    }
   }
 
   private readonly gameLoop = (nowMs: number): void => {
@@ -611,7 +771,7 @@ export class LuKhachKyUcGame {
 
     const allowWorldInput = this.store.isWorldInputAllowed();
 
-    this.renderer.render({
+    const renderState: RenderState & { debugOverlay?: boolean } = {
       chapter: this.currentChapter,
       playerX: this.playerX,
       playerY: this.playerY,
@@ -629,7 +789,10 @@ export class LuKhachKyUcGame {
       mapData: this.useLegacyRenderer ? undefined : this.currentMap,
       nearbyPrompt: candidate?.promptText ?? null,
       nearbyTargetPos: candidate ? { x: candidate.x, y: candidate.y } : null,
-    });
+      debugOverlay: this.store.debugOverlayEnabled,
+    };
+
+    this.renderer.render(renderState);
 
     requestAnimationFrame(this.gameLoop);
   };
@@ -648,6 +811,10 @@ export class LuKhachKyUcGame {
     this.store.portalCooldownSec = this.sceneTransition.getCooldownRemaining();
 
     if (allowWorldInput) {
+      if (!this.useLegacyRenderer) {
+        this.updateNpcRoutes(dt);
+      }
+
       const speed = this.useLegacyRenderer ? (this.isCrouching ? 42 : 95) : 96;
       const dx = moveVec.x * speed * dt;
       const dy = this.useLegacyRenderer ? 0 : moveVec.y * speed * dt;
@@ -680,6 +847,7 @@ export class LuKhachKyUcGame {
 
         // Kiểm tra tự động bước qua cổng (Portal) khi đi vào ô cửa
         if (!this.useLegacyRenderer && this.sceneTransition.getCooldownRemaining() <= 0) {
+          this.allMaps = getAllBuiltInMaps();
           const portalRes = this.sceneTransition.tryPortalTransition(
             this.getPlayerFootRect(),
             this.currentMap.portals,

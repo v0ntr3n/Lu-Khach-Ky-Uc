@@ -22,6 +22,11 @@
       "value": "1930"
     },
     {
+      "name": "districtType",
+      "type": "string",
+      "value": "hub"
+    },
+    {
       "name": "defaultSpawnId",
       "type": "string",
       "value": "default_spawn"
@@ -876,10 +881,10 @@
         2,
         2,
         2,
-        1,
-        1,
-        1,
-        1,
+        2,
+        2,
+        2,
+        2,
         1,
         1,
         1,
@@ -940,10 +945,10 @@
         2,
         2,
         2,
-        1,
-        1,
-        1,
-        1,
+        2,
+        2,
+        2,
+        2,
         1,
         1,
         1,
@@ -1004,10 +1009,10 @@
         2,
         2,
         2,
-        1,
-        1,
-        1,
-        1,
+        2,
+        2,
+        2,
+        2,
         1,
         1,
         1,
@@ -1068,10 +1073,10 @@
         2,
         2,
         2,
-        1,
-        1,
-        1,
-        1,
+        2,
+        2,
+        2,
+        2,
         1,
         1,
         1,
@@ -1132,10 +1137,10 @@
         2,
         2,
         2,
-        1,
-        1,
-        1,
-        1,
+        2,
+        2,
+        2,
+        2,
         1,
         1,
         1,
@@ -1196,10 +1201,10 @@
         2,
         2,
         2,
-        1,
-        1,
-        1,
-        1,
+        2,
+        2,
+        2,
+        2,
         1,
         1,
         1,
@@ -1776,36 +1781,6 @@
         2,
         2,
         2,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
         1,
         1,
         1,
@@ -1856,30 +1831,12 @@
         1,
         1,
         1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
         1,
         1,
         1,
@@ -1938,6 +1895,12 @@
         1,
         1,
         1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
         1,
         1,
         1,
@@ -1996,6 +1959,12 @@
         1,
         1,
         1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
         1,
         1,
         1,
@@ -2054,6 +2023,12 @@
         1,
         1,
         1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
         1,
         1,
         1,
@@ -2112,6 +2087,12 @@
         1,
         1,
         1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
         1,
         1,
         1,
@@ -2170,6 +2151,12 @@
         1,
         1,
         1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
         1,
         1,
         1,
@@ -2228,6 +2215,12 @@
         1,
         1,
         1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
         1,
         1,
         1,
@@ -2286,6 +2279,12 @@
         1,
         1,
         1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
         1,
         1,
         1,
@@ -2344,6 +2343,12 @@
         1,
         1,
         1,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
         1,
         1,
         1,
@@ -18769,6 +18774,62 @@
               "value": "III"
             }
           ]
+        },
+        {
+          "id": 204,
+          "name": "npc_old_worker",
+          "type": "npc",
+          "x": 304,
+          "y": 480,
+          "width": 16,
+          "height": 16,
+          "properties": [
+            {
+              "name": "npcId",
+              "type": "string",
+              "value": "npc_old_worker"
+            },
+            {
+              "name": "name",
+              "type": "string",
+              "value": "Bác Khuân Vác Bến Cảng"
+            },
+            {
+              "name": "role",
+              "type": "string",
+              "value": "Công nhân bốc xếp Cửu Long"
+            },
+            {
+              "name": "facing",
+              "type": "string",
+              "value": "right"
+            },
+            {
+              "name": "dialogueId",
+              "type": "string",
+              "value": "ch1_worker_rumor"
+            },
+            {
+              "name": "fictionTag",
+              "type": "string",
+              "value": "fictional_npc"
+            },
+            {
+              "name": "approachRadius",
+              "type": "int",
+              "value": 36
+            },
+            {
+              "name": "moveSpeed",
+              "type": "float",
+              "value": 36
+            },
+            {
+              "name": "routeJson",
+              "type": "string",
+              "value": "[{\"x\":304,\"y\":480,\"waitSec\":1,\"facing\":\"right\"},{\"x\":432,\"y\":480,\"waitSec\":1,\"facing\":\"left\"}]"
+            }
+          ]
         }
       ]
     },
@@ -18835,6 +18896,32 @@
               "value": "inspect_harbor_notice"
             }
           ]
+        },
+        {
+          "id": 303,
+          "name": "cp_harbor_lantern",
+          "type": "checkpoint",
+          "x": 192,
+          "y": 384,
+          "width": 16,
+          "height": 16,
+          "properties": [
+            {
+              "name": "kind",
+              "type": "string",
+              "value": "checkpoint"
+            },
+            {
+              "name": "label",
+              "type": "string",
+              "value": "Đèn Báo An Toàn Bến Cảng"
+            },
+            {
+              "name": "actionId",
+              "type": "string",
+              "value": "activate_checkpoint"
+            }
+          ]
         }
       ]
     },
@@ -18879,6 +18966,38 @@
         },
         {
           "id": 403,
+          "name": "from_old_street",
+          "type": "spawn",
+          "x": 912,
+          "y": 240,
+          "width": 16,
+          "height": 16,
+          "properties": [
+            {
+              "name": "facing",
+              "type": "string",
+              "value": "left"
+            }
+          ]
+        },
+        {
+          "id": 404,
+          "name": "from_small_pier",
+          "type": "spawn",
+          "x": 832,
+          "y": 544,
+          "width": 16,
+          "height": 16,
+          "properties": [
+            {
+              "name": "facing",
+              "type": "string",
+              "value": "up"
+            }
+          ]
+        },
+        {
+          "id": 405,
           "name": "exit_harbor_to_warehouse",
           "type": "portal",
           "x": 512,
@@ -18905,6 +19024,99 @@
               "name": "label",
               "type": "string",
               "value": "Kho Hàng Bến Cảng"
+            }
+          ]
+        },
+        {
+          "id": 406,
+          "name": "portal_to_warehouse",
+          "type": "portal",
+          "x": 512,
+          "y": 400,
+          "width": 32,
+          "height": 16,
+          "properties": [
+            {
+              "name": "destinationMap",
+              "type": "string",
+              "value": "warehouse_interior"
+            },
+            {
+              "name": "destinationSpawn",
+              "type": "string",
+              "value": "from_harbor"
+            },
+            {
+              "name": "transition",
+              "type": "string",
+              "value": "fade"
+            },
+            {
+              "name": "label",
+              "type": "string",
+              "value": "Kho Hàng Số 4"
+            }
+          ]
+        },
+        {
+          "id": 407,
+          "name": "portal_to_old_street",
+          "type": "portal",
+          "x": 960,
+          "y": 240,
+          "width": 32,
+          "height": 32,
+          "properties": [
+            {
+              "name": "destinationMap",
+              "type": "string",
+              "value": "old_street"
+            },
+            {
+              "name": "destinationSpawn",
+              "type": "string",
+              "value": "from_harbor"
+            },
+            {
+              "name": "transition",
+              "type": "string",
+              "value": "fade"
+            },
+            {
+              "name": "label",
+              "type": "string",
+              "value": "Phố Cổ Cửu Long"
+            }
+          ]
+        },
+        {
+          "id": 408,
+          "name": "portal_to_small_pier",
+          "type": "portal",
+          "x": 832,
+          "y": 608,
+          "width": 32,
+          "height": 32,
+          "properties": [
+            {
+              "name": "destinationMap",
+              "type": "string",
+              "value": "small_pier"
+            },
+            {
+              "name": "destinationSpawn",
+              "type": "string",
+              "value": "from_harbor"
+            },
+            {
+              "name": "transition",
+              "type": "string",
+              "value": "fade"
+            },
+            {
+              "name": "label",
+              "type": "string",
+              "value": "Bến Thuyền Nhỏ (Tuyến Phụ)"
             }
           ]
         }
@@ -18974,9 +19186,9 @@
       "objects": [
         {
           "id": 601,
-          "name": "checkpoint_harbor_hub",
+          "name": "cp_harbor_lantern",
           "type": "checkpoint",
-          "x": 160,
+          "x": 192,
           "y": 384,
           "width": 16,
           "height": 16,
