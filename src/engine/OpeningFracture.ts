@@ -92,6 +92,7 @@ export class OpeningFractureController {
 
     this.setState('initializing');
     this.startTimeMs = performance.now();
+    this.renderFrame(0);
     this.rafId = requestAnimationFrame(this.tick);
   }
 
@@ -241,16 +242,17 @@ export class OpeningFractureController {
 
     ctx.clearRect(0, 0, w, h);
 
-    if (t < 2.9) {
-      // Nền đen tuyệt đối
+    if (t < 0.6) {
+      // Phase A — True Black (0.0s – 0.6s): Khung nhìn phủ #000000 tuyệt đối
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, w, h);
+    } else if (t < 2.9) {
+      // Phase B & C (0.6s – 2.9s): Nền #0D0A08 và vết nứt vàng đồng Sơn Mài (#D4A55D)
       ctx.fillStyle = '#0D0A08';
       ctx.fillRect(0, 0, w, h);
 
-      // Đục thủng vết nứt kèm viền vàng đồng Sơn Mài (#D4A55D)
-      if (t >= 0.6) {
-        const crackProgress = Math.min(1, (t - 0.6) / 0.9);
-        this.strokePolylinePartial(ctx, this.mainCrack, crackProgress, 3.2);
-      }
+      const crackProgress = Math.min(1, (t - 0.6) / 0.9);
+      this.strokePolylinePartial(ctx, this.mainCrack, crackProgress, 3.2);
 
       if (t >= 1.5) {
         const branchProgress = Math.min(1, (t - 1.5) / 1.4);

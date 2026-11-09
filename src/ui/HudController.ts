@@ -5,16 +5,16 @@
  */
 
 import { AI_LOOKUP_DATABASE, CHAPTERS } from '../data/chronicles';
-import type { ChapterData, EraId, MilestoneArtifact, RomanMilestoneId } from '../types/game';
+import type {
+  ChapterData,
+  EraId,
+  GameMode,
+  HudCallbacks,
+  MilestoneArtifact,
+  RomanMilestoneId,
+} from '../types/game';
 
-export interface HudCallbacks {
-  onSelectEra: (eraId: EraId) => void;
-  onTeleportToMilestone: (milestone: MilestoneArtifact) => void;
-  onTriggerClimaxStepB: () => void;
-  onAdvanceNextChapter: () => void;
-  onToggleLecturerUnlockAll: () => void;
-  onToggleMute: () => boolean;
-}
+export type { GameMode, HudCallbacks };
 
 export class HudController {
   private callbacks: HudCallbacks;
@@ -48,11 +48,13 @@ export class HudController {
       }
     });
 
-    // Nút mở Bàn Cố Vấn Sử Học (Phím Q)
+    // Nút mở Bàn Cố Vấn Sử Học (Phím Q) & Nút đóng Climax
     const lookupBtn = document.getElementById('btn-open-lookup');
     const closeLookupBtn = document.getElementById('btn-close-lookup');
+    const closeClimaxBtn = document.getElementById('btn-close-climax');
     lookupBtn?.addEventListener('click', () => this.toggleLookupDrawer(true));
     closeLookupBtn?.addEventListener('click', () => this.toggleLookupDrawer(false));
+    closeClimaxBtn?.addEventListener('click', () => this.closeClimaxModal());
 
     // Xử lý tìm kiếm trong Bàn Cố Vấn Sử Học
     const lookupInput = document.getElementById('lookup-search-input') as HTMLInputElement | null;
@@ -189,7 +191,9 @@ export class HudController {
 
     modal.classList.add('is-open');
     stepABox.hidden = false;
+    stepABox.removeAttribute('hidden');
     stepBBox.hidden = true;
+    stepBBox.setAttribute('hidden', '');
     feedbackEl.textContent = '';
     feedbackEl.className = 'climax-feedback';
 
@@ -214,6 +218,8 @@ export class HudController {
       });
       optionsContainer.appendChild(btn);
     }
+
+    this.callbacks.onOverlayStateChange?.(true, 'climax');
   }
 
   private revealClimaxStepB(chapter: ChapterData): void {
@@ -225,6 +231,7 @@ export class HudController {
 
     if (!stepBBox || !actionBtn) return;
     stepBBox.hidden = false;
+    stepBBox.removeAttribute('hidden');
 
     if (titleB) titleB.textContent = chapter.climax.stepBTitle;
     if (subB) subB.textContent = chapter.climax.stepBSubtitle;
@@ -239,7 +246,12 @@ export class HudController {
 
   public closeClimaxModal(): void {
     const modal = document.getElementById('climax-modal');
-    modal?.classList.remove('is-open');
+    if (!modal) return;
+    const wasOpen = modal.classList.contains('is-open');
+    modal.classList.remove('is-open');
+    if (wasOpen) {
+      this.callbacks.onOverlayStateChange?.(false, 'exploring');
+    }
   }
 
   public toggleLookupDrawer(forceOpen?: boolean): void {
@@ -247,10 +259,35 @@ export class HudController {
     if (!drawer) return;
     const next = forceOpen ?? !drawer.classList.contains('is-open');
     drawer.classList.toggle('is-open', next);
+    this.callbacks.onOverlayStateChange?.(next, next ? 'lookup' : 'exploring');
     if (next) {
       const input = document.getElementById('lookup-search-input') as HTMLInputElement | null;
       input?.focus();
     }
+  }
+
+  public setPresenterModeUI(isPresenterMode: boolean): void {
+    const lecturerBtn = document.getElementById('btn-lecturer-unlock');
+    if (lecturerBtn) {
+      lecturerBtn.textContent = isPresenterMode
+        ? '⚡ Chế Độ Giảng Viên: BẬT'
+        : '⚡ Chế Độ Giảng Viên';
+      lecturerBtn.classList.toggle('is-presenter-active', isPresenterMode);
+      lecturerBtn.setAttribute('aria-pressed', String(isPresenterMode));
+    }
+
+    const codexSubSpan = document.querySelector<HTMLElement>('.codex-sub span:first-child');
+    if (codexSubSpan) {
+      codexSubSpan.textContent = isPresenterMode
+        ? 'Chế độ Giảng Viên: Bấm để dịch chuyển'
+        : 'Bấm mốc đã mở để xem tư liệu';
+    }
+  }
+
+  public isOverlayOpen(): boolean {
+    const climaxOpen = document.getElementById('climax-modal')?.classList.contains('is-open') ?? false;
+    const lookupOpen = document.getElementById('lookup-drawer')?.classList.contains('is-open') ?? false;
+    return climaxOpen || lookupOpen;
   }
 
   private renderLookupResults(query: string): void {
@@ -261,7 +298,7 @@ export class HudController {
     const matched = normalized
       ? AI_LOOKUP_DATABASE.filter(
           (item) =>
-            item.question.toLowerCase().includes(normalized) ||
+            String(item.question).toLowerCase().includes(normalized) ||
             item.answer.toLowerCase().includes(normalized) ||
             item.keywords.some((k) => k.toLowerCase().includes(normalized))
         )
