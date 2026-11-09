@@ -168,7 +168,90 @@ Rain and glow can use selected PixelFX-like effects, but only if measured within
 
 **Important save migration:** save v1 (chapter + scalar playerX) cannot be treated as XY positions. Version a new save schema; migrate only safe chapter/evidence state or start at a named spawn. Never silently put a player inside collision.
 
-Suggested paths: public/maps/ch1/*.tmj; public/tilesets/ch1/*.png; src/world/{TileMapLoader,WorldGraph,SceneTransition,WorldCamera}; src/systems/{Quest,Dialogue,Interaction,Stealth,Save}; src/ui/{HUD,Journal,Map,Inventory}; tests/{maps,progression,ui}.
+### Canonical target directory layout
+
+**Single source of truth for the target directory structure (M1+).** [RPG_EXPLORATION.md](RPG_EXPLORATION.md) references this exact layout instead of maintaining a divergent path list. These are **planned paths**, not existing files. M1 must create only what is needed to validate the two-map spike; later PRs introduce the other modules. Keep the current source tree working until the spike passes.
+
+~~~text
+src/
+  main.ts                       # existing Vite entrypoint; becomes thin bootstrap
+  core/
+    GameApp.ts                   # lifecycle and game mode/state transitions
+    GameStore.ts                 # authoritative serializable game state
+    InputManager.ts              # keyboard/touch + UI focus gating
+    SaveManager.ts               # versioned local persistence
+  runtime/
+    PhaserRuntime.ts             # Phaser 3 initialization; isolated spike
+    MapLoader.ts                 # parse/load Tiled TMJ/JSON and tilesets
+    CameraController.ts          # follow/zoom/clamp
+    SceneTransition.ts           # named portal + spawn and safe transitions
+  scenes/
+    BootScene.ts
+    HarborScene.ts               # M1 outdoor test scene
+    WarehouseInteriorScene.ts    # M1 indoor test scene
+  world/
+    WorldGraph.ts                # discoverable zones / connections
+    CollisionWorld.ts            # world collision data; no pixel sampling
+    MapValidator.ts              # map IDs, exits, spawns, reachability
+  systems/
+    QuestSystem.ts
+    DialogueSystem.ts
+    InteractionSystem.ts
+    InventorySystem.ts
+    EvidenceSystem.ts
+    StealthSystem.ts
+  data/
+    chronicles.ts                # existing milestone and historical content
+    chapters/
+    quests/
+    npcs/
+    locales/
+    provenance/
+  engine/
+    OpeningFracture.ts           # existing opening, keep DOM overlay
+    SoundSynth.ts                # existing audio bridge
+    PixelRenderer.ts             # existing Canvas 2D legacy/fallback
+    SpriteAtlas.ts               # existing procedural sprite fallback
+  ui/
+    GameHUD.ts
+    JournalPanel.ts
+    WorldMapPanel.ts
+    InventoryPanel.ts
+    DialoguePanel.ts
+    PausePanel.ts
+    HudController.ts             # existing UI; migrate incrementally
+  types/
+    game.ts                      # existing; extend for XY, MapId, Quest, SaveV2
+public/
+  maps/ch1/
+    harbor_square.tmj            # M1 outside
+    warehouse_interior.tmj      # M1 inside
+  tilesets/ch1/
+    harbor_tiles.png
+    interior_tiles.png
+  assets/
+    atlases/
+    portraits/
+    backgrounds/
+    audio/
+tests/
+  unit/
+  maps/
+  playwright/
+tools/
+  validate_maps.ts               # map validator CLI (later PR)
+~~~
+
+**Ownership rules and non-goals:**
+- `src/runtime/` owns **Phaser integration**, including scene transitions and camera. Do not duplicate `WorldCamera`, `SceneManager`, `TileMapLoader` under `src/world/`.
+- `src/world/` owns **engine-independent map geometry/graph/validation**. `src/systems/` owns gameplay rules; only `src/core/SaveManager.ts` writes saves (no `src/systems/Save.ts`).
+- **Tiled authored maps** live in `public/maps/ch1/` and **tileset PNGs** in `public/tilesets/ch1/`; no canonical `src/data/maps/` copy. Game content/quests/lore live in `src/data/`, referenced by stable IDs from Tiled objects.
+- `src/engine/` contains retained **legacy/presentation modules** and remains in place during M1. Do not destructively rename existing runtime classes before proving the Phaser 3 spike.
+- `src/ui/` owns the **DOM accessibility layer**, which reads state but cannot unlock evidence. `public/assets/` contains curated only, not the complete Hugging Face dataset.
+- `tests/unit`, `tests/maps` and `tests/playwright` are the only planned test folders. Use imports and naming consistent with this tree; no empty scaffolding required.
+
+**M1 minimum subset:** `src/runtime/{PhaserRuntime,MapLoader,CameraController,SceneTransition}.ts`, `src/scenes/{BootScene,HarborScene,WarehouseInteriorScene}.ts`, two map TMJs under `public/maps/ch1/`, their reviewed tilesets under `public/tilesets/ch1/`, and corresponding tests. Additional game systems are added only when independently required.
+
 
 ## 9. PR roadmap and acceptance gates
 
