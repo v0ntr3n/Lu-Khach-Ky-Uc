@@ -1,6 +1,7 @@
 /**
  * @file src/systems/InteractionSystem.ts
- * @description Hệ thống dò tìm đối tượng tương tác gần nhất (Portal, NPC, Di vật/Tư liệu, Điểm Lưu Checkpoint, Cổng Thời Gian)
+ * @description Hệ thống dò tìm đối tượng tương tác gần nhất (Portal, NPC, Di vật/Tư liệu,
+ * Bàn Đối Chiếu Hồ Sơ Puzzle, Điểm Lưu Checkpoint, Cổng Thời Gian)
  * trong không gian 2D Top-Down cho "Lữ Khách Ký Ức (1930 – 2045)".
  */
 
@@ -114,6 +115,8 @@ export class InteractionSystem {
           promptText = `[E] Trò chuyện: ${item.label}`;
         } else if (item.kind === 'checkpoint') {
           promptText = `Nhấn [E] — Kích hoạt Điểm Lưu / Đèn Báo An Toàn: ${item.label}`;
+        } else if (item.kind === 'puzzle') {
+          promptText = `Nhấn [E] — Đối chiếu Tư liệu: ${item.label}`;
         } else if (item.kind === 'climax_gate') {
           promptText = '[E] Cổng Thời Gian';
         }
@@ -156,7 +159,11 @@ export class InteractionSystem {
     }
 
     // 5. Kiểm tra Cổng Thời Gian Cuối Chương (Climax Gate)
-    if (mapData.id === 'harbor_square' || mapData.id === 'archive_courtyard') {
+    if (
+      mapData.id === 'harbor_square' ||
+      mapData.id === 'archive_courtyard' ||
+      mapData.id === 'secret_archive'
+    ) {
       const gx = chapter.climax.gateWorldX;
       const gy =
         chapter.climax.gateWorldY ??

@@ -15,6 +15,7 @@ import type {
   MilestoneArtifact,
   NormalizedMapData,
   NpcMapPlacement,
+  PatrolActorRenderState,
   RomanMilestoneId,
   Vec2,
 } from '../types/game';
@@ -50,6 +51,7 @@ export interface RenderState {
   nearbyPrompt?: string | null;
   nearbyTargetPos?: Vec2 | null;
   debugOverlay?: boolean;
+  patrolActors?: PatrolActorRenderState[];
 }
 
 export class PixelRenderer {
@@ -264,18 +266,41 @@ export class PixelRenderer {
         depthQueue.push({
           footY: inter.y + 8,
           draw: () => {
+            const pulse = Math.round(Math.sin(timeSec * 5) * 2);
             ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
-            ctx.fillRect(ix - 12, iy - 28, 4, 28);
-            ctx.fillRect(ix + 8, iy - 28, 4, 28);
+            ctx.fillRect(ix - 14, iy - 30, 4, 30);
+            ctx.fillRect(ix + 10, iy - 30, 4, 30);
             ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
-            ctx.fillRect(ix - 14, iy - 32, 28, 4);
-            ctx.fillStyle = climaxBurstProgress > 0 ? PALETTE_12.PARCHMENT_LIGHT : PALETTE_12.CRIMSON_SEAL;
-            ctx.fillRect(ix - 6, iy - 26, 12, 24);
+            ctx.fillRect(ix - 16, iy - 34, 32, 4);
+            ctx.fillStyle =
+              climaxBurstProgress > 0 ? PALETTE_12.PARCHMENT_LIGHT : PALETTE_12.CRIMSON_SEAL;
+            ctx.fillRect(ix - 8, iy - 28, 16, 26);
+            ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+            ctx.fillRect(ix - 3, iy - 24, 6 + pulse, 20);
           },
         });
-      } else if (inter.kind === 'evidence' && inter.milestoneId) {
-        const milestone = chapter.milestones.find((m) => m.roman === inter.milestoneId);
-        const isDone = collectedMilestones.has(inter.milestoneId);
+      } else if (inter.kind === 'puzzle') {
+        depthQueue.push({
+          footY: inter.y + 6,
+          draw: () => {
+            // Bàn Kiểm Định Hồ Sơ Lịch Sử (Ornate Parchment Dossier Table & Gold Seal)
+            ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+            ctx.fillRect(ix - 12, iy - 8, 24, 12);
+            ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+            ctx.fillRect(ix - 11, iy - 7, 22, 9);
+            ctx.fillStyle = PALETTE_12.PARCHMENT_WARM;
+            ctx.fillRect(ix - 7, iy - 6, 14, 7);
+            ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+            ctx.fillRect(ix - 2, iy - 4, 4, 3);
+            ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+            ctx.fillRect(ix - 1, iy - 13, 2, 4);
+          },
+        });
+      } else if (inter.kind === 'evidence') {
+        const milestone = inter.milestoneId
+          ? chapter.milestones.find((m) => m.roman === inter.milestoneId)
+          : undefined;
+        const isDone = inter.milestoneId ? collectedMilestones.has(inter.milestoneId) : false;
         depthQueue.push({
           footY: inter.y + 4,
           draw: () => {
@@ -289,10 +314,12 @@ export class PixelRenderer {
               isDone,
               timeSec
             );
-            ctx.font = 'bold 7px monospace';
-            ctx.textAlign = 'center';
-            ctx.fillStyle = isDone ? PALETTE_12.PARCHMENT_LIGHT : PALETTE_12.BRONZE_BRIGHT;
-            ctx.fillText(isDone ? `✓ ${inter.milestoneId}` : inter.milestoneId!, ix, iy - 20);
+            if (inter.milestoneId) {
+              ctx.font = 'bold 7px monospace';
+              ctx.textAlign = 'center';
+              ctx.fillStyle = isDone ? PALETTE_12.PARCHMENT_LIGHT : PALETTE_12.BRONZE_BRIGHT;
+              ctx.fillText(isDone ? `✓ ${inter.milestoneId}` : inter.milestoneId, ix, iy - 20);
+            }
           },
         });
       } else if (inter.kind === 'door') {
@@ -378,9 +405,16 @@ export class PixelRenderer {
       ctx.restore();
     }
 
-    // 5. Đèn rọi tuần tra (Patrol Cones / Hazard Sweeps)
-    if (climaxBurstProgress <= 0.05 && !isInterior) {
-      this.drawTopDownPatrols(mapData, chapter, cameraX, cameraY, timeSec);
+    // 5. Đèn rọi tuần tra & Lính tuần tra góc nhìn nón (Patrol Cones / Hazard Sweeps)
+    if (climaxBurstProgress <= 0.05) {
+      this.drawTopDownPatrols(
+        mapData,
+        chapter,
+        cameraX,
+        cameraY,
+        timeSec,
+        state.patrolActors
+      );
     }
 
     // 6. Hào quang Chiaroscuro quanh Lữ Khách
@@ -554,9 +588,86 @@ export class PixelRenderer {
     chapter: ChapterData,
     cameraX: number,
     cameraY: number,
-    timeSec: number
+    timeSec: number,
+    patrolActors?: PatrolActorRenderState[]
   ): void {
     const { ctx } = this;
+
+    if (patrolActors && patrolActors.length > 0) {
+      for (const guard of patrolActors) {
+        const gx = Math.round(guard.x - cameraX);
+        const gy = Math.round(guard.y - cameraY);
+        if (gx < -96 || gx > INTERNAL_WIDTH + 96 || gy < -96 || gy > INTERNAL_HEIGHT + 96) {
+          continue;
+        }
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(gx, gy - 6);
+        ctx.arc(
+          gx,
+          gy - 6,
+          guard.coneLength,
+          guard.facingAngleRad - guard.coneAngleRad / 2,
+          guard.facingAngleRad + guard.coneAngleRad / 2
+        );
+        ctx.closePath();
+
+        if (guard.alertState === 'alert') {
+          ctx.fillStyle = 'rgba(196, 58, 43, 0.38)';
+          ctx.strokeStyle = 'rgba(224, 90, 71, 0.9)';
+        } else if (guard.alertState === 'suspicious') {
+          ctx.fillStyle = 'rgba(234, 138, 46, 0.28)';
+          ctx.strokeStyle = 'rgba(234, 138, 46, 0.75)';
+        } else {
+          ctx.fillStyle = 'rgba(212, 168, 79, 0.16)';
+          ctx.strokeStyle = 'rgba(212, 168, 79, 0.45)';
+        }
+        ctx.lineWidth = 1;
+        ctx.fill();
+        ctx.stroke();
+
+        // Chuyển góc radian sang hướng 4 chiều cho sprite lính tuần tra
+        const deg = ((guard.facingAngleRad * 180) / Math.PI + 360) % 360;
+        const guardFacing: Facing4 =
+          deg >= 45 && deg < 135
+            ? 'down'
+            : deg >= 135 && deg < 225
+              ? 'left'
+              : deg >= 225 && deg < 315
+                ? 'up'
+                : 'right';
+
+        drawCharacter4Dir(ctx, 'observer', gx, gy, guardFacing, true, false, timeSec);
+
+        // Thanh nghi ngờ / Biểu tượng cảnh báo (? / !)
+        if (guard.suspicionLevel > 0 || guard.alertState !== 'calm') {
+          ctx.fillStyle = PALETTE_12.LACQUER_VOID;
+          ctx.fillRect(gx - 7, gy - 24, 14, 3);
+          ctx.fillStyle =
+            guard.alertState === 'alert'
+              ? PALETTE_12.CRIMSON_VERMILION
+              : PALETTE_12.BRONZE_BRIGHT;
+          ctx.fillRect(
+            gx - 6,
+            gy - 23,
+            Math.max(2, Math.round(12 * Math.min(1, guard.suspicionLevel))),
+            1
+          );
+
+          ctx.font = 'bold 8px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(
+            guard.alertState === 'alert' ? '!' : '?',
+            gx,
+            gy - 26
+          );
+        }
+        ctx.restore();
+      }
+      return;
+    }
+
     if (mapData.patrols.length > 0) {
       for (const p of mapData.patrols) {
         if (p.waypoints.length === 0) continue;

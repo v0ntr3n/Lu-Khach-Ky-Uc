@@ -101,4 +101,30 @@ Tài liệu này cập nhật liên tục kết quả kiểm thử tự động 
 - **Browser E2E Tests (`npm run test:e2e`)**: **15/15 passed** trên Chromium (`m0_stabilization.spec.ts`: 5, `m1_topdown.spec.ts`: 4, `m2_exploration.spec.ts`: 3, `m3_systems_ui.spec.ts`: 3).
 - **Visual Audit Screenshots**: Đã kiểm tra trực quan `m3_dialogue_choices.png`, `m3_journal_modal.png`, `m3_inventory_modal.png` (bố cục 100% fullscreen, chữ rõ nét, đúng bảng màu Sơn Mài & Giấy Dó).
 
+---
+
+## Milestone M4 — Chapter I Complete Vertical Slice (Hoàn tất)
+
+### 1. Hạng mục đã kiểm chứng
+
+1. **Hệ thống Stealth & Tuần tra 2D (`src/systems/StealthSystem.ts`)**:
+   - Nón tầm nhìn hình học (`coneLength`, `coneAngleRad`, `facingAngleRad`) kết hợp kiểm tra mái hiên ẩn nấp (`ShelterZone`) và tường chắn tầm nhìn (`CollisionWorld.hasLineOfSight` với `obstacles` & `occluders`).
+   - Giữ phím `S` ngoài khoảng trống tuyệt đối không bất tử.
+   - Ba trạng thái cảnh giác (`calm -> suspicious -> alert`): khi bị phát hiện hoàn toàn (`suspicionLevel >= 1`), nhân vật rút lui về Đèn Báo An Toàn (`checkpoint`) gần nhất trên bản đồ hiện tại mà **giữ nguyên 100% tư liệu, cờ nhiệm vụ và cột mốc đã thu thập**.
+   - Phần thưởng nhiệm vụ phụ (`ev_ch1_patrol_schedule` tại `small_pier`) giảm 22% tầm quét nón đèn và tốc độ tăng nghi ngờ của lính tuần tra.
+2. **Giải đố Đối chiếu Văn kiện Lịch sử (`src/ui/PuzzlePanel.ts` & `CH1_DOSSIER_PUZZLE`)**:
+   - Bàn đối chiếu văn kiện Hội nghị Hợp nhất (`puzzle_ch1_unification_dossier` tại `secret_archive`) yêu cầu xác thực 3 luận điểm cốt lõi của *Chánh cương vắn tắt, Sách lược vắn tắt* (02/1930).
+   - Tự động hiển thị gợi ý học thuật (`#dossier-progressive-hint`, dẫn nguồn *Giáo trình Lịch sử Đảng Cộng sản Việt Nam 2021, tr. 61–65*) sau 2 lần thử chưa đúng mà không phạt hay xóa tiến trình người chơi.
+3. **Kịch bản Chơi Hoàn Chỉnh Chương I từ Đầu đến Cuối Không Dùng Cheat (`m4_chapter1_playthrough.spec.ts`)**:
+   - Khởi đầu tại `harbor_square` (`isPresenterMode === false`, `0 / 12 CỘT MỐC`) -> trò chuyện Giao Liên Lâm Văn Bính (Mốc I) -> vào `warehouse_interior` thu thập `ev_ch1_shipping_ledger` -> rẽ sang `small_pier` hoàn thành nhiệm vụ phụ `q_ch1_side_dock_watch` (`npc_pier_boatman` + `ev_ch1_patrol_schedule`) -> qua `old_street` vào `safehouse_interior` giải mã `ev_ch1_cipher_note` (Mốc II) -> vượt `shadow_alley` & `archive_courtyard` tới `secret_archive` -> giải đố `puzzle_ch1_unification_dossier` (Mốc III + `ev_ch1_unification_appeal`) -> mở `climax_gate_1930`, vượt qua Bước A & Bước B (`Thắp Sáng Ngọn Đuốc 1930`).
+
+### 2. Kết quả thực thi kiểm thử M4
+
+- **Map & WorldGraph Validator (`npm run validate:maps`)**: **8/8 zones PASS** (0 lỗi).
+- **Build & Typecheck (`npm run build`)**: Pass (`dist/index.html` 45.16 kB, `dist/assets/index-*.js` 238.83 kB / gzip 63.95 kB).
+- **Unit & Map Validation Tests (`npm run test:unit`)**: **30/30 passed** across 6 test files (`m0_stabilization`: 12, `m1_runtime`: 4, `m1_maps`: 4, `m2_world_graph`: 4, `m3_rpg_systems`: 4, `m4_vertical_slice`: 2).
+- **Browser E2E Tests (`npm run test:e2e`)**: **17/17 passed** trên Chromium (`m0_stabilization`: 5, `m1_topdown`: 4, `m2_exploration`: 3, `m3_systems_ui`: 3, `m4_chapter1_playthrough`: 2).
+- **Visual Audit Screenshots**: Đã kiểm tra trực quan `m4_stealth_alley.png`, `m4_dossier_puzzle.png`, `m4_climax_1930.png`.
+
+
 
