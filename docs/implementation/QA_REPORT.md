@@ -75,3 +75,30 @@ Tài liệu này cập nhật liên tục kết quả kiểm thử tự động 
 - **Unit & Map Validation Tests (`npm run test:unit`)**: **24/24 passed** (`m0_stabilization.test.ts`: 12, `m1_runtime.test.ts`: 4, `m1_maps.test.ts`: 4, `m2_world_graph.test.ts`: 4).
 - **Browser E2E Tests (`npm run test:e2e`)**: **12/12 passed** trên Chromium (`m0_stabilization.spec.ts`: 5, `m1_topdown.spec.ts`: 4, `m2_exploration.spec.ts`: 3).
 
+---
+
+## Milestone M3 — RPG Systems & UI (Hoàn tất)
+
+### 1. Hạng mục đã kiểm chứng
+
+1. **Hệ thống Nhiệm vụ & Phụ thuộc Mục tiêu (`src/systems/QuestSystem.ts`)**:
+   - Triển khai chuỗi nhiệm vụ chính Chương I (`q_ch1_main_unification`, 4 bước tuần tự có điều kiện tiên quyết `requiresMilestones` / `requiresEvidence`) và nhiệm vụ phụ (`q_ch1_side_dock_watch`, 2 bước tại `small_pier`), cùng nhiệm vụ chính cho các Chương II, III, IV.
+   - Tự động mở khóa bước tiếp theo khi người chơi thu thập tư liệu, khôi phục cột mốc hoặc đối thoại NPC; cô lập hoàn toàn khi bật Chế độ Giảng Viên (`isPresenterMode`).
+2. **Hệ thống Đối thoại Đa lựa chọn (`src/systems/DialogueSystem.ts` & `src/ui/DialoguePanel.ts`)**:
+   - Cây hội thoại nhiều nút cho toàn bộ 8 NPC Chương I (`dlg_harbor_liaison`, `dlg_old_worker`, `dlg_dock_watchman`, `dlg_warehouse_keeper`, `dlg_street_vendor`, `dlg_liaison_inner`, `dlg_pier_boatman`, `dlg_archive_keeper`).
+   - Gắn nhãn xuất xứ tư liệu (`#dialogue-provenance-badge`: `TƯ LIỆU LỊCH SỬ XÁC THỰC` có dẫn trang *Giáo trình Lịch sử Đảng Cộng sản Việt Nam 2021* hoặc `NHÂN VẬT GIAO LIÊN HƯ CẤU`).
+3. **Hệ thống Tư liệu, Bằng chứng & Túi đồ (`src/systems/EvidenceSystem.ts`, `src/systems/InventorySystem.ts`, `src/ui/InventoryPanel.ts`)**:
+   - Quản lý 8 tư liệu lịch sử có trích dẫn nguyên văn, ý nghĩa lịch sử và chú thích nguồn giáo trình.
+   - Giao diện `#inventory-modal` (`[I]`) cho phép tra cứu chi tiết từng tư liệu đã thu thập và ẩn nội dung tư liệu chưa mở khóa.
+4. **Bố cục Fullscreen World Viewport & Các Bảng Điều Khiển (`GameHUD.ts`, `JournalPanel.ts`, `PausePanel.ts`)**:
+   - Loại bỏ hoàn toàn cột sidebar 1/5 cố định (`260px`), chuyển `.workspace-grid` sang rộng 100% màn hình và biến danh sách mốc thành dải **Chronicle Ribbon Bar** gọn nhẹ phía trên cùng hộp theo dõi mục tiêu `#hud-objective-tracker`.
+   - Bổ sung Nhật ký nhiệm vụ `#journal-modal` (`[J]`), Túi tư liệu `#inventory-modal` (`[I]`), và Tạm dừng / Thiết lập `#pause-modal` (`[Tab]`) hỗ trợ Lưu thủ công, Xóa lưu trữ, Giảm chuyển động (`body.reduced-motion`), Cỡ chữ lớn (`body.text-scale-large`) và Bật/tắt gợi ý.
+
+### 2. Kết quả thực thi kiểm thử M3
+
+- **Build & Typecheck (`npm run build`)**: Pass (`dist/index.html` 37.95 kB, `dist/assets/index-*.js` 221.96 kB / gzip 59.40 kB).
+- **Unit & Map Validation Tests (`npm run test:unit`)**: **28/28 passed** across 5 test files (`m0_stabilization.test.ts`: 12, `m1_runtime.test.ts`: 4, `m1_maps.test.ts`: 4, `m2_world_graph.test.ts`: 4, `m3_rpg_systems.test.ts`: 4).
+- **Browser E2E Tests (`npm run test:e2e`)**: **15/15 passed** trên Chromium (`m0_stabilization.spec.ts`: 5, `m1_topdown.spec.ts`: 4, `m2_exploration.spec.ts`: 3, `m3_systems_ui.spec.ts`: 3).
+- **Visual Audit Screenshots**: Đã kiểm tra trực quan `m3_dialogue_choices.png`, `m3_journal_modal.png`, `m3_inventory_modal.png` (bố cục 100% fullscreen, chữ rõ nét, đúng bảng màu Sơn Mài & Giấy Dó).
+
+

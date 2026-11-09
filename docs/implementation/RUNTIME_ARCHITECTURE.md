@@ -16,10 +16,19 @@ Tài liệu này ghi nhận kiến trúc runtime thực tế được triển kh
 - `src/runtime/` & `src/scenes/`:
   - Tích hợp Phaser 3 + Tiled TMJ/JSON, điều khiển Camera bám mục tiêu có giới hạn biên, sắp xếp chiều sâu theo trục Y (`footY`), và chuyển cảnh hai chiều có thời gian miễn nhiễm (`portalCooldown`) chống hiệu ứng dội cổng (`portal ping-pong`).
 - `src/systems/`:
-  - `QuestSystem.ts`, `DialogueSystem.ts`, `InteractionSystem.ts`, `InventorySystem.ts`, `EvidenceSystem.ts`, `StealthSystem.ts`.
+  - `QuestSystem.ts`: Quản lý chuỗi nhiệm vụ chính/phụ và máy trạng thái phụ thuộc mục tiêu (`locked` -> `active` -> `completed`).
+  - `DialogueSystem.ts`: Cây hội thoại đa lựa chọn cho NPC có gắn nhãn xuất xứ (`ProvenanceMetadata`) và phần thưởng cờ/tư liệu/cột mốc.
+  - `EvidenceSystem.ts` & `InventorySystem.ts`: Kho tư liệu lịch sử có dẫn nguồn giáo trình và bộ lọc theo thời kỳ.
+  - `InteractionSystem.ts`: Phát hiện tương tác ưu tiên theo khoảng cách (Cửa/Portal, NPC, Tư liệu, Cột mốc, Đèn Báo An Toàn, Cổng Thời Gian).
 - `src/ui/`:
-  - Giao diện DOM toàn màn hình theo hệ màu 12 Sắc Độ Sơn Mài & Giấy Dó (`DESIGN.md`), hoàn toàn chỉ đọc trạng thái và gửi hành động qua `GameStore`, không tự ý mở khóa tiến trình.
-  - `WorldMapPanel.ts`: Sơ đồ liên thông 8 khu vực Chương I (`[M]`), hiển thị trạng thái Đang đứng / Đã khám phá / Khu vực ẩn và điều khiển Dịch chuyển nhanh giữa các Đèn Báo An Toàn (`checkpoint`) đã mở khóa.
+  - Giao diện DOM toàn màn hình (Fullscreen World Viewport 100%, thanh Chronicle Ribbon gọn nhẹ) theo hệ màu 12 Sắc Độ Sơn Mài & Giấy Dó (`DESIGN.md`), hoàn toàn chỉ đọc trạng thái và gửi hành động qua `GameStore`, không tự ý mở khóa tiến trình.
+  - `GameHUD.ts`: Hộp theo dõi mục tiêu nhiệm vụ đang thực hiện (`#hud-objective-tracker`) và gợi ý dẫn đường.
+  - `DialoguePanel.ts`: Hộp thoại NPC đa lựa chọn và thẻ xuất xứ tư liệu (`#dialogue-provenance-badge`).
+  - `JournalPanel.ts`: Nhật ký nhiệm vụ chính/phụ (`[J]`, `#journal-modal`).
+  - `InventoryPanel.ts`: Túi tư liệu & trình tra cứu bằng chứng lịch sử (`[I]`, `#inventory-modal`).
+  - `WorldMapPanel.ts`: Sơ đồ liên thông 8 khu vực Chương I (`[M]`, `#world-map-modal`), hiển thị trạng thái Đang đứng / Đã khám phá / Khu vực ẩn và điều khiển Dịch chuyển nhanh giữa các Đèn Báo An Toàn (`checkpoint`) đã mở khóa.
+  - `PausePanel.ts`: Menu tạm dừng, lưu/xóa tiến trình và thiết lập trợ năng (`[Tab]`, `#pause-modal`).
 - `tools/validate_maps.ts`:
   - Công cụ dòng lệnh (`npm run validate:maps`) chạy trực tiếp trên Node 24 (`--experimental-strip-types`), kiểm định toàn bộ file `.tmj` trong `public/maps/ch1/` cùng đồ thị `CHAPTER1_WORLD_GRAPH` (kiểm tra va chạm spawn, khoảng cách an toàn với portal, và BFS `16×16` tới mọi lối ra/mục tiêu).
+
 

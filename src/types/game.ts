@@ -330,6 +330,86 @@ export interface WorldZoneNode {
   edges: WorldZoneEdge[];
 }
 
+export type QuestObjectiveStatus = 'locked' | 'active' | 'completed';
+
+export interface QuestObjective {
+  id: string;
+  title: string;
+  description: string;
+  zoneId: string;
+  requiresFlags?: string[];
+  requiresEvidence?: string[];
+  requiresMilestones?: RomanMilestoneId[];
+  completedByFlag?: string;
+  completedByEvidence?: string;
+  completedByMilestone?: RomanMilestoneId;
+  isOptional?: boolean;
+  hintText?: string;
+}
+
+export interface QuestDefinition {
+  id: string;
+  eraId: EraId;
+  title: string;
+  subtitle: string;
+  category: 'main' | 'side';
+  summary: string;
+  objectives: QuestObjective[];
+  rewardFlag?: string;
+  provenance: ProvenanceMetadata;
+}
+
+export interface DialogueChoice {
+  id: string;
+  text: string;
+  nextNodeId: string | null;
+  requiresFlag?: string;
+  requiresEvidence?: string;
+  grantsFlag?: string;
+  grantsEvidence?: string;
+  grantsMilestone?: RomanMilestoneId;
+  responseToast?: string;
+}
+
+export interface DialogueNode {
+  id: string;
+  speaker: string;
+  role: string;
+  text: string;
+  provenance: ProvenanceMetadata;
+  choices: DialogueChoice[];
+}
+
+export interface DialogueTree {
+  id: string;
+  eraId: EraId;
+  npcId: string;
+  rootNodeId: string;
+  nodes: Record<string, DialogueNode>;
+}
+
+export interface EvidenceItem {
+  id: string;
+  eraId: EraId;
+  title: string;
+  category: 'document' | 'cipher' | 'artifact' | 'dispatch';
+  zoneId: string;
+  shortSummary: string;
+  historicalQuote: string;
+  historicalSignificance: string;
+  textbookCitation: string;
+  provenance: ProvenanceMetadata;
+  relatedMilestone?: RomanMilestoneId;
+  grantsFlag?: string;
+}
+
+export interface GameSettings {
+  muted: boolean;
+  reducedMotion: boolean;
+  textScale: 'normal' | 'large';
+  showHints: boolean;
+}
+
 export interface SaveDataV1 {
   version?: 1;
   chapterId: EraId;
@@ -351,6 +431,11 @@ export interface SaveDataV2 {
   discoveredMaps: string[];
   unlockedCheckpoints: string[];
   completedChapters: EraId[];
+  activeQuestIds?: string[];
+  completedQuestIds?: string[];
+  completedObjectiveIds?: string[];
+  dialogueHistory?: string[];
+  settings?: GameSettings;
 }
 
 export interface HudCallbacks {
@@ -363,4 +448,9 @@ export interface HudCallbacks {
   onOverlayStateChange?: (isOpen: boolean, overlayName: GameMode) => void;
   onFastTravelToZone?: (zoneId: string, spawnId: string) => void;
   onToggleDebugOverlay?: () => boolean;
+  onSelectDialogueChoice?: (choiceId: string) => void;
+  onManualSave?: () => void;
+  onResetSave?: () => void;
+  onUpdateSettings?: (partial: Partial<GameSettings>) => void;
 }
+

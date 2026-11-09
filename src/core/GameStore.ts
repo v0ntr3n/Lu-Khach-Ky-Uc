@@ -3,9 +3,8 @@
  * @description Kho trạng thái trung tâm có thẩm quyền duy nhất (Authoritative Serializable State)
  * cho "Lữ Khách Ký Ức (1930 – 2045)". Quản lý máy trạng thái GameMode, tọa độ 2D Top-Down,
  * bản đồ hiện tại (currentMapId / currentSpawnId), các điểm lưu (unlockedCheckpoints),
- * lớp phủ gỡ lỗi (debugOverlayEnabled), tiến trình Cột mốc La Mã,
- * sự cô lập hoàn toàn của Chế độ Giảng viên (Presenter Mode), điều kiện mở Cổng Thời Gian Climax,
- * kiểm tra vùng ẩn nấp (Shelter 1D/2D) và bộ đếm Transition Token chống timer cũ.
+ * nhiệm vụ (completedQuests / completedObjectives), lịch sử hội thoại (dialogueHistory),
+ * cài đặt trợ năng (settings), tiến trình Cột mốc La Mã và sự cô lập hoàn toàn của Presenter Mode.
  */
 
 import type {
@@ -13,12 +12,14 @@ import type {
   EraId,
   Facing4,
   GameMode,
+  GameSettings,
   RomanMilestoneId,
   SaveDataV2,
   ShelterZone,
   Vec2,
 } from '../types/game';
 import {
+  DEFAULT_GAME_SETTINGS,
   DEFAULT_SAFE_MAP_ID,
   DEFAULT_SAFE_PLAYER_POS,
   DEFAULT_SAFE_SPAWN_ID,
@@ -65,6 +66,12 @@ export class GameStore {
   ]);
   public debugOverlayEnabled = false;
 
+  // Trạng thái M3 RPG Systems (Quests, Objectives, Dialogue History & Settings)
+  public readonly completedObjectives = new Set<string>();
+  public readonly completedQuests = new Set<string>();
+  public readonly dialogueHistory = new Set<string>();
+  public settings: GameSettings = { ...DEFAULT_GAME_SETTINGS };
+
   public setMode(mode: GameMode): void {
     this.mode = mode;
   }
@@ -75,6 +82,14 @@ export class GameStore {
 
   public isWorldInputAllowed(): boolean {
     return this.mode === 'exploring';
+  }
+
+  public updateSettings(partial: Partial<GameSettings>): GameSettings {
+    this.settings = {
+      ...this.settings,
+      ...partial,
+    };
+    return { ...this.settings };
   }
 
   public setMapState(
@@ -211,6 +226,29 @@ export class GameStore {
     return this.transitionToken;
   }
 
+  public resetToDefault(): void {
+    this.currentChapterIndex = 0;
+    this.isPresenterMode = false;
+    this.collectedMilestones.clear();
+    this.presenterCollectedMilestones.clear();
+    this.questFlags.clear();
+    this.collectedEvidence.clear();
+    this.discoveredMaps.clear();
+    this.discoveredMaps.add(DEFAULT_SAFE_MAP_ID);
+    this.unlockedCheckpoints.clear();
+    this.unlockedCheckpoints.add(DEFAULT_SAFE_MAP_ID);
+    this.unlockedCheckpoints.add(DEFAULT_SAFE_SPAWN_ID);
+    this.unlockedCheckpoints.add('cp_harbor_lantern');
+    this.completedObjectives.clear();
+    this.completedQuests.clear();
+    this.dialogueHistory.clear();
+    this.currentMapId = DEFAULT_SAFE_MAP_ID;
+    this.currentSpawnId = DEFAULT_SAFE_SPAWN_ID;
+    this.playerPos = { x: 85, y: 384 };
+    this.playerFacing = 'right';
+    this.bumpTransitionToken();
+  }
+
   public toSaveDataV2(
     eraId: EraId,
     playerX: number,
@@ -243,6 +281,11 @@ export class GameStore {
       discoveredMaps: Array.from(this.discoveredMaps),
       unlockedCheckpoints: Array.from(this.unlockedCheckpoints),
       completedChapters: [],
+      activeQuestIds: [],
+      completedQuestIds: Array.from(this.completedQuests),
+      completedObjectiveIds: Array.from(this.completedObjectives),
+      dialogueHistory: Array.from(this.dialogueHistory),
+      settings: { ...this.settings },
     };
   }
 
@@ -274,6 +317,28 @@ export class GameStore {
     this.unlockedCheckpoints.add('cp_harbor_lantern');
     for (const cp of save.unlockedCheckpoints ?? []) {
       this.unlockedCheckpoints.add(cp);
+    }
+
+    this.completedObjectives.clear();
+    for (const objId of save.completedObjectiveIds ?? []) {
+      this.completedObjectives.add(objId);
+    }
+
+    this.completedQuests.clear();
+    for (const qId of save.completedQuestIds ?? []) {
+      this.completedQuests.add(qId);
+    }
+
+    this.dialogueHistory.clear();
+    for (const dId of save.dialogueHistory ?? []) {
+      this.dialogueHistory.add(dId);
+    }
+
+    if (save.settings) {
+      this.settings = {
+        ...DEFAULT_GAME_SETTINGS,
+        ...save.settings,
+      };
     }
 
     this.currentMapId = save.currentMapId || DEFAULT_SAFE_MAP_ID;

@@ -4,7 +4,13 @@
  * với khả năng tự động di trú từ định dạng cũ (SaveV1) và khôi phục vị trí spawn an toàn.
  */
 
-import type { EraId, RomanMilestoneId, SaveDataV1, SaveDataV2 } from '../types/game';
+import type {
+  EraId,
+  GameSettings,
+  RomanMilestoneId,
+  SaveDataV1,
+  SaveDataV2,
+} from '../types/game';
 
 export const SAVE_KEY_V2 = 'lu_khach_ky_uc_save_v2';
 export const SAVE_KEY_V1 = 'lu_khach_ky_uc_save_v1';
@@ -29,6 +35,13 @@ export const DEFAULT_SAFE_MAP_ID = 'harbor_square';
 export const DEFAULT_SAFE_SPAWN_ID = 'default_spawn';
 export const DEFAULT_SAFE_PLAYER_POS = { x: 85, y: 148 } as const;
 
+export const DEFAULT_GAME_SETTINGS: GameSettings = {
+  muted: false,
+  reducedMotion: false,
+  textScale: 'normal',
+  showHints: true,
+};
+
 export function migrateV1ToV2(v1: SaveDataV1): SaveDataV2 {
   const eraId: EraId = VALID_ERAS.includes(v1.chapterId) ? v1.chapterId : '1930';
   const rawMilestones = Array.isArray(v1.collectedMilestones) ? v1.collectedMilestones : [];
@@ -50,6 +63,11 @@ export function migrateV1ToV2(v1: SaveDataV1): SaveDataV2 {
     discoveredMaps: [DEFAULT_SAFE_MAP_ID],
     unlockedCheckpoints: [DEFAULT_SAFE_SPAWN_ID],
     completedChapters: [],
+    activeQuestIds: [],
+    completedQuestIds: [],
+    completedObjectiveIds: [],
+    dialogueHistory: [],
+    settings: { ...DEFAULT_GAME_SETTINGS },
   };
 }
 
@@ -105,6 +123,15 @@ export class SaveManager {
               ? { x: parsed.playerPos.x, y: parsed.playerPos.y }
               : { x: DEFAULT_SAFE_PLAYER_POS.x, y: DEFAULT_SAFE_PLAYER_POS.y };
 
+          const rawSettings = parsed.settings;
+          const safeSettings: GameSettings = {
+            muted: Boolean(rawSettings?.muted),
+            reducedMotion: Boolean(rawSettings?.reducedMotion),
+            textScale: rawSettings?.textScale === 'large' ? 'large' : 'normal',
+            showHints:
+              typeof rawSettings?.showHints === 'boolean' ? rawSettings.showHints : true,
+          };
+
           return {
             version: 2,
             timestamp: typeof parsed.timestamp === 'number' ? parsed.timestamp : Date.now(),
@@ -131,6 +158,19 @@ export class SaveManager {
             completedChapters: Array.isArray(parsed.completedChapters)
               ? parsed.completedChapters
               : [],
+            activeQuestIds: Array.isArray(parsed.activeQuestIds)
+              ? parsed.activeQuestIds
+              : [],
+            completedQuestIds: Array.isArray(parsed.completedQuestIds)
+              ? parsed.completedQuestIds
+              : [],
+            completedObjectiveIds: Array.isArray(parsed.completedObjectiveIds)
+              ? parsed.completedObjectiveIds
+              : [],
+            dialogueHistory: Array.isArray(parsed.dialogueHistory)
+              ? parsed.dialogueHistory
+              : [],
+            settings: safeSettings,
           };
         }
 
@@ -173,6 +213,14 @@ export class SaveManager {
   }
 
   public clear(): void {
+    SaveManager.clear();
+  }
+
+  public static clearSave(): void {
+    SaveManager.clear();
+  }
+
+  public clearSave(): void {
     SaveManager.clear();
   }
 }

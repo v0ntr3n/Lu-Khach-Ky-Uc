@@ -1,29 +1,78 @@
 /**
  * @file src/ui/HudController.ts
- * @description Điều khiển toàn bộ giao diện (1/5 Codex Sidebar I-XII, Hộp thoại RPG Giấy Dó,
- * Cửa sổ Quyết sách & Đại cảnh Climax A+B, và Bàn Tra cứu Cố vấn Sử học AI).
+ * @description Điều phối toàn bộ giao diện (Chronicle Ribbon I-XII, GameHUD, DialoguePanel,
+ * JournalPanel, InventoryPanel, WorldMapPanel, PausePanel, Climax A+B, và Cố vấn Sử học AI).
  */
 
 import { AI_LOOKUP_DATABASE, CHAPTERS } from '../data/chronicles';
 import type {
   ChapterData,
+  DialogueChoice,
+  DialogueNode,
   EraId,
+  EvidenceItem,
   GameMode,
+  GameSettings,
   HudCallbacks,
   MilestoneArtifact,
+  QuestDefinition,
+  QuestObjective,
+  QuestObjectiveStatus,
   RomanMilestoneId,
 } from '../types/game';
-
+import { DialoguePanel } from './DialoguePanel';
+import { GameHUD } from './GameHUD';
+import { InventoryPanel } from './InventoryPanel';
+import { JournalPanel } from './JournalPanel';
+import { PausePanel } from './PausePanel';
 import { WorldMapPanel } from './WorldMapPanel';
 
 export type { GameMode, HudCallbacks };
 
 export class HudController {
   private callbacks: HudCallbacks;
+  public readonly gameHud: GameHUD;
+  public readonly dialoguePanel: DialoguePanel;
+  public readonly journalPanel: JournalPanel;
+  public readonly inventoryPanel: InventoryPanel;
+  public readonly pausePanel: PausePanel;
   public readonly worldMapPanel: WorldMapPanel;
 
   constructor(callbacks: HudCallbacks) {
     this.callbacks = callbacks;
+    this.gameHud = new GameHUD();
+    this.dialoguePanel = new DialoguePanel({
+      onSelectChoice: (choiceId) => {
+        this.callbacks.onSelectDialogueChoice?.(choiceId);
+      },
+      onClose: () => {
+        this.callbacks.onOverlayStateChange?.(false, 'dialogue');
+      },
+    });
+    this.journalPanel = new JournalPanel({
+      onClose: () => {
+        this.callbacks.onOverlayStateChange?.(false, 'journal');
+      },
+    });
+    this.inventoryPanel = new InventoryPanel({
+      onClose: () => {
+        this.callbacks.onOverlayStateChange?.(false, 'inventory');
+      },
+    });
+    this.pausePanel = new PausePanel({
+      onUpdateSettings: (partial) => {
+        this.callbacks.onUpdateSettings?.(partial);
+      },
+      onManualSave: () => {
+        this.callbacks.onManualSave?.();
+      },
+      onResetSave: () => {
+        this.callbacks.onResetSave?.();
+      },
+      onClose: () => {
+        this.callbacks.onOverlayStateChange?.(false, 'paused');
+      },
+    });
     this.worldMapPanel = new WorldMapPanel({
       onFastTravel: (zoneId, spawnId) => {
         this.callbacks.onOverlayStateChange?.(false, 'map');
@@ -52,7 +101,8 @@ export class HudController {
     });
 
     // Nút Âm thanh 8-bit
-    const muteBtn = document.getElementById('btn-audio-toggle');
+    const muteBtn =
+      document.getElementById('btn-audio-toggle') ?? document.getElementById('btn-mute-audio');
     muteBtn?.addEventListener('click', () => {
       const muted = this.callbacks.onToggleMute();
       if (muteBtn) {
@@ -60,17 +110,23 @@ export class HudController {
       }
     });
 
-    // Nút mở Bàn Cố Vấn Sử Học (Phím Q), Bản Đồ (Phím M), Debug (Phím F3) & Nút đóng Climax
+    // Các nút mở Overlay trên Topbar
     const lookupBtn = document.getElementById('btn-open-lookup');
     const closeLookupBtn = document.getElementById('btn-close-lookup');
     const closeClimaxBtn = document.getElementById('btn-close-climax');
     const openMapBtn = document.getElementById('btn-open-map');
+    const openJournalBtn = document.getElementById('btn-open-journal');
+    const openInventoryBtn = document.getElementById('btn-open-inventory');
+    const openPauseBtn = document.getElementById('btn-open-pause');
     const debugBtn = document.getElementById('btn-debug-overlay');
 
     lookupBtn?.addEventListener('click', () => this.toggleLookupDrawer(true));
     closeLookupBtn?.addEventListener('click', () => this.toggleLookupDrawer(false));
     closeClimaxBtn?.addEventListener('click', () => this.closeClimaxModal());
     openMapBtn?.addEventListener('click', () => this.toggleWorldMapModal());
+    openJournalBtn?.addEventListener('click', () => this.toggleJournalModal());
+    openInventoryBtn?.addEventListener('click', () => this.toggleInventoryModal());
+    openPauseBtn?.addEventListener('click', () => this.togglePauseModal());
     debugBtn?.addEventListener('click', () => {
       const active = this.callbacks.onToggleDebugOverlay?.() ?? false;
       debugBtn.classList.toggle('is-active', active);
@@ -148,23 +204,7 @@ export class HudController {
   }
 
   public updateStageHeader(chapter: ChapterData, isSheltered: boolean): void {
-    const numEl = document.getElementById('stage-chapter-num');
-    const titleEl = document.getElementById('stage-chapter-title');
-    const locEl = document.getElementById('stage-location-badge');
-    const hintEl = document.getElementById('stage-mechanic-hint');
-    const shelterBadge = document.getElementById('stage-shelter-status');
-
-    if (numEl) numEl.textContent = `${chapter.chapterNum} (${chapter.years})`;
-    if (titleEl) titleEl.textContent = chapter.title;
-    if (locEl) locEl.textContent = `📍 ${chapter.locationLabel} · ${chapter.coordinates}`;
-    if (hintEl) hintEl.textContent = chapter.mechanicHint;
-
-    if (shelterBadge) {
-      shelterBadge.textContent = isSheltered
-        ? '🛡️ ĐANG ẨN MÌNH TRONG BÓNG TỐI (AN TOÀN)'
-        : '🚶 ĐANG DI CHUYỂN TRÊN TUYẾN ĐƯỜNG LỊCH SỬ';
-      shelterBadge.classList.toggle('is-sheltered', isSheltered);
-    }
+    this.gameHud.updateStageHeader(chapter, isSheltered);
   }
 
   public updateMapLocationBadge(
@@ -172,46 +212,40 @@ export class HudController {
     coordinates?: string,
     promptText?: string | null
   ): void {
-    const locEl = document.getElementById('stage-location-badge');
-    if (locEl) {
-      locEl.textContent = coordinates ? `📍 ${mapTitle} · ${coordinates}` : `📍 ${mapTitle}`;
-    }
-
-    const interactBtn = document.getElementById('ctrl-interact');
-    if (interactBtn && promptText !== undefined) {
-      interactBtn.textContent = promptText ? `✨ ${promptText}` : '✨ Khôi Phục / Mở Cổng (E)';
-    }
+    this.gameHud.updateMapLocationBadge(mapTitle, coordinates, promptText);
   }
 
-  public showArtifactDialogue(milestone: MilestoneArtifact): void {
-    const card = document.getElementById('dialogue-parchment-card');
-    const speakerEl = document.getElementById('dialogue-speaker');
-    const roleEl = document.getElementById('dialogue-role');
-    const titleEl = document.getElementById('dialogue-milestone-title');
-    const textEl = document.getElementById('dialogue-body-text');
-    const sigEl = document.getElementById('dialogue-significance');
-    const citeEl = document.getElementById('dialogue-citation');
+  public showArtifactDialogue(
+    milestone: MilestoneArtifact,
+    node?: DialogueNode | null,
+    choices?: DialogueChoice[]
+  ): void {
+    this.dialoguePanel.showArtifactDialogue(milestone, node, choices);
+  }
 
-    if (!card) return;
-    card.classList.add('is-Active');
+  public openNpcDialogue(
+    node: DialogueNode,
+    choices: DialogueChoice[],
+    milestone?: MilestoneArtifact
+  ): void {
+    this.dialoguePanel.openNpcDialogue(node, choices, milestone);
+    this.callbacks.onOverlayStateChange?.(true, 'dialogue');
+  }
 
-    if (speakerEl) speakerEl.textContent = milestone.npcSpeaker;
-    if (roleEl) roleEl.textContent = milestone.npcRole;
-    if (titleEl) titleEl.textContent = `MỐC LA MÃ ${milestone.roman} (${milestone.year}): ${milestone.title}`;
-    if (textEl) textEl.textContent = `"${milestone.dialogue}"`;
-    if (sigEl) sigEl.textContent = `Ý nghĩa lịch sử: ${milestone.historicalSignificance}`;
-    if (citeEl) citeEl.textContent = `📖 ${milestone.textbookCitation}`;
+  public updateDialogueNode(node: DialogueNode, choices: DialogueChoice[]): void {
+    this.dialoguePanel.updateDialogueNode(node, choices);
+  }
+
+  public closeDialogueModal(): void {
+    const wasOpen = this.dialoguePanel.isOpen();
+    this.dialoguePanel.close();
+    if (wasOpen) {
+      this.callbacks.onOverlayStateChange?.(false, 'dialogue');
+    }
   }
 
   public showToast(message: string): void {
-    const toast = document.getElementById('stage-toast');
-    if (!toast) return;
-    toast.textContent = message;
-    toast.classList.add('is-visible');
-    window.clearTimeout((toast as unknown as { _timer?: number })._timer);
-    (toast as unknown as { _timer?: number })._timer = window.setTimeout(() => {
-      toast.classList.remove('is-visible');
-    }, 3200);
+    this.gameHud.showToast(message);
   }
 
   public openClimaxModal(chapter: ChapterData): void {
@@ -303,6 +337,47 @@ export class HudController {
     }
   }
 
+  public toggleWorldMapModal(force?: boolean): void {
+    const isOpen = this.worldMapPanel.toggle(force);
+    this.callbacks.onOverlayStateChange?.(isOpen, 'map');
+  }
+
+  public toggleJournalModal(force?: boolean): void {
+    const isOpen = this.journalPanel.toggle(force);
+    this.callbacks.onOverlayStateChange?.(isOpen, 'journal');
+  }
+
+  public toggleInventoryModal(force?: boolean): void {
+    const isOpen = this.inventoryPanel.toggle(force);
+    this.callbacks.onOverlayStateChange?.(isOpen, 'inventory');
+  }
+
+  public togglePauseModal(force?: boolean): void {
+    const isOpen = this.pausePanel.toggle(force);
+    this.callbacks.onOverlayStateChange?.(isOpen, 'paused');
+  }
+
+  public closeAllOverlays(): void {
+    this.closeClimaxModal();
+    this.closeDialogueModal();
+    if (document.getElementById('lookup-drawer')?.classList.contains('is-open')) {
+      this.toggleLookupDrawer(false);
+    }
+    if (this.worldMapPanel.isOpen()) {
+      this.worldMapPanel.toggle(false);
+    }
+    if (this.journalPanel.isOpen()) {
+      this.journalPanel.toggle(false);
+    }
+    if (this.inventoryPanel.isOpen()) {
+      this.inventoryPanel.toggle(false);
+    }
+    if (this.pausePanel.isOpen()) {
+      this.pausePanel.toggle(false);
+    }
+    this.callbacks.onOverlayStateChange?.(false, 'exploring');
+  }
+
   public setPresenterModeUI(isPresenterMode: boolean): void {
     const lecturerBtn = document.getElementById('btn-lecturer-unlock');
     if (lecturerBtn) {
@@ -321,11 +396,6 @@ export class HudController {
     }
   }
 
-  public toggleWorldMapModal(force?: boolean): void {
-    const isOpen = this.worldMapPanel.toggle(force);
-    this.callbacks.onOverlayStateChange?.(isOpen, 'map');
-  }
-
   public updateWorldMapState(
     currentMapId: string,
     discoveredMaps: ReadonlySet<string>,
@@ -340,11 +410,51 @@ export class HudController {
     );
   }
 
+  public updateRpgSystemsState(data: {
+    quests: Array<{
+      quest: QuestDefinition;
+      objectives: Array<{ objective: QuestObjective; status: QuestObjectiveStatus }>;
+    }>;
+    activeObjective: { quest: QuestDefinition; objective: QuestObjective } | null;
+    hintText: string;
+    allEvidence: EvidenceItem[];
+    collectedEvidenceIds: ReadonlySet<string>;
+    settings: GameSettings;
+    isPresenterMode: boolean;
+  }): void {
+    this.gameHud.updateObjectiveTracker(
+      data.activeObjective,
+      data.hintText,
+      data.settings.showHints
+    );
+    this.journalPanel.updateState(
+      data.quests,
+      data.activeObjective,
+      data.hintText,
+      data.isPresenterMode
+    );
+    this.inventoryPanel.updateState(
+      data.allEvidence,
+      data.collectedEvidenceIds,
+      data.isPresenterMode
+    );
+    this.pausePanel.updateSettings(data.settings);
+  }
+
   public isOverlayOpen(): boolean {
-    const climaxOpen = document.getElementById('climax-modal')?.classList.contains('is-open') ?? false;
-    const lookupOpen = document.getElementById('lookup-drawer')?.classList.contains('is-open') ?? false;
-    const mapOpen = this.worldMapPanel.isOpen();
-    return climaxOpen || lookupOpen || mapOpen;
+    const climaxOpen =
+      document.getElementById('climax-modal')?.classList.contains('is-open') ?? false;
+    const lookupOpen =
+      document.getElementById('lookup-drawer')?.classList.contains('is-open') ?? false;
+    return (
+      climaxOpen ||
+      lookupOpen ||
+      this.dialoguePanel.isOpen() ||
+      this.worldMapPanel.isOpen() ||
+      this.journalPanel.isOpen() ||
+      this.inventoryPanel.isOpen() ||
+      this.pausePanel.isOpen()
+    );
   }
 
   private renderLookupResults(query: string): void {
