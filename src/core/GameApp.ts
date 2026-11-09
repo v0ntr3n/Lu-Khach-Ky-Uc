@@ -2,8 +2,8 @@
  * @file src/core/GameApp.ts
  * @description Bộ điều phối vòng đời chính của "Lữ Khách Ký Ức (1930 – 2045)".
  * Kết nối GameStore, InputManager, SaveManager, MapLoader, CameraController,
- * SceneTransition, CollisionWorld, InteractionSystem, OpeningFracture,
- * PixelRenderer (Top-Down 2D, Debug Overlay & 1D Fallback), SoundSynth và HudController.
+ * SceneTransition, CollisionWorld, InteractionSystem, QuestSystem, DialogueSystem,
+ * EvidenceSystem, InventorySystem, OpeningFracture, PixelRenderer, SoundSynth và HudController.
  */
 
 import { CHAPTERS } from '../data/chronicles';
@@ -19,12 +19,17 @@ import { CameraController } from '../runtime/CameraController';
 import { getAllBuiltInMaps, getBuiltInMap } from '../runtime/MapLoader';
 import { computeEntityDepth } from '../runtime/PhaserRuntime';
 import { SceneTransition } from '../runtime/SceneTransition';
+import { DialogueSystem } from '../systems/DialogueSystem';
+import { EvidenceSystem } from '../systems/EvidenceSystem';
 import { InteractionSystem, type InteractionCandidate } from '../systems/InteractionSystem';
+import { InventorySystem } from '../systems/InventorySystem';
+import { QuestSystem } from '../systems/QuestSystem';
 import type {
   ChapterData,
   EraId,
   Facing4,
   GameMode,
+  GameSettings,
   MilestoneArtifact,
   NormalizedMapData,
   PortalDefinition,
@@ -40,10 +45,14 @@ import { SaveManager } from './SaveManager';
 
 interface HudExtendedMethods {
   toggleWorldMapModal?: (forceOpen?: boolean) => void;
+  toggleJournalModal?: (forceOpen?: boolean) => void;
+  toggleInventoryModal?: (forceOpen?: boolean) => void;
+  togglePauseModal?: (forceOpen?: boolean) => void;
+  closeAllOverlays?: () => void;
   updateWorldMapState?: (
     currentMapId: string,
-    discoveredMaps: Set<string>,
-    unlockedCheckpoints: Set<string>,
+    discoveredMaps: ReadonlySet<string>,
+    unlockedCheckpoints: ReadonlySet<string>,
     isPresenterMode: boolean
   ) => void;
   setDebugOverlayUI?: (enabled: boolean) => void;
@@ -57,6 +66,10 @@ export class LuKhachKyUcGame {
   public readonly sound: SoundSynth;
   public readonly hud: HudController;
   public readonly interactionSystem: InteractionSystem;
+  public readonly questSystem: QuestSystem;
+  public readonly dialogueSystem: DialogueSystem;
+  public readonly evidenceSystem: EvidenceSystem;
+  public readonly inventorySystem: InventorySystem;
   public readonly cameraController: CameraController;
   public readonly sceneTransition: SceneTransition;
 
@@ -99,6 +112,10 @@ export class LuKhachKyUcGame {
     this.store = new GameStore();
     this.saveManager = new SaveManager();
     this.interactionSystem = new InteractionSystem();
+    this.questSystem = new QuestSystem();
+    this.dialogueSystem = new DialogueSystem();
+    this.evidenceSystem = new EvidenceSystem();
+    this.inventorySystem = new InventorySystem(this.evidenceSystem);
 
     this.allMaps = getAllBuiltInMaps();
     this.currentMap = getBuiltInMap('harbor_square');
@@ -179,7 +196,28 @@ export class LuKhachKyUcGame {
           return;
         }
         this.syncHudWithState();
-        (this.hud as unknown as HudExtendedMethods).toggleWorldMapModal?.();
+        this.hud.toggleWorldMapModal();
+      },
+      onToggleJournal: () => {
+        if (this.store.getMode() === 'opening' || this.store.getMode() === 'climax') {
+          return;
+        }
+        this.syncHudWithState();
+        this.hud.toggleJournalModal();
+      },
+      onToggleInventory: () => {
+        if (this.store.getMode() === 'opening' || this.store.getMode() === 'climax') {
+          return;
+        }
+        this.syncHudWithState();
+        this.hud.toggleInventoryModal();
+      },
+      onTogglePause: () => {
+        if (this.store.getMode() === 'opening' || this.store.getMode() === 'climax') {
+          return;
+        }
+        this.syncHudWithState();
+        this.hud.togglePauseModal();
       },
       onToggleDebugOverlay: () => {
         this.toggleDebugOverlay();
@@ -188,13 +226,13 @@ export class LuKhachKyUcGame {
         if (this.store.getMode() === 'opening') {
           return;
         }
-        this.hud.closeClimaxModal();
-        if (document.getElementById('lookup-drawer')?.classList.contains('is-open')) {
-          this.hud.toggleLookupDrawer(false);
+        if (this.hud.isOverlayOpen()) {
+          this.dialogueSystem.closeDialogue();
+          this.hud.closeAllOverlays();
+          return;
         }
-        if (document.getElementById('world-map-modal')?.classList.contains('is-open')) {
-          (this.hud as unknown as HudExtendedMethods).toggleWorldMapModal?.(false);
-        }
+        this.syncHudWithState();
+        this.hud.togglePauseModal(true);
       },
     });
 
@@ -204,7 +242,12 @@ export class LuKhachKyUcGame {
       onTriggerClimaxStepB: () => this.triggerClimaxStepBSetPiece(),
       onAdvanceNextChapter: () => this.advanceToNextChapter(),
       onToggleLecturerUnlockAll: () => this.togglePresenterMode(),
-      onToggleMute: () => this.sound.toggleMute(),
+      onToggleMute: () => {
+        const muted = this.sound.toggleMute();
+        this.store.updateSettings({ muted });
+        this.persistProgress();
+        return muted;
+      },
       onOverlayStateChange: (isOpen: boolean, overlayMode: GameMode) => {
         this.store.setMode(isOpen ? overlayMode : 'exploring');
         this.input.clearKeys();
@@ -213,6 +256,18 @@ export class LuKhachKyUcGame {
         this.fastTravelToZone(zoneId, spawnId);
       },
       onToggleDebugOverlay: () => this.toggleDebugOverlay(),
+      onSelectDialogueChoice: (choiceId: string) => {
+        this.selectDialogueChoice(choiceId);
+      },
+      onManualSave: () => {
+        this.manualSave();
+      },
+      onResetSave: () => {
+        this.resetSave();
+      },
+      onUpdateSettings: (partial: Partial<GameSettings>) => {
+        this.updateSettings(partial);
+      },
     });
 
     this.hud.setPresenterModeUI(this.store.isPresenterMode);
@@ -279,6 +334,94 @@ export class LuKhachKyUcGame {
         : '🛠️ Đã tắt Lớp Phủ Gỡ Lỗi (F3).'
     );
     return enabled;
+  }
+
+  public updateSettings(partial: Partial<GameSettings>): GameSettings {
+    const next = this.store.updateSettings(partial);
+    this.persistProgress();
+    this.syncHudWithState();
+    return next;
+  }
+
+  public manualSave(): boolean {
+    if (this.store.isPresenterMode) {
+      this.hud.showToast(
+        '⚠️ Đang ở Chế độ Giảng Viên: Không ghi đè dữ liệu lưu tiến trình thường.'
+      );
+      return false;
+    }
+    this.persistProgress();
+    this.hud.showToast('💾 Đã lưu tiến trình Lữ Khách vào bộ nhớ cục bộ (SaveV2)!');
+    return true;
+  }
+
+  public resetSave(): void {
+    this.saveManager.clearSave();
+    this.store.resetToDefault();
+    this.hud.setPresenterModeUI(false);
+    this.loadMap('harbor_square', 'default_spawn', { x: 85, y: 384 }, 'right');
+    this.hud.closeAllOverlays();
+    this.store.setMode('exploring');
+    this.syncHudWithState();
+    this.hud.showToast('🔄 Đã xóa dữ liệu lưu và đặt lại hành trình từ đầu Chương I!');
+  }
+
+  public openDialogueForNpc(npcIdOrDialogueId: string, milestone?: MilestoneArtifact): boolean {
+    const node = this.dialogueSystem.startDialogue(npcIdOrDialogueId);
+    if (!node) return false;
+    const choices = this.dialogueSystem.getAvailableChoices(
+      node,
+      this.store.questFlags,
+      this.store.collectedEvidence
+    );
+    this.hud.openNpcDialogue(node, choices, milestone);
+    return true;
+  }
+
+  public selectDialogueChoice(choiceId: string): void {
+    const { nextNode, choice, ended } = this.dialogueSystem.selectChoice(
+      choiceId,
+      this.store.questFlags,
+      this.store.collectedEvidence
+    );
+
+    if (choice) {
+      this.store.dialogueHistory.add(choice.id);
+
+      if (!this.store.isPresenterMode) {
+        if (choice.grantsFlag) {
+          this.store.questFlags.add(choice.grantsFlag);
+        }
+        if (choice.grantsEvidence) {
+          this.inventorySystem.addItem(choice.grantsEvidence, this.store);
+        }
+        if (choice.grantsMilestone) {
+          this.store.collectMilestone(choice.grantsMilestone);
+        }
+      } else if (choice.grantsMilestone) {
+        this.store.presenterCollectedMilestones.add(choice.grantsMilestone);
+      }
+
+      if (choice.responseToast) {
+        this.hud.showToast(choice.responseToast);
+      }
+    }
+
+    this.questSystem.evaluateProgress(this.store, this.currentChapter.id);
+    this.persistProgress();
+    this.syncHudWithState();
+
+    if (ended || !nextNode) {
+      this.hud.closeDialogueModal();
+      return;
+    }
+
+    const nextChoices = this.dialogueSystem.getAvailableChoices(
+      nextNode,
+      this.store.questFlags,
+      this.store.collectedEvidence
+    );
+    this.hud.updateDialogueNode(nextNode, nextChoices);
   }
 
   public loadMap(
@@ -390,7 +533,7 @@ export class LuKhachKyUcGame {
     }
 
     this.loadMap(zoneId, checkpointSpawnId);
-    (this.hud as unknown as HudExtendedMethods).toggleWorldMapModal?.(false);
+    this.hud.toggleWorldMapModal(false);
     if (this.store.getMode() !== 'opening') {
       this.store.setMode('exploring');
     }
@@ -427,13 +570,7 @@ export class LuKhachKyUcGame {
     this.isBurstAnimating = false;
     this.hazardCooldown = 0;
 
-    this.hud.closeClimaxModal();
-    if (document.getElementById('lookup-drawer')?.classList.contains('is-open')) {
-      this.hud.toggleLookupDrawer(false);
-    }
-    if (document.getElementById('world-map-modal')?.classList.contains('is-open')) {
-      (this.hud as unknown as HudExtendedMethods).toggleWorldMapModal?.(false);
-    }
+    this.hud.closeAllOverlays();
     if (this.store.getMode() !== 'opening') {
       this.store.setMode('exploring');
     }
@@ -555,15 +692,33 @@ export class LuKhachKyUcGame {
     const nearbyMilestone = candidate?.milestone ?? this.findNearbyMilestone();
     if (nearbyMilestone) {
       this.store.collectMilestone(nearbyMilestone.roman);
-      if (candidate?.interactable?.evidenceId && !this.store.isPresenterMode) {
-        this.store.collectedEvidence.add(candidate.interactable.evidenceId);
+      if (nearbyMilestone.roman === 'I' && !this.store.isPresenterMode) {
+        this.store.questFlags.add('ch1_met_liaison');
+      }
+      if (candidate?.interactable?.evidenceId) {
+        this.inventorySystem.addItem(candidate.interactable.evidenceId, this.store);
       }
       if (candidate?.interactable?.grantsFlag && !this.store.isPresenterMode) {
         this.store.questFlags.add(candidate.interactable.grantsFlag);
       }
+
+      const dialogueKey =
+        candidate?.npc?.dialogueId ??
+        candidate?.npc?.npcId ??
+        candidate?.interactable?.dialogueId;
+      const dlgNode = dialogueKey ? this.dialogueSystem.startDialogue(dialogueKey) : null;
+      const dlgChoices = dlgNode
+        ? this.dialogueSystem.getAvailableChoices(
+            dlgNode,
+            this.store.questFlags,
+            this.store.collectedEvidence
+          )
+        : undefined;
+
+      this.questSystem.evaluateProgress(this.store, chapter.id);
       this.persistProgress();
       this.sound.playSealStamp();
-      this.hud.showArtifactDialogue(nearbyMilestone);
+      this.hud.showArtifactDialogue(nearbyMilestone, dlgNode, dlgChoices);
       this.syncHudWithState();
       this.hud.showToast(
         `✓ Đã đóng dấu khôi phục Cột mốc ${nearbyMilestone.roman} (${nearbyMilestone.year})`
@@ -571,21 +726,41 @@ export class LuKhachKyUcGame {
       return true;
     }
 
-    // 4. Tương tác với vật thể / bảng tin / hòm hàng trong bản đồ 2D
+    // 4. Tương tác với NPC không gắn cột mốc trực tiếp (hội thoại phân nhánh)
+    if (candidate?.kind === 'npc' && candidate.npc) {
+      const node = this.dialogueSystem.startDialogue(
+        candidate.npc.dialogueId || candidate.npc.npcId
+      );
+      if (node) {
+        const choices = this.dialogueSystem.getAvailableChoices(
+          node,
+          this.store.questFlags,
+          this.store.collectedEvidence
+        );
+        this.sound.playSealStamp();
+        this.hud.openNpcDialogue(node, choices);
+        this.syncHudWithState();
+        return true;
+      }
+    }
+
+    // 5. Tương tác với vật thể / chứng cứ / bảng tin trong bản đồ 2D
     if (candidate?.interactable && candidate.kind !== 'climax_gate') {
+      if (candidate.interactable.evidenceId) {
+        this.inventorySystem.addItem(candidate.interactable.evidenceId, this.store);
+      }
       if (candidate.interactable.grantsFlag && !this.store.isPresenterMode) {
         this.store.questFlags.add(candidate.interactable.grantsFlag);
       }
-      if (candidate.interactable.evidenceId && !this.store.isPresenterMode) {
-        this.store.collectedEvidence.add(candidate.interactable.evidenceId);
-      }
+      this.questSystem.evaluateProgress(this.store, chapter.id);
+      this.persistProgress();
       this.sound.playSealStamp();
-      this.hud.showToast(`📜 Đã kiểm tra: ${candidate.interactable.label}`);
+      this.hud.showToast(`📜 Đã thu thập tư liệu: ${candidate.interactable.label}`);
       this.syncHudWithState();
       return true;
     }
 
-    // 5. Kiểm tra nếu đứng gần Cổng Thời Gian cuối màn
+    // 6. Kiểm tra nếu đứng gần Cổng Thời Gian cuối màn
     const nearClimaxGate =
       candidate?.kind === 'climax_gate' ||
       Math.abs(this.playerX - chapter.climax.gateWorldX) <= 38;
@@ -615,6 +790,7 @@ export class LuKhachKyUcGame {
       for (const m of chapter.milestones) {
         this.store.collectMilestone(m.roman);
       }
+      this.questSystem.evaluateProgress(this.store, chapter.id);
       this.persistProgress();
     } else {
       for (const m of chapter.milestones) {
@@ -686,25 +862,55 @@ export class LuKhachKyUcGame {
   }
 
   public syncHudWithState(): void {
+    const chapter = this.currentChapter;
+    this.questSystem.evaluateProgress(this.store, chapter.id);
+
     const candidate = this.findNearestInteractionCandidate();
     const nearby = candidate?.milestone ?? this.findNearbyMilestone();
     this.hud.renderSidebarCodex(
-      this.currentChapter,
+      chapter,
       this.store.getActiveMilestones(),
       nearby
     );
-    this.hud.updateStageHeader(this.currentChapter, this.isPlayerInShelter());
+    this.hud.updateStageHeader(chapter, this.isPlayerInShelter());
     this.hud.updateMapLocationBadge(
-      this.currentMap.title || this.currentChapter.locationLabel,
-      this.currentChapter.coordinates,
+      this.currentMap.title || chapter.locationLabel,
+      chapter.coordinates,
       candidate?.promptText ?? null
     );
-    (this.hud as unknown as HudExtendedMethods).updateWorldMapState?.(
+    this.hud.updateWorldMapState(
       this.currentMap.id,
       this.store.discoveredMaps,
       this.store.unlockedCheckpoints,
       this.store.isPresenterMode
     );
+
+    const eraQuests = this.questSystem.getQuestsForEra(chapter.id);
+    const questsWithStatus = eraQuests.map((quest) => ({
+      quest,
+      objectives: quest.objectives.map((objective) => ({
+        objective,
+        status: this.questSystem.getObjectiveStatus(objective, this.store),
+      })),
+    }));
+    const activeObjective = this.questSystem.getCurrentActiveObjective(
+      chapter.id,
+      this.store
+    );
+    const hintText = this.questSystem.getHintForActiveObjective(
+      chapter.id,
+      this.store
+    );
+
+    this.hud.updateRpgSystemsState({
+      quests: questsWithStatus,
+      activeObjective,
+      hintText,
+      allEvidence: [...this.evidenceSystem.getAllEvidence()],
+      collectedEvidenceIds: this.store.collectedEvidence,
+      settings: this.store.settings,
+      isPresenterMode: this.store.isPresenterMode,
+    });
   }
 
   private updateNpcRoutes(dt: number): void {

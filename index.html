@@ -154,33 +154,48 @@
         flex-wrap: wrap;
       }
 
-      /* 3. BỐ CỤC ĐIỆN ẢNH 1/5 + 4/5 */
-      .chronicle-layout {
-        display: grid;
-        grid-template-columns: minmax(250px, 21vw) 1fr;
-        min-height: calc(100vh - 50px);
-      }
-
-      /* CỘT TRÁI 1/5: SỔ TAY SỬ KÝ 12 MỐC LA MÃ (I - XII) */
-      #codex-sidebar {
-        background: var(--lacquer-deep);
-        border-right: 1px solid rgba(212, 165, 93, 0.22);
-        padding: 18px 14px;
+      /* 3. BỐ CỤC TOÀN MÀN HÌNH + THANH BIÊN NIÊN SỬ LA MÃ NGANG */
+      .chronicle-layout,
+      .workspace-grid {
         display: flex;
         flex-direction: column;
-        gap: 14px;
+        flex: 1;
+        min-height: calc(100vh - 50px);
+        width: 100%;
+        overflow-x: hidden;
+      }
+
+      /* THANH BIÊN NIÊN SỬ LA MÃ (I - XII) DẠNG DẢI NGANG GỌN GÀNG */
+      #codex-sidebar,
+      aside.codex-sidebar {
+        background: var(--lacquer-deep);
+        border-right: none;
+        border-bottom: 1px solid rgba(212, 165, 93, 0.28);
+        padding: 6px 14px;
+        max-height: 54px;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 12px;
+        overflow-x: auto;
       }
 
       .codex-header {
-        border-bottom: 1px solid rgba(212, 165, 93, 0.22);
-        padding-bottom: 10px;
+        border-bottom: none;
+        border-right: 1px solid rgba(212, 165, 93, 0.25);
+        padding-bottom: 0;
+        padding-right: 12px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
       }
 
       .codex-header h2 {
         font-family: 'Cormorant Garamond', serif;
-        font-size: 1.2rem;
+        font-size: 1rem;
         color: var(--bronze-bright);
-        text-wrap: balance;
+        white-space: nowrap;
       }
 
       .codex-sub {
@@ -189,28 +204,41 @@
         align-items: center;
         gap: 8px;
         font-family: 'JetBrains Mono', monospace;
-        font-size: 0.72rem;
+        font-size: 0.7rem;
         color: var(--parchment-warm);
-        margin-top: 4px;
+        margin-top: 0;
       }
 
       #codex-progress-count {
         white-space: nowrap;
+        color: var(--bronze-bright);
       }
 
       #codex-milestone-list {
         display: flex;
-        flex-direction: column;
-        gap: 12px;
-        overflow-y: auto;
+        flex-direction: row;
+        gap: 8px;
+        overflow-x: auto;
+        align-items: center;
+        flex: 1;
+      }
+
+      .codex-chapter-group {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
       }
 
       .codex-chapter-header {
         font-family: 'JetBrains Mono', monospace;
-        font-size: 0.7rem;
+        font-size: 0.66rem;
         color: var(--bronze-antique);
-        letter-spacing: 0.06em;
-        margin-bottom: 4px;
+        letter-spacing: 0.04em;
+        margin-bottom: 0;
+        white-space: nowrap;
+        padding-right: 4px;
       }
 
       .codex-chapter-header.is-active {
@@ -219,27 +247,30 @@
       }
 
       .codex-item {
-        width: 100%;
-        display: flex;
-        align-items: baseline;
-        gap: 6px;
-        background: transparent;
-        border: none;
-        color: rgba(230, 229, 220, 0.65);
-        padding: 5px 6px;
+        width: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: var(--lacquer-elevated);
+        border: 1px solid rgba(212, 165, 93, 0.22);
+        color: rgba(230, 229, 220, 0.75);
+        padding: 3px 8px;
         text-align: left;
         font-family: 'Newsreader', serif;
-        font-size: 0.84rem;
+        font-size: 0.76rem;
         cursor: pointer;
+        white-space: nowrap;
+        flex-shrink: 0;
       }
 
       .codex-item:hover {
-        background: rgba(212, 165, 93, 0.12);
+        background: rgba(212, 165, 93, 0.16);
         color: var(--parchment-light);
       }
 
       .codex-item.is-collected {
         color: var(--parchment-light);
+        border-color: var(--bronze-antique);
       }
 
       .codex-item.is-collected .codex-roman {
@@ -248,36 +279,36 @@
       }
 
       .codex-item.is-current {
-        background: rgba(158, 51, 33, 0.25);
+        background: rgba(158, 51, 33, 0.28);
         outline: 1px solid var(--bronze-bright);
       }
 
       .codex-roman {
         font-family: 'JetBrains Mono', monospace;
-        font-size: 0.74rem;
+        font-size: 0.72rem;
         color: var(--bronze-bright);
-        min-width: 34px;
+        min-width: auto;
       }
 
       .codex-dots {
-        flex: 0 0 14px;
-        border-bottom: 1px dotted rgba(212, 165, 93, 0.35);
+        display: none;
       }
 
       .codex-title {
-        flex: 1;
+        max-width: 120px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
       }
 
-      /* SÂN KHẤU CHÍNH 4/5 */
-      #stage-viewport {
-        padding: 18px 28px 28px;
+      /* SÂN KHẤU CHÍNH 100% TOÀN MÀN HÌNH */
+      #stage-viewport,
+      .main-stage {
+        padding: 12px 24px 22px;
         display: flex;
         flex-direction: column;
-        gap: 14px;
-        max-width: 1180px;
+        gap: 10px;
+        max-width: 1440px;
         margin: 0 auto;
         width: 100%;
       }
@@ -819,12 +850,247 @@
         color: var(--crimson-seal);
       }
 
+      /* HUD OBJECTIVE TRACKER & PROVENANCE BADGES */
+      #hud-objective-tracker {
+        background: var(--lacquer-elevated);
+        border: 1px solid var(--bronze-antique);
+        padding: 6px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        max-width: 460px;
+      }
+
+      #hud-active-quest-title {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.72rem;
+        color: var(--bronze-bright);
+        font-weight: 600;
+      }
+
+      #hud-active-objective-text {
+        font-size: 0.86rem;
+        color: var(--parchment-light);
+      }
+
+      #hud-active-objective-hint {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.7rem;
+        color: var(--crimson-vermilion);
+      }
+
+      .provenance-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.68rem;
+        font-weight: 600;
+      }
+
+      .provenance-badge.is-historical_fact {
+        background: var(--crimson-seal);
+        color: var(--parchment-light);
+        border: 1px solid var(--bronze-bright);
+      }
+
+      .provenance-badge.is-fictional_npc {
+        background: var(--parchment-warm);
+        color: var(--ink-primary);
+        border: 1px solid var(--bronze-antique);
+      }
+
+      .provenance-badge.is-speculative_2045 {
+        background: var(--lacquer-elevated);
+        color: var(--bronze-bright);
+        border: 1px solid var(--bronze-bright);
+      }
+
+      #dialogue-choices {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 8px;
+      }
+
+      .dialogue-choice-btn {
+        text-align: left;
+        background: var(--lacquer-elevated);
+        color: var(--parchment-light);
+        border: 1px solid var(--bronze-antique);
+      }
+
+      .dialogue-choice-btn:hover {
+        background: var(--crimson-seal);
+        border-color: var(--bronze-bright);
+      }
+
+      .modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 6px;
+      }
+
+      /* MODALS NHẬT KÝ (#journal-modal), TƯ LIỆU (#inventory-modal), TẠM DỪNG (#pause-modal) */
+      #journal-modal,
+      #inventory-modal,
+      #pause-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 330;
+        background: rgba(17, 14, 11, 0.88);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+
+      #journal-modal.is-open,
+      #inventory-modal.is-open,
+      #pause-modal.is-open {
+        display: flex;
+      }
+
+      .rpg-modal-dialog {
+        background: var(--lacquer-deep);
+        color: var(--parchment-light);
+        border: 2px solid var(--bronze-bright);
+        max-width: 920px;
+        width: 100%;
+        max-height: 86vh;
+        padding: 20px 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        overflow-y: auto;
+      }
+
+      .rpg-modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        border-bottom: 1px solid rgba(212, 165, 93, 0.28);
+        padding-bottom: 10px;
+      }
+
+      .rpg-modal-header h3 {
+        font-family: 'Cormorant Garamond', serif;
+        font-size: 1.45rem;
+        color: var(--bronze-bright);
+      }
+
+      #journal-active-banner {
+        background: var(--lacquer-elevated);
+        border: 1px solid var(--bronze-bright);
+        padding: 12px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      #journal-quest-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .journal-quest-card {
+        background: var(--parchment-warm);
+        color: var(--ink-primary);
+        border: 1px solid var(--bronze-antique);
+        padding: 14px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .journal-quest-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 10px;
+      }
+
+      .journal-objective-list {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .journal-objective-row {
+        padding: 8px 10px;
+        background: var(--parchment-light);
+        border-left: 3px solid var(--bronze-muted);
+      }
+
+      .journal-objective-row.is-completed {
+        border-left-color: var(--crimson-seal);
+      }
+
+      .journal-objective-row.is-active {
+        border-left-color: var(--bronze-bright);
+      }
+
+      .inventory-body-grid {
+        display: grid;
+        grid-template-columns: 1fr 1.1fr;
+        gap: 14px;
+      }
+
+      #inventory-item-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .inventory-item-card {
+        text-align: left;
+        padding: 10px 12px;
+        background: var(--lacquer-elevated);
+        color: var(--parchment-light);
+        border: 1px solid var(--bronze-muted);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        cursor: pointer;
+      }
+
+      .inventory-item-card.is-collected {
+        background: var(--parchment-warm);
+        color: var(--ink-primary);
+        border-color: var(--bronze-antique);
+      }
+
+      .inventory-item-card.is-selected {
+        border: 2px solid var(--crimson-seal);
+        outline: 1px solid var(--bronze-bright);
+      }
+
+      #inventory-item-detail {
+        background: var(--parchment-light);
+        color: var(--ink-primary);
+        border: 1px solid var(--bronze-antique);
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .pause-settings-list,
+      .pause-actions-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      body.text-scale-large {
+        font-size: 112%;
+      }
+
       @media (max-width: 900px) {
-        .chronicle-layout {
+        .inventory-body-grid {
           grid-template-columns: 1fr;
-        }
-        #codex-sidebar {
-          order: 2;
         }
       }
 
@@ -867,6 +1133,22 @@
       <div class="utility-cluster topbar-actions">
         <button
           type="button"
+          id="btn-open-journal"
+          class="utility-btn lacquer-button"
+          title="Nhật Ký Nhiệm Vụ Lịch Sử (Phím J)"
+        >
+          📓 Nhật Ký [J]
+        </button>
+        <button
+          type="button"
+          id="btn-open-inventory"
+          class="utility-btn lacquer-button"
+          title="Túi Tư Liệu & Bằng Chứng (Phím I)"
+        >
+          📜 Tư Liệu [I]
+        </button>
+        <button
+          type="button"
           id="btn-open-map"
           class="utility-btn lacquer-button"
           title="Sơ Đồ Khu Vực Hương Cảng (Phím M)"
@@ -890,13 +1172,20 @@
         <button type="button" id="btn-audio-toggle" class="utility-btn lacquer-button">
           🔊 Ngũ Cung 8-Bit
         </button>
+        <button
+          type="button"
+          id="btn-open-pause"
+          class="utility-btn lacquer-button"
+          title="Tạm Dừng & Thiết Lập (Phím Tab)"
+        >
+          ⚙️ Tạm Dừng [Tab]
+        </button>
       </div>
     </header>
 
-    <!-- 3. BỐ CỤC CHÍNH 1/5 CODEX + 4/5 SÂN KHẤU PIXEL -->
-    <main class="chronicle-layout">
-      <!-- Cột Trái 1/5: Sổ tay 12 Cột mốc La Mã (I - XII) -->
-      <aside id="codex-sidebar" aria-label="Sổ Tay Biên Niên Sử 12 Cột Mốc">
+    <!-- 3. BỐ CỤC TOÀN MÀN HÌNH + DẢI BIÊN NIÊN SỬ LA MÃ (I - XII) -->
+    <main class="chronicle-layout workspace-grid">
+      <aside id="codex-sidebar" class="codex-sidebar" aria-label="Sổ Tay Biên Niên Sử 12 Cột Mốc">
         <div class="codex-header">
           <h2>Biên Niên Sử La Mã</h2>
           <div class="codex-sub">
@@ -907,12 +1196,17 @@
         <div id="codex-milestone-list"></div>
       </aside>
 
-      <!-- Sân Khấu Chính 4/5 -->
-      <section id="stage-viewport">
-        <div class="stage-banner">
+      <!-- Sân Khấu Chính 100% Toàn Màn Hình -->
+      <section id="stage-viewport" class="main-stage">
+        <div class="stage-banner stage-header">
           <div>
             <div id="stage-chapter-num">CHƯƠNG I (1930 – 1931)</div>
             <h1 id="stage-chapter-title">Đêm Mưa Cửu Long & Ngọn Đuốc Cương Lĩnh</h1>
+          </div>
+          <div id="hud-objective-tracker" aria-live="polite">
+            <div id="hud-active-quest-title">◆ Đêm Mưa Cửu Long & Ngọn Đuốc Cương Lĩnh</div>
+            <div id="hud-active-objective-text">Gặp Giao Liên Lâm Văn Bính tại Quảng Trường Bến Cảng</div>
+            <div id="hud-active-objective-hint">💡 Gợi ý: Tiến tới đèn lồng cảng và nhấn [E]</div>
           </div>
           <div class="stage-meta-right">
             <span id="stage-location-badge">📍 Cửu Long (Hương Cảng) → Nghệ Tĩnh</span>
@@ -921,7 +1215,7 @@
         </div>
 
         <!-- Khung hình Pixel 320x180 Integer-Scaled -->
-        <div class="pixel-frame-wrapper">
+        <div class="pixel-frame-wrapper canvas-frame">
           <canvas id="pixel-canvas" width="320" height="180"></canvas>
           <div id="stage-toast" role="status" aria-live="polite"></div>
         </div>
@@ -941,25 +1235,40 @@
           <p id="stage-mechanic-hint"></p>
         </div>
 
-        <!-- Thẻ Sổ Tay Giấy Dó hiển thị tư liệu & số trang Giáo trình 2021 -->
-        <article id="dialogue-parchment-card" aria-live="polite">
-          <div class="dialogue-top-row">
-            <span id="dialogue-speaker">Lữ Khách Lưu Trữ Quốc Gia 2045</span>
-            <span id="dialogue-role">Viện Lưu Trữ Lịch Sử Đảng (1930 – 2045)</span>
-          </div>
-          <h3 id="dialogue-milestone-title">
-            HƯỚNG DẪN: Di chuyển Lữ Khách tới các Cột Mốc La Mã (I – XII) và nhấn [E]
-          </h3>
-          <p id="dialogue-body-text">
-            "Từ năm 2045, bạn bước qua Vết Nứt Thời Gian để khôi phục 12 cột mốc lịch sử trọng đại. Hãy ẩn mình dưới Mái Hiên hoặc Bóng Đa khi đèn tuần tra quét qua, thu thập đủ di vật và mở Cổng Thời Gian ở cuối mỗi chương."
-          </p>
-          <p id="dialogue-significance">
-            Mẹo cho Giảng viên / Thuyết trình: Bấm trực tiếp vào bất kỳ mốc La Mã (I – XII) nào ở cột bên trái để dịch chuyển tức thì tới sự kiện đó.
-          </p>
-          <div id="dialogue-citation">
-            📖 Đối chiếu toàn văn: Giáo trình Lịch sử Đảng Cộng sản Việt Nam (Bộ GD&ĐT, NXB Chính trị quốc gia Sự thật, 2021 — 440 trang)
-          </div>
-        </article>
+        <!-- Hộp Thoại Sử Liệu Giấy Dó & Nhánh Lựa Chọn NPC (#dialogue-modal) -->
+        <div id="dialogue-modal" role="region" aria-label="Hộp Thoại Nhân Vật & Tư Liệu">
+          <article id="dialogue-parchment-card" aria-live="polite">
+            <div class="dialogue-top-row">
+              <div>
+                <span id="dialogue-speaker">Lữ Khách Lưu Trữ Quốc Gia 2045</span>
+                <span id="dialogue-role">Viện Lưu Trữ Lịch Sử Đảng (1930 – 2045)</span>
+              </div>
+              <span id="dialogue-provenance-badge" class="provenance-badge is-historical_fact">
+                📜 SỬ LIỆU XÁC THỰC (GIÁO TRÌNH 2021)
+              </span>
+            </div>
+            <h3 id="dialogue-milestone-title">
+              HƯỚNG DẪN: Di chuyển Lữ Khách tới các Cột Mốc La Mã (I – XII) và nhấn [E]
+            </h3>
+            <p id="dialogue-body-text">
+              <span id="dialogue-text">
+                "Từ năm 2045, bạn bước qua Vết Nứt Thời Gian để khôi phục 12 cột mốc lịch sử trọng đại. Hãy ẩn mình dưới Mái Hiên hoặc Bóng Đa khi đèn tuần tra quét qua, thu thập đủ di vật và mở Cổng Thời Gian ở cuối mỗi chương."
+              </span>
+            </p>
+            <p id="dialogue-significance">
+              Mẹo cho Giảng viên / Thuyết trình: Bấm trực tiếp vào bất kỳ mốc La Mã (I – XII) nào trên thanh Biên Niên Sử để xem hoặc dịch chuyển.
+            </p>
+            <div id="dialogue-citation">
+              📖 Đối chiếu toàn văn: Giáo trình Lịch sử Đảng Cộng sản Việt Nam (Bộ GD&ĐT, NXB Chính trị quốc gia Sự thật, 2021 — 440 trang)
+            </div>
+            <div id="dialogue-choices" hidden></div>
+            <div class="modal-footer">
+              <button type="button" id="btn-close-dialogue" class="ctrl-btn">
+                ✕ Đóng Hội Thoại [Esc]
+              </button>
+            </div>
+          </article>
+        </div>
       </section>
     </main>
 
@@ -1027,6 +1336,77 @@
         </div>
         <div id="world-map-graph" aria-label="Sơ đồ lưới các khu vực Chương I"></div>
         <div id="world-map-zone-detail" aria-label="Danh sách khu vực và Dịch chuyển nhanh"></div>
+      </div>
+    </div>
+
+    <!-- 7. NHẬT KÝ HÀNH TRÌNH & NHIỆM VỤ LỊCH SỬ (PHÍM J) -->
+    <div id="journal-modal" role="dialog" aria-modal="true" aria-labelledby="journal-modal-title" hidden>
+      <div class="rpg-modal-dialog">
+        <div class="rpg-modal-header">
+          <div>
+            <h3 id="journal-modal-title">NHẬT KÝ HÀNH TRÌNH & NHIỆM VỤ LỊCH SỬ</h3>
+            <p id="journal-summary">Tiến độ nhiệm vụ: 0 / 0 mục tiêu hoàn thành</p>
+          </div>
+          <button type="button" id="btn-close-journal" class="ctrl-btn">✕ Đóng [J/Esc]</button>
+        </div>
+        <div id="journal-active-banner" aria-live="polite"></div>
+        <div id="journal-quest-list"></div>
+      </div>
+    </div>
+
+    <!-- 8. TÚI TƯ LIỆU & BẰNG CHỨNG LỊCH SỬ (PHÍM I) -->
+    <div id="inventory-modal" role="dialog" aria-modal="true" aria-labelledby="inventory-modal-title" hidden>
+      <div class="rpg-modal-dialog">
+        <div class="rpg-modal-header">
+          <div>
+            <h3 id="inventory-modal-title">TÚI TƯ LIỆU & BẰNG CHỨNG LỊCH SỬ</h3>
+            <p id="inventory-summary">Đã thu thập 0 / 6 tư liệu</p>
+          </div>
+          <button type="button" id="btn-close-inventory" class="ctrl-btn">✕ Đóng [I/Esc]</button>
+        </div>
+        <div class="inventory-body-grid">
+          <div id="inventory-item-list" aria-label="Danh sách tư liệu"></div>
+          <div id="inventory-item-detail" aria-live="polite"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 9. TẠM DỪNG & THIẾT LẬP HỆ THỐNG (PHÍM TAB) -->
+    <div id="pause-modal" role="dialog" aria-modal="true" aria-labelledby="pause-modal-title" hidden>
+      <div class="rpg-modal-dialog">
+        <div class="rpg-modal-header">
+          <div>
+            <h3 id="pause-modal-title">TẠM DỪNG & THIẾT LẬP HỆ THỐNG</h3>
+            <p style="font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; color: var(--parchment-warm)">
+              Cấu hình âm thanh, trợ năng và quản lý tiến trình lưu trữ
+            </p>
+          </div>
+          <button type="button" id="btn-close-pause" class="ctrl-btn is-primary">
+            ▶ Tiếp Tục Hành Trình [Tab/Esc]
+          </button>
+        </div>
+        <div class="pause-settings-list">
+          <button type="button" id="toggle-mute-audio" class="ctrl-btn">
+            🔊 Âm thanh Ngũ Cung 8-Bit: BẬT
+          </button>
+          <button type="button" id="toggle-reduced-motion" class="ctrl-btn">
+            ○ Giảm chuyển động / Hiệu ứng mưa & rung: TẮT
+          </button>
+          <button type="button" id="toggle-text-scale" class="ctrl-btn">
+            ○ Cỡ chữ lớn dễ đọc: MẶC ĐỊNH
+          </button>
+          <button type="button" id="toggle-show-hints" class="ctrl-btn">
+            ✓ Hiển thị gợi ý nhiệm vụ trên HUD: BẬT
+          </button>
+        </div>
+        <div class="pause-actions-list">
+          <button type="button" id="btn-manual-save" class="ctrl-btn is-primary">
+            💾 Lưu Tiến Trình Ngay
+          </button>
+          <button type="button" id="btn-reset-save" class="ctrl-btn">
+            🗑️ Xóa Lưu Trữ & Chơi Lại Từ Đầu
+          </button>
+        </div>
       </div>
     </div>
 

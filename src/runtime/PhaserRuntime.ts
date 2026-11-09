@@ -20,6 +20,7 @@ import type {
   Vec2,
 } from '../types/game';
 import { CollisionWorld } from '../world/CollisionWorld';
+import { CHAPTER1_WORLD_GRAPH } from '../world/WorldGraph';
 import { CameraController } from './CameraController';
 import { getAllBuiltInMaps, getBuiltInMap } from './MapLoader';
 import { SceneTransition, type SceneTransitionResult } from './SceneTransition';
@@ -41,6 +42,87 @@ export const LAYER_DEPTHS = {
  */
 export function computeEntityDepth(footY: number): number {
   return LAYER_DEPTHS.EntitiesBase + Math.round(footY);
+}
+
+export interface ObjectiveTargetPosition {
+  x: number;
+  y: number;
+  isPortal: boolean;
+  label: string;
+}
+
+/**
+ * Xác định tọa độ chỉ dẫn không gian (Spatial Objective Marker) trên bản đồ hiện tại `currentMap`
+ * hướng tới khu vực nhiệm vụ đang kích hoạt `activeObjectiveZoneId`:
+ * - Nếu đang ở đúng bản đồ mục tiêu (`currentMap.id === activeObjectiveZoneId`):
+ *   trả về tọa độ của chứng cứ (`evidence`), câu đố (`puzzle`), cổng Climax (`climax_gate`), hoặc NPC đầu tiên.
+ * - Nếu đang ở bản đồ khác (`currentMap.id !== activeObjectiveZoneId`):
+ *   dùng `CHAPTER1_WORLD_GRAPH.findShortestRoute` tìm bước kế tiếp `nextZoneId = route[1]`
+ *   và trả về tâm của cổng (`portal`) dẫn sang `nextZoneId`.
+ */
+export function getObjectiveTargetPosition(
+  currentMap: NormalizedMapData,
+  activeObjectiveZoneId: string | null
+): ObjectiveTargetPosition | null {
+  if (!activeObjectiveZoneId || activeObjectiveZoneId.trim().length === 0) {
+    return null;
+  }
+
+  if (currentMap.id === activeObjectiveZoneId) {
+    const priorityInteractable =
+      currentMap.interactables.find(
+        (it) =>
+          it.kind === 'evidence' ||
+          it.kind === 'puzzle' ||
+          it.kind === 'climax_gate'
+      ) ??
+      currentMap.interactables.find((it) => it.kind === 'npc') ??
+      currentMap.interactables[0];
+
+    if (priorityInteractable) {
+      return {
+        x: priorityInteractable.x + (priorityInteractable.width ?? 16) * 0.5,
+        y: priorityInteractable.y + (priorityInteractable.height ?? 16) * 0.5,
+        isPortal: false,
+        label: priorityInteractable.label,
+      };
+    }
+
+    const firstNpc = currentMap.npcs[0];
+    if (firstNpc) {
+      return {
+        x: firstNpc.x + 8,
+        y: firstNpc.y + 8,
+        isPortal: false,
+        label: firstNpc.name,
+      };
+    }
+
+    return null;
+  }
+
+  const route = CHAPTER1_WORLD_GRAPH.findShortestRoute(
+    currentMap.id,
+    activeObjectiveZoneId
+  );
+  if (!route || route.length < 2) {
+    return null;
+  }
+
+  const nextZoneId = route[1];
+  const portal = currentMap.portals.find(
+    (p) => p.destinationMap === nextZoneId
+  );
+  if (!portal) {
+    return null;
+  }
+
+  return {
+    x: portal.x + portal.width * 0.5,
+    y: portal.y + portal.height * 0.5,
+    isPortal: true,
+    label: portal.label ?? nextZoneId,
+  };
 }
 
 export interface NpcRouteState {
