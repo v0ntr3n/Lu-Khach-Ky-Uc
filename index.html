@@ -138,7 +138,8 @@
         color: var(--parchment-light);
       }
 
-      .era-tab-btn.is-active {
+      .era-tab-btn.is-active,
+      .utility-btn.is-presenter-active {
         background: var(--crimson-seal);
         color: var(--parchment-light);
         border-color: var(--bronze-bright);
@@ -536,6 +537,18 @@
         gap: 10px;
       }
 
+      [hidden],
+      #climax-step-b[hidden] {
+        display: none !important;
+      }
+
+      .climax-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+
       /* BÀN TRA CỨU CỐ VẤN SỬ HỌC AI (#lookup-drawer) */
       #lookup-drawer {
         position: fixed;
@@ -765,7 +778,10 @@
     <div id="climax-modal" role="dialog" aria-modal="true">
       <div class="climax-dialog">
         <div id="climax-step-a">
-          <h3 id="climax-a-title">BƯỚC A · KHÔI PHỤC QUYẾT SÁCH LỊCH SỬ</h3>
+          <div class="climax-top">
+            <h3 id="climax-a-title">BƯỚC A · KHÔI PHỤC QUYẾT SÁCH LỊCH SỬ</h3>
+            <button type="button" id="btn-close-climax" class="ctrl-btn">Đóng (Esc)</button>
+          </div>
           <p id="climax-a-prompt" style="margin-top: 6px; line-height: 1.6"></p>
           <div
             id="climax-a-cite"
