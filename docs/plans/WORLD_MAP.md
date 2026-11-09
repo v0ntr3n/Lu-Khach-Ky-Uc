@@ -1,4 +1,6 @@
-# World / map design — first playable slice
+# World / map design — archived 1D baseline
+
+> **Status: legacy side-scrolling concept (preserved for migration reference).** The active map decision is [WORKADVENTURE_TOPDOWN.md](WORKADVENTURE_TOPDOWN.md): orthogonal top-down/3-4 perspective, XY navigation, Tiled tilemaps, walk-in buildings, named portals and a Phaser 3 spike. Any A/D-only or no-vertical-movement instructions below are **superseded**. Reuse the zone graph, safety constraints and historical framing; do not implement the legacy movement model.
 
 ## Decision: 2D connected districts, NOT a single scroll strip
 The existing game is left/right side-scrolling at 320×180 with a playerX scalar and 1080 worldWidth. Preserve this foundation initially. **World map = connected directed graph of scenes; each scene = a camera-scrolling 2D tilemap** with physical blockers, exits, interactable entities, NPCs and quest flags. It is not a geo-accurate Google map or a single rendered background.

@@ -1,5 +1,7 @@
 # Lữ Khách Ký Ức — RPG Exploration implementation plan
 
+> **Updated architecture decision (2026-11-10):** [WORKADVENTURE_TOPDOWN.md](WORKADVENTURE_TOPDOWN.md) is the current design for Avatar-style top-down 2D/3-4-view traversal, Tiled maps and an isolated Phaser 3 technical spike. This document remains the RPG narrative/quest design; any side-scrolling A/D-only assumptions are legacy baseline, not the target. No implementation is claimed.
+
 > Planning document only. Baseline: main @ 21028242 (2026-11-09). Target: local-first single-player web game; no backend, payments, publishing or commercial assumptions.
 
 ## Vision and non-goals
@@ -55,7 +57,7 @@ Keep one authority for world state; render must not mutate progression. Keep gam
 ## Implementation PR sequence
 - **PR-A Gameplay containment:** protect climax prerequisites, separate Presenter Mode, fix crouch stealth, modal/game input, hidden CSS, timeouts, pointer cancellation, scene-specific checkpoint; add regression tests.
 - **PR-B State & quests:** typed GameState, QuestSystem, Inventory/Evidence, save schema with version/migration and tests.
-- **PR-C World map:** scene graph, 16×16 tile metadata, collision and triggers, travel transitions, coordinate conversion, minimap/journal. Preserve old renderer fallback.
+- **PR-C World map (revised):** first prove Phaser 3 + Tiled with 8-way XY movement, tile collision, Y-depth sorting, two maps and a named return portal; then adopt the top-down zone graph, minimap and journal. Preserve the Canvas renderer as a fallback until proven.
 - **PR-D UI:** fullscreen view, context HUD, accessible dialogues, overlays and pause.
 - **PR-E Art pipeline:** curate a limited atlas from Angais dataset, preserve source metadata, batch draw, palette correction and asset fallback.
 - **PR-F Chapter I slice:** populate all zones and three NPCs, implement stealth + evidence puzzle + side quest + finale.
@@ -70,4 +72,4 @@ Keep one authority for world state; render must not mutate progression. Keep gam
 - No large raw dataset or unreviewed generated sprites committed; no runtime Hugging Face dependency.
 - Distinguish documented facts, fictionalized interactions and 2045 aspirations on every relevant dossier.
 - Keep \`README.md\` and \`DESIGN.md\` updated when implementation begins.
-See [WORLD_MAP.md](WORLD_MAP.md), [SPRITE_ATLAS.md](SPRITE_ATLAS.md) and [SKILLS.md](SKILLS.md).
+See the **active** map decision [WORKADVENTURE_TOPDOWN.md](WORKADVENTURE_TOPDOWN.md), the archived side-scroller baseline [WORLD_MAP.md](WORLD_MAP.md), [SPRITE_ATLAS.md](SPRITE_ATLAS.md) and [SKILLS.md](SKILLS.md).
