@@ -44,15 +44,19 @@ Game world takes the main viewport (desktop landscape first). Only a small chapt
 - Three NPC roles: courier, archivist, dock observer. All invented NPCs are labelled fictional, with historical facts sourced independently.
 - No quiz-gated cliff: puzzle information comes from exploration; a journal hint is available after repeated failure.
 
-## Suggested architecture
-\`src/core/{GameApp,GameState,InputManager,SaveManager}.ts\`
-\`src/world/{WorldGraph,SceneManager,TileMap,Collision,Camera2D}.ts\`
-\`src/systems/{Quest,Dialogue,Interaction,Inventory,Evidence,Stealth}.ts\`
-\`src/ui/{HUD,Journal,WorldMap,Inventory,Dialogue,Pause}.ts\`
-\`src/data/{chapters,quests,npcs,locales,provenance}/\`
-\`public/assets/{atlases,portraits,backgrounds,audio}/\`
-\`tests/{unit,playwright}/\`
-Keep one authority for world state; render must not mutate progression. Keep game state separate from DOM state. Use typed events. Use dt clamping/fixed simulation updates for consistent collision/stealth behavior.
+## Canonical target directory structure (shared with map plan)
+
+**Only one authoritative directory tree:** [WORKADVENTURE_TOPDOWN.md — Canonical target directory layout](WORKADVENTURE_TOPDOWN.md#canonical-target-directory-layout). Follow that tree verbatim for M1+; do **not** create a second `src/world/SceneManager` or `Camera2D`, put Tiled maps in `src/data/maps`, or move saves from `src/core/SaveManager.ts` into `src/systems/`. The canonical layout assigns:
+
+- `src/core/`: app lifecycle, authoritative store, input and save.
+- `src/runtime/`: Phaser 3 bootstrap, Tiled map loading, camera and scene transitions.
+- `src/scenes/` and `src/world/`: playable scenes vs pure map graph/collision/validation.
+- `src/systems/` and `src/data/`: quests/dialogue/evidence/stealth vs historical and authored narrative data.
+- `src/ui/` and existing `src/engine/`: DOM UI vs preserved legacy Canvas/opening/audio.
+- `public/maps/ch1/`, `public/tilesets/ch1/`, `public/assets/`, `tests/`: Tiled content, reviewed visuals and tests.
+
+These are **planned folders**, not features already implemented. Keep one authority for game state; rendering must not mutate progression. Separate UI state from gameplay state; use typed events and fixed/guarded simulation updates. M1 is an isolated **Phaser 3 + Tiled** spike; no wholesale WorkAdventure import.
+
 
 ## Implementation PR sequence
 - **PR-A Gameplay containment:** protect climax prerequisites, separate Presenter Mode, fix crouch stealth, modal/game input, hidden CSS, timeouts, pointer cancellation, scene-specific checkpoint; add regression tests.
