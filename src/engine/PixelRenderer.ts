@@ -2,14 +2,30 @@
  * @file src/engine/PixelRenderer.ts
  * @description Bộ dựng hình Canvas 2D 320x180 Integer-Scaled (HD-2D Chiaroscuro Sơn Mài & Giấy Dó).
  * Hỗ trợ:
- * - 4 lớp Parallax theo từng Chương (1930, 1945, 1954-1975, 1986-2045)
+ * - Chế độ Khám phá 2D Top-Down (Orthogonal 16x16 Tilemap, Y-Depth Sorting, Foreground Occlusion, 4-Direction Sprites)
+ * - Chế độ 4 lớp Parallax theo từng Chương (1930, 1945, 1954-1975, 1986-2045)
  * - Ánh sáng Chiaroscuro hướng tâm & đèn rọi tuần tra Mức 1 (Story-Driven)
  * - 4 Đại Cảnh Tương Tác Bùng Nổ (Climax Set-Pieces: Đuốc 1930, Cờ Ba Đình 1945, Xe tăng 1975, Tàu cao tốc 2045)
  */
 
 import { PALETTE_12 } from '../data/chronicles';
-import type { ChapterData, MilestoneArtifact, RomanMilestoneId } from '../types/game';
-import { drawArtifactSprite, drawNpcSprite, drawTravelerSprite } from './SpriteAtlas';
+import type {
+  ChapterData,
+  Facing4,
+  MilestoneArtifact,
+  NormalizedMapData,
+  NpcMapPlacement,
+  RomanMilestoneId,
+  Vec2,
+} from '../types/game';
+import {
+  type CharacterAtlasRole,
+  drawArtifactSprite,
+  drawCharacter4Dir,
+  drawNpcSprite,
+  drawTopDownTile,
+  drawTravelerSprite,
+} from './SpriteAtlas';
 
 export const INTERNAL_WIDTH = 320;
 export const INTERNAL_HEIGHT = 180;
@@ -18,8 +34,11 @@ export const GROUND_Y = 148;
 export interface RenderState {
   chapter: ChapterData;
   playerX: number;
+  playerY?: number;
   cameraX: number;
+  cameraY?: number;
   facingRight: boolean;
+  playerFacing?: Facing4;
   isMoving: boolean;
   isSheltered: boolean;
   collectedMilestones: Set<RomanMilestoneId>;
@@ -27,6 +46,9 @@ export interface RenderState {
   nearClimaxGate: boolean;
   climaxBurstProgress: number; // 0.0 -> 1.0 khi kích hoạt Bước B Đại Cảnh
   timeSec: number;
+  mapData?: NormalizedMapData;
+  nearbyPrompt?: string | null;
+  nearbyTargetPos?: Vec2 | null;
 }
 
 export class PixelRenderer {
@@ -46,6 +68,11 @@ export class PixelRenderer {
   }
 
   public render(state: RenderState): void {
+    if (state.mapData) {
+      this.renderTopDown(state);
+      return;
+    }
+
     const { ctx } = this;
     const {
       chapter,
@@ -105,6 +132,361 @@ export class PixelRenderer {
 
     // 10. Thời tiết & Hạt bụi điểm ảnh Sơn Mài (Rain / Autumn / Embers / Digital Stars)
     this.drawWeatherParticles(chapter, timeSec);
+  }
+
+  public renderTopDown(state: RenderState): void {
+    const { ctx } = this;
+    const mapData = state.mapData;
+    if (!mapData) {
+      this.render(state);
+      return;
+    }
+
+    const {
+      chapter,
+      playerX,
+      cameraX,
+      facingRight,
+      isMoving,
+      isSheltered,
+      collectedMilestones,
+      nearbyMilestone,
+      nearClimaxGate,
+      climaxBurstProgress,
+      timeSec,
+    } = state;
+
+    const playerY = state.playerY ?? GROUND_Y;
+    const cameraY = state.cameraY ?? 0;
+    const facing: Facing4 = state.playerFacing ?? (facingRight ? 'right' : 'left');
+    const isInterior = mapData.id.includes('interior') || mapData.id.includes('warehouse');
+    const tileSize = mapData.tileSize || 16;
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = PALETTE_12.LACQUER_VOID;
+    ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
+
+    const startCol = Math.max(0, Math.floor(cameraX / tileSize));
+    const endCol = Math.min(
+      mapData.widthInTiles - 1,
+      Math.ceil((cameraX + INTERNAL_WIDTH) / tileSize)
+    );
+    const startRow = Math.max(0, Math.floor(cameraY / tileSize));
+    const endRow = Math.min(
+      mapData.heightInTiles - 1,
+      Math.ceil((cameraY + INTERNAL_HEIGHT) / tileSize)
+    );
+
+    const drawTileLayer = (layerName: string) => {
+      const layer = mapData.tileLayers[layerName];
+      if (!layer) return;
+      for (let r = startRow; r <= endRow; r++) {
+        for (let c = startCol; c <= endCol; c++) {
+          const tileId = layer[r * mapData.widthInTiles + c] ?? 0;
+          if (tileId > 0) {
+            drawTopDownTile(
+              ctx,
+              tileId,
+              Math.round(c * tileSize - cameraX),
+              Math.round(r * tileSize - cameraY),
+              isInterior
+            );
+          }
+        }
+      }
+    };
+
+    // 1. Lớp mặt đất & chi tiết mặt đất
+    drawTileLayer('Ground');
+    drawTileLayer('GroundDetails');
+    drawTileLayer('LowProps');
+
+    // 2. Vẽ khung chỉ báo vùng ẩn nấp (Shelters) & ngưỡng cửa dịch chuyển (Portals)
+    for (const shelter of mapData.shelters) {
+      if (!shelter.bounds) continue;
+      const sx = Math.round(shelter.bounds.x - cameraX);
+      const sy = Math.round(shelter.bounds.y - cameraY);
+      const sw = Math.round(shelter.bounds.width);
+      const sh = Math.round(shelter.bounds.height);
+      if (sx + sw < 0 || sx > INTERNAL_WIDTH || sy + sh < 0 || sy > INTERNAL_HEIGHT) continue;
+      ctx.fillStyle = isSheltered ? 'rgba(212, 165, 93, 0.20)' : 'rgba(17, 14, 11, 0.28)';
+      ctx.fillRect(sx, sy, sw, sh);
+    }
+
+    for (const portal of mapData.portals) {
+      const px = Math.round(portal.x - cameraX);
+      const py = Math.round(portal.y - cameraY);
+      const pw = Math.max(16, Math.round(portal.width));
+      const ph = Math.max(10, Math.round(portal.height));
+      if (px + pw < -16 || px > INTERNAL_WIDTH + 16 || py + ph < -16 || py > INTERNAL_HEIGHT + 16) {
+        continue;
+      }
+      ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+      ctx.fillRect(px, py, pw, ph);
+      ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+      ctx.fillRect(px + 2, py + 2, pw - 4, 2);
+      ctx.fillRect(px + 2, py + ph - 4, pw - 4, 2);
+    }
+
+    // 3. Y-Depth Sorting: Structures, Interactables, Milestones, NPCs, và Traveler
+    const depthQueue: Array<{ footY: number; draw: () => void }> = [];
+
+    const structuresLayer = mapData.tileLayers['Structures'];
+    if (structuresLayer) {
+      for (let r = startRow; r <= endRow; r++) {
+        for (let c = startCol; c <= endCol; c++) {
+          const tileId = structuresLayer[r * mapData.widthInTiles + c] ?? 0;
+          if (tileId > 0) {
+            const footY = (r + 1) * tileSize;
+            const sx = Math.round(c * tileSize - cameraX);
+            const sy = Math.round(r * tileSize - cameraY);
+            depthQueue.push({
+              footY,
+              draw: () => drawTopDownTile(ctx, tileId, sx, sy, isInterior),
+            });
+          }
+        }
+      }
+    }
+
+    // Interactables (Doors, Evidence, Climax Gate)
+    for (const inter of mapData.interactables) {
+      const ix = Math.round(inter.x - cameraX);
+      const iy = Math.round(inter.y - cameraY);
+      if (ix < -32 || ix > INTERNAL_WIDTH + 32 || iy < -32 || iy > INTERNAL_HEIGHT + 32) continue;
+
+      if (inter.kind === 'climax_gate') {
+        depthQueue.push({
+          footY: inter.y + 8,
+          draw: () => {
+            ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+            ctx.fillRect(ix - 12, iy - 28, 4, 28);
+            ctx.fillRect(ix + 8, iy - 28, 4, 28);
+            ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+            ctx.fillRect(ix - 14, iy - 32, 28, 4);
+            ctx.fillStyle = climaxBurstProgress > 0 ? PALETTE_12.PARCHMENT_LIGHT : PALETTE_12.CRIMSON_SEAL;
+            ctx.fillRect(ix - 6, iy - 26, 12, 24);
+          },
+        });
+      } else if (inter.kind === 'evidence' && inter.milestoneId) {
+        const milestone = chapter.milestones.find((m) => m.roman === inter.milestoneId);
+        const isDone = collectedMilestones.has(inter.milestoneId);
+        depthQueue.push({
+          footY: inter.y + 4,
+          draw: () => {
+            ctx.fillStyle = isDone ? PALETTE_12.CRIMSON_SEAL : PALETTE_12.BRONZE_MUTED;
+            ctx.fillRect(ix - 7, iy - 5, 14, 7);
+            drawArtifactSprite(
+              ctx,
+              milestone?.spriteType ?? 'scroll',
+              ix,
+              iy - 10,
+              isDone,
+              timeSec
+            );
+            ctx.font = 'bold 7px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = isDone ? PALETTE_12.PARCHMENT_LIGHT : PALETTE_12.BRONZE_BRIGHT;
+            ctx.fillText(isDone ? `✓ ${inter.milestoneId}` : inter.milestoneId!, ix, iy - 20);
+          },
+        });
+      } else if (inter.kind === 'door') {
+        depthQueue.push({
+          footY: inter.y + 4,
+          draw: () => {
+            ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+            ctx.fillRect(ix - 6, iy - 2, 12, 3);
+          },
+        });
+      }
+    }
+
+    // NPCs trên bản đồ
+    for (const npc of mapData.npcs) {
+      const nx = Math.round(npc.x - cameraX);
+      const ny = Math.round(npc.y - cameraY);
+      if (nx < -24 || nx > INTERNAL_WIDTH + 24 || ny < -24 || ny > INTERNAL_HEIGHT + 24) continue;
+
+      const role = this.resolveNpcRole(npc);
+      depthQueue.push({
+        footY: npc.y,
+        draw: () => {
+          drawCharacter4Dir(ctx, role, nx, ny, npc.facing, false, false, timeSec);
+        },
+      });
+    }
+
+    // Nhân vật Lữ Khách Ký Ức 2045
+    const screenPlayerX = Math.round(playerX - cameraX);
+    const screenPlayerY = Math.round(playerY - cameraY);
+    depthQueue.push({
+      footY: playerY,
+      draw: () => {
+        drawCharacter4Dir(
+          ctx,
+          'traveler',
+          screenPlayerX,
+          screenPlayerY,
+          facing,
+          isMoving,
+          isSheltered,
+          timeSec
+        );
+      },
+    });
+
+    depthQueue.sort((a, b) => a.footY - b.footY);
+    for (const item of depthQueue) {
+      item.draw();
+    }
+
+    // 4. Lớp Foreground (Mái hiên & Tán cây cổ thụ che phủ phía trước nhân vật khi đi qua bên dưới)
+    const foregroundLayer = mapData.tileLayers['Foreground'];
+    if (foregroundLayer) {
+      const playerUnderOccluder = mapData.occluders.some(
+        (occ) =>
+          playerX >= occ.x &&
+          playerX <= occ.x + occ.width &&
+          playerY >= occ.y &&
+          playerY <= occ.y + occ.height
+      );
+      ctx.save();
+      if (playerUnderOccluder) {
+        ctx.globalAlpha = 0.76;
+      }
+      drawTileLayer('Foreground');
+      ctx.restore();
+    }
+
+    // 5. Đèn rọi tuần tra (Patrol Cones / Hazard Sweeps)
+    if (climaxBurstProgress <= 0.05 && !isInterior) {
+      this.drawTopDownPatrols(mapData, chapter, cameraX, cameraY, timeSec);
+    }
+
+    // 6. Hào quang Chiaroscuro quanh Lữ Khách
+    this.drawTopDownChiaroscuro(screenPlayerX, screenPlayerY, climaxBurstProgress, isInterior);
+
+    // 7. Đại cảnh Climax nếu kích hoạt
+    if (climaxBurstProgress > 0) {
+      this.drawClimaxSetPiece(chapter, climaxBurstProgress, timeSec);
+    }
+
+    // 8. Hạt thời tiết (chỉ vẽ ngoài trời)
+    if (!isInterior) {
+      this.drawWeatherParticles(chapter, timeSec);
+    }
+
+    // 9. Nhãn tương tác [E] ngữ cảnh
+    const promptLabel =
+      state.nearbyPrompt ??
+      (nearbyMilestone
+        ? `[E] ${nearbyMilestone.roman} · ${nearbyMilestone.title}`
+        : nearClimaxGate
+          ? '[E] CỔNG THỜI GIAN'
+          : null);
+
+    if (promptLabel) {
+      const targetX = state.nearbyTargetPos
+        ? Math.round(state.nearbyTargetPos.x - cameraX)
+        : screenPlayerX;
+      const targetY = state.nearbyTargetPos
+        ? Math.round(state.nearbyTargetPos.y - cameraY) - 22
+        : screenPlayerY - 22;
+      this.drawPromptBadge(targetX, targetY, promptLabel);
+    }
+  }
+
+  private resolveNpcRole(npc: NpcMapPlacement): CharacterAtlasRole {
+    const key = `${npc.npcId} ${npc.role}`.toLowerCase();
+    if (key.includes('courier') || key.includes('giao liên')) return 'courier';
+    if (key.includes('archivist') || key.includes('lưu trữ')) return 'archivist';
+    if (key.includes('observer') || key.includes('bến')) return 'observer';
+    return 'historian';
+  }
+
+  private drawTopDownPatrols(
+    mapData: NormalizedMapData,
+    chapter: ChapterData,
+    cameraX: number,
+    cameraY: number,
+    timeSec: number
+  ): void {
+    const { ctx } = this;
+    if (mapData.patrols.length > 0) {
+      for (const p of mapData.patrols) {
+        if (p.waypoints.length === 0) continue;
+        const w0 = p.waypoints[0];
+        const w1 = p.waypoints[p.waypoints.length - 1] ?? w0;
+        const t = 0.5 + 0.5 * Math.sin(timeSec * (p.speed * 0.04));
+        const wx = w0.x + (w1.x - w0.x) * t;
+        const wy = w0.y + (w1.y - w0.y) * t;
+        const sx = Math.round(wx - cameraX);
+        const sy = Math.round(wy - cameraY);
+
+        ctx.save();
+        const grad = ctx.createRadialGradient(sx, sy, 2, sx, sy, 26);
+        grad.addColorStop(0, 'rgba(223, 107, 87, 0.38)');
+        grad.addColorStop(1, 'rgba(212, 165, 93, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 26, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      return;
+    }
+
+    for (const h of chapter.hazards) {
+      const sweepX = h.xCenter + Math.sin(timeSec * h.speed + h.phaseOffset) * h.radius;
+      const sx = Math.round(sweepX - cameraX);
+      const sy = Math.round(GROUND_Y - 16 - cameraY);
+      ctx.save();
+      const grad = ctx.createRadialGradient(sx, sy, 2, sx, sy, 28);
+      grad.addColorStop(0, 'rgba(223, 107, 87, 0.35)');
+      grad.addColorStop(1, 'rgba(212, 165, 93, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 28, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  private drawTopDownChiaroscuro(
+    playerScreenX: number,
+    playerScreenY: number,
+    burst: number,
+    isInterior: boolean
+  ): void {
+    const { ctx } = this;
+    const cx = Math.max(0, Math.min(INTERNAL_WIDTH, playerScreenX));
+    const cy = Math.max(0, Math.min(INTERNAL_HEIGHT, playerScreenY - 8));
+    const grad = ctx.createRadialGradient(cx, cy, 18, cx, cy, isInterior ? 125 : 150 + burst * 50);
+    grad.addColorStop(0, 'rgba(212, 165, 93, 0.10)');
+    grad.addColorStop(0.65, 'rgba(17, 14, 11, 0.14)');
+    grad.addColorStop(1, 'rgba(17, 14, 11, 0.42)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
+  }
+
+  private drawPromptBadge(x: number, y: number, text: string): void {
+    const { ctx } = this;
+    ctx.save();
+    ctx.font = 'bold 7px monospace';
+    ctx.textAlign = 'center';
+    const label = text.length > 26 ? `${text.slice(0, 25)}…` : text;
+    const w = Math.max(44, label.length * 4.4 + 10);
+    const bx = Math.round(Math.max(4, Math.min(INTERNAL_WIDTH - w - 4, x - w * 0.5)));
+    const by = Math.round(Math.max(4, Math.min(INTERNAL_HEIGHT - 14, y - 9)));
+
+    ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+    ctx.fillRect(bx, by, Math.round(w), 10);
+    ctx.strokeStyle = PALETTE_12.BRONZE_BRIGHT;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx + 0.5, by + 0.5, Math.round(w) - 1, 9);
+    ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+    ctx.fillText(label, Math.round(bx + w * 0.5), by + 7);
+    ctx.restore();
   }
 
   private drawSkyAndChiaroscuro(
@@ -259,7 +641,7 @@ export class PixelRenderer {
       }
       ctx.stroke();
 
-      // Xung tín hiệu điện報 chạy dọc dây
+      // Xung tín hiệu điện báo chạy dọc dây
       const pulseX = Math.floor((timeSec * 90) % INTERNAL_WIDTH);
       ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
       ctx.fillRect(pulseX, 66, 4, 3);

@@ -202,7 +202,9 @@ export class InputManager {
       this.keysPressed.has('d') ||
       this.keysPressed.has('arrowright') ||
       this.keysPressed.has('w') ||
-      this.keysPressed.has('arrowup')
+      this.keysPressed.has('arrowup') ||
+      this.keysPressed.has('s') ||
+      this.keysPressed.has('arrowdown')
     );
   }
 

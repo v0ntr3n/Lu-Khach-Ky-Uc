@@ -182,10 +182,16 @@
       .codex-sub {
         display: flex;
         justify-content: space-between;
+        align-items: center;
+        gap: 8px;
         font-family: 'JetBrains Mono', monospace;
         font-size: 0.72rem;
         color: var(--parchment-warm);
         margin-top: 4px;
+      }
+
+      #codex-progress-count {
+        white-space: nowrap;
       }
 
       #codex-milestone-list {
@@ -742,9 +748,11 @@
         <!-- Thanh nút điều khiển & gợi ý cơ chế Mức 1 -->
         <div class="controls-bar">
           <div class="touch-controls">
+            <button type="button" id="ctrl-up" class="ctrl-btn">▲ Lên (W)</button>
             <button type="button" id="ctrl-left" class="ctrl-btn">◀ Trái (A)</button>
-            <button type="button" id="ctrl-shelter" class="ctrl-btn">▼ Ẩn Nấp (S)</button>
+            <button type="button" id="ctrl-down" class="ctrl-btn">▼ Xuống (S)</button>
             <button type="button" id="ctrl-right" class="ctrl-btn">▶ Phải (D)</button>
+            <button type="button" id="ctrl-shelter" class="ctrl-btn">🛡️ Ẩn Nấp (Shift)</button>
             <button type="button" id="ctrl-interact" class="ctrl-btn is-primary">
               ✨ Khôi Phục / Mở Cổng (E)
             </button>

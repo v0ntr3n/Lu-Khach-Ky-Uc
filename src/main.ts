@@ -9,6 +9,7 @@ import { LuKhachKyUcGame } from './core/GameApp';
 import { GameStore } from './core/GameStore';
 import { InputManager } from './core/InputManager';
 import { SaveManager } from './core/SaveManager';
+import { InteractionSystem } from './systems/InteractionSystem';
 
 declare global {
   interface Window {
@@ -16,7 +17,7 @@ declare global {
   }
 }
 
-export { LuKhachKyUcGame, GameStore, InputManager, SaveManager };
+export { GameStore, InputManager, InteractionSystem, LuKhachKyUcGame, SaveManager };
 
 function bootstrapGame(): void {
   if (typeof document === 'undefined' || !document.getElementById('pixel-canvas')) {

@@ -1,22 +1,34 @@
 /**
  * @file src/core/GameApp.ts
  * @description Bộ điều phối vòng đời chính của "Lữ Khách Ký Ức (1930 – 2045)".
- * Kết nối GameStore, InputManager, SaveManager, OpeningFracture, PixelRenderer (320x180),
- * SoundSynth và HudController.
+ * Kết nối GameStore, InputManager, SaveManager, MapLoader, CameraController,
+ * SceneTransition, CollisionWorld, InteractionSystem, OpeningFracture,
+ * PixelRenderer (Top-Down 2D & 1D Fallback), SoundSynth và HudController.
  */
 
 import { CHAPTERS } from '../data/chronicles';
 import { OpeningFractureController } from '../engine/OpeningFracture';
-import { INTERNAL_WIDTH, PixelRenderer } from '../engine/PixelRenderer';
+import { INTERNAL_HEIGHT, INTERNAL_WIDTH, PixelRenderer } from '../engine/PixelRenderer';
 import { SoundSynth } from '../engine/SoundSynth';
+import { CameraController } from '../runtime/CameraController';
+import { getAllBuiltInMaps, getBuiltInMap } from '../runtime/MapLoader';
+import { computeEntityDepth } from '../runtime/PhaserRuntime';
+import { SceneTransition } from '../runtime/SceneTransition';
+import { InteractionSystem, type InteractionCandidate } from '../systems/InteractionSystem';
 import type {
   ChapterData,
   EraId,
+  Facing4,
   GameMode,
   MilestoneArtifact,
+  NormalizedMapData,
+  PortalDefinition,
+  Rect2D,
   RomanMilestoneId,
+  Vec2,
 } from '../types/game';
 import { HudController } from '../ui/HudController';
+import { CollisionWorld } from '../world/CollisionWorld';
 import { GameStore } from './GameStore';
 import { InputManager } from './InputManager';
 import { SaveManager } from './SaveManager';
@@ -28,11 +40,22 @@ export class LuKhachKyUcGame {
   public readonly renderer: PixelRenderer;
   public readonly sound: SoundSynth;
   public readonly hud: HudController;
+  public readonly interactionSystem: InteractionSystem;
+  public readonly cameraController: CameraController;
+  public readonly sceneTransition: SceneTransition;
+
+  public allMaps: Record<string, NormalizedMapData>;
+  public currentMap: NormalizedMapData;
+  public collisionWorld: CollisionWorld;
 
   public playerX = 85;
+  public playerY = 384;
   public cameraX = 0;
+  public cameraY = 294;
   public facingRight = true;
+  public playerFacing: Facing4 = 'right';
   public isCrouching = false;
+  public useLegacyRenderer = false;
 
   public climaxBurstProgress = 0;
   public isBurstAnimating = false;
@@ -48,21 +71,83 @@ export class LuKhachKyUcGame {
       throw new Error('Không tìm thấy phần tử #pixel-canvas.');
     }
 
+    if (typeof window !== 'undefined' && window.location?.search) {
+      const params = new URLSearchParams(window.location.search);
+      this.useLegacyRenderer = params.get('renderer') === 'legacy';
+    }
+
     this.store = new GameStore();
     this.saveManager = new SaveManager();
+    this.interactionSystem = new InteractionSystem();
+
+    this.allMaps = getAllBuiltInMaps();
+    this.currentMap = getBuiltInMap('harbor_square');
+    this.collisionWorld = new CollisionWorld(
+      this.currentMap.obstacles,
+      this.currentMap.shelters,
+      {
+        x: 0,
+        y: 0,
+        width: this.currentMap.widthPx,
+        height: this.currentMap.heightPx,
+      }
+    );
+    this.cameraController = new CameraController({
+      worldWidth: this.currentMap.widthPx,
+      worldHeight: this.currentMap.heightPx,
+      viewportWidth: INTERNAL_WIDTH,
+      viewportHeight: INTERNAL_HEIGHT,
+    });
+    this.sceneTransition = new SceneTransition('harbor_square', 'default_spawn', 0.65);
 
     const saved = this.saveManager.load();
     if (saved) {
       this.store.restoreFromSave(saved, CHAPTERS);
+      const savedMapId =
+        saved.currentMapId && this.allMaps[saved.currentMapId]
+          ? saved.currentMapId
+          : 'harbor_square';
+      this.currentMap = getBuiltInMap(savedMapId);
+      this.collisionWorld = new CollisionWorld(
+        this.currentMap.obstacles,
+        this.currentMap.shelters,
+        {
+          x: 0,
+          y: 0,
+          width: this.currentMap.widthPx,
+          height: this.currentMap.heightPx,
+        }
+      );
+      this.cameraController.setBounds(
+        this.currentMap.widthPx,
+        this.currentMap.heightPx,
+        INTERNAL_WIDTH,
+        INTERNAL_HEIGHT
+      );
       this.playerX = saved.playerPos.x;
-      this.facingRight = saved.playerFacing !== 'left';
+      this.playerY =
+        saved.playerPos.y && saved.playerPos.y !== 148 ? saved.playerPos.y : 384;
+      this.playerFacing = saved.playerFacing ?? 'right';
+      this.facingRight = this.playerFacing !== 'left';
     }
+
+    this.store.setMapState(
+      this.currentMap.id,
+      this.store.currentSpawnId || 'default_spawn',
+      { x: this.playerX, y: this.playerY },
+      this.playerFacing
+    );
+    const initialCam = this.cameraController.snapTo(this.playerX, this.playerY);
+    this.cameraX = initialCam.x;
+    this.cameraY = initialCam.y;
 
     this.renderer = new PixelRenderer(canvas);
     this.sound = new SoundSynth();
 
     this.input = new InputManager({
-      onInteract: () => this.handleInteractAction(),
+      onInteract: () => {
+        this.handleInteractAction();
+      },
       onToggleLookup: () => {
         if (this.store.getMode() === 'opening' || this.store.getMode() === 'climax') {
           return;
@@ -127,12 +212,118 @@ export class LuKhachKyUcGame {
     return this.store.collectedMilestones;
   }
 
+  public getPlayerPosition(): Vec2 {
+    return { x: this.playerX, y: this.playerY };
+  }
+
+  public getCurrentMapId(): string {
+    return this.store.currentMapId;
+  }
+
+  public getEntityDepth(footY: number): number {
+    return computeEntityDepth(footY);
+  }
+
+  public getPlayerFootRect(x = this.playerX, y = this.playerY): Rect2D {
+    return {
+      x: x - 6,
+      y: y - 6,
+      width: 12,
+      height: 8,
+    };
+  }
+
+  public loadMap(
+    mapId: string,
+    spawnId?: string,
+    posOverride?: Vec2,
+    facingOverride?: Facing4
+  ): NormalizedMapData {
+    const map = this.allMaps[mapId] ?? getBuiltInMap(mapId);
+    this.currentMap = map;
+    this.collisionWorld = new CollisionWorld(map.obstacles, map.shelters, {
+      x: 0,
+      y: 0,
+      width: map.widthPx,
+      height: map.heightPx,
+    });
+
+    const spawn =
+      (spawnId ? map.spawns.find((s) => s.id === spawnId) : undefined) ??
+      map.spawns.find((s) => s.id === map.defaultSpawnId) ??
+      map.spawns[0];
+
+    this.playerX = posOverride?.x ?? spawn?.x ?? 160;
+    this.playerY = posOverride?.y ?? spawn?.y ?? 384;
+    this.playerFacing = facingOverride ?? spawn?.facing ?? 'down';
+    this.facingRight = this.playerFacing !== 'left';
+
+    this.store.setMapState(
+      map.id,
+      spawn?.id ?? 'default_spawn',
+      { x: this.playerX, y: this.playerY },
+      this.playerFacing
+    );
+    this.sceneTransition.currentMapId = map.id;
+    this.sceneTransition.currentSpawnId = spawn?.id ?? 'default_spawn';
+
+    this.cameraController.setBounds(
+      map.widthPx,
+      map.heightPx,
+      INTERNAL_WIDTH,
+      INTERNAL_HEIGHT
+    );
+    const cam = this.cameraController.snapTo(this.playerX, this.playerY);
+    this.cameraX = cam.x;
+    this.cameraY = cam.y;
+
+    return map;
+  }
+
+  public enterPortal(portal: PortalDefinition): boolean {
+    if (this.sceneTransition.getCooldownRemaining() > 0) {
+      return false;
+    }
+
+    const res = this.sceneTransition.transitionTo(
+      portal.destinationMap,
+      portal.destinationSpawn,
+      this.allMaps,
+      portal.requiresFlag,
+      this.store.questFlags
+    );
+
+    if (!res.transitioned || !res.targetMapId || !res.spawnPos) {
+      if (res.reason === 'missing_flag') {
+        this.hud.showToast('🔒 Lối đi này cần hoàn thành nhiệm vụ liên lạc trước.');
+      }
+      return false;
+    }
+
+    this.store.portalCooldownSec = this.sceneTransition.getCooldownRemaining();
+    this.loadMap(
+      res.targetMapId,
+      res.targetSpawnId,
+      res.spawnPos,
+      res.spawnFacing ?? 'down'
+    );
+    this.persistProgress();
+    this.syncHudWithState();
+    this.hud.showToast(`🚪 Đã chuyển tới: ${this.currentMap.title}`);
+    return true;
+  }
+
+  public interactWithDoorOrNearest(): boolean {
+    return this.handleInteractAction();
+  }
+
   private persistProgress(): void {
     if (this.store.isPresenterMode) return;
     const data = this.store.toSaveDataV2(
       this.currentChapter.id,
       this.playerX,
-      this.facingRight ? 'right' : 'left'
+      this.playerFacing,
+      this.playerY
     );
     this.saveManager.save(data);
   }
@@ -143,8 +334,7 @@ export class LuKhachKyUcGame {
 
     this.store.bumpTransitionToken();
     this.store.currentChapterIndex = idx;
-    this.playerX = 85;
-    this.cameraX = 0;
+    this.loadMap('harbor_square', 'default_spawn', { x: 85, y: 384 }, 'right');
     this.climaxBurstProgress = 0;
     this.isBurstAnimating = false;
     this.hazardCooldown = 0;
@@ -184,7 +374,17 @@ export class LuKhachKyUcGame {
       this.climaxBurstProgress = 0;
       this.isBurstAnimating = false;
     }
-    this.playerX = m.worldX;
+
+    if (m.mapId && this.allMaps[m.mapId] && this.currentMap.id !== m.mapId) {
+      this.loadMap(m.mapId, undefined, { x: m.worldX, y: m.worldY ?? 384 });
+    } else {
+      this.playerX = m.worldX;
+      if (m.worldY !== undefined) {
+        this.playerY = m.worldY;
+      }
+      this.store.playerPos = { x: this.playerX, y: this.playerY };
+    }
+
     this.store.presenterCollectedMilestones.add(m.roman);
     this.sound.playSealStamp();
     this.hud.showArtifactDialogue(m);
@@ -215,17 +415,47 @@ export class LuKhachKyUcGame {
     this.togglePresenterMode();
   }
 
-  public handleInteractAction(): void {
+  public handleInteractAction(): boolean {
     if (!this.store.isWorldInputAllowed()) {
-      return;
+      return false;
     }
 
     const chapter = this.currentChapter;
+    const candidate = this.findNearestInteractionCandidate();
 
-    // Kiểm tra nếu đứng gần Cột mốc lịch sử
-    const nearbyMilestone = this.findNearbyMilestone();
+    // 1. Tương tác với Portal / Cửa ra vào
+    if (candidate?.kind === 'portal' && candidate.portal) {
+      return this.enterPortal(candidate.portal);
+    }
+
+    if (
+      candidate?.kind === 'door' &&
+      candidate.interactable?.destinationMap &&
+      candidate.interactable?.destinationSpawn
+    ) {
+      return this.enterPortal({
+        id: candidate.interactable.id,
+        x: candidate.interactable.x,
+        y: candidate.interactable.y,
+        width: candidate.interactable.width ?? 32,
+        height: candidate.interactable.height ?? 16,
+        destinationMap: candidate.interactable.destinationMap,
+        destinationSpawn: candidate.interactable.destinationSpawn,
+        requiresFlag: candidate.interactable.requiresFlag,
+        label: candidate.interactable.label,
+      });
+    }
+
+    // 2. Tương tác với Cột mốc lịch sử hoặc NPC / Tư liệu gắn với cột mốc
+    const nearbyMilestone = candidate?.milestone ?? this.findNearbyMilestone();
     if (nearbyMilestone) {
       this.store.collectMilestone(nearbyMilestone.roman);
+      if (candidate?.interactable?.evidenceId && !this.store.isPresenterMode) {
+        this.store.collectedEvidence.add(candidate.interactable.evidenceId);
+      }
+      if (candidate?.interactable?.grantsFlag && !this.store.isPresenterMode) {
+        this.store.questFlags.add(candidate.interactable.grantsFlag);
+      }
       this.persistProgress();
       this.sound.playSealStamp();
       this.hud.showArtifactDialogue(nearbyMilestone);
@@ -233,23 +463,42 @@ export class LuKhachKyUcGame {
       this.hud.showToast(
         `✓ Đã đóng dấu khôi phục Cột mốc ${nearbyMilestone.roman} (${nearbyMilestone.year})`
       );
-      return;
+      return true;
     }
 
-    // Kiểm tra nếu đứng gần Cổng Thời Gian cuối màn
-    if (Math.abs(this.playerX - chapter.climax.gateWorldX) <= 38) {
+    // 3. Tương tác với vật thể / bảng tin / hòm hàng trong bản đồ 2D
+    if (candidate?.interactable && candidate.kind !== 'climax_gate') {
+      if (candidate.interactable.grantsFlag && !this.store.isPresenterMode) {
+        this.store.questFlags.add(candidate.interactable.grantsFlag);
+      }
+      if (candidate.interactable.evidenceId && !this.store.isPresenterMode) {
+        this.store.collectedEvidence.add(candidate.interactable.evidenceId);
+      }
+      this.sound.playSealStamp();
+      this.hud.showToast(`📜 Đã kiểm tra: ${candidate.interactable.label}`);
+      this.syncHudWithState();
+      return true;
+    }
+
+    // 4. Kiểm tra nếu đứng gần Cổng Thời Gian cuối màn
+    const nearClimaxGate =
+      candidate?.kind === 'climax_gate' ||
+      Math.abs(this.playerX - chapter.climax.gateWorldX) <= 38;
+
+    if (nearClimaxGate) {
       const check = this.store.canTriggerChapterClimax(chapter);
       if (!check.allowed) {
         this.hud.showToast(
           `🔒 Cần khôi phục đủ Cột mốc ${check.missing.join(', ')} trước khi mở Cổng Thời Gian!`
         );
-        return;
+        return false;
       }
       this.hud.openClimaxModal(chapter);
-      return;
+      return true;
     }
 
-    this.hud.showToast('Hãy di chuyển lại gần Cột Mốc La Mã hoặc Cổng Thời Gian rồi bấm [E].');
+    this.hud.showToast('Hãy di chuyển lại gần Cột Mốc La Mã, Cửa Kho hoặc Cổng Thời Gian rồi bấm [E].');
+    return false;
   }
 
   public triggerClimaxStepBSetPiece(): void {
@@ -280,8 +529,7 @@ export class LuKhachKyUcGame {
 
     if (this.store.currentChapterIndex < CHAPTERS.length - 1) {
       this.store.currentChapterIndex++;
-      this.playerX = 85;
-      this.cameraX = 0;
+      this.loadMap('harbor_square', 'default_spawn', { x: 85, y: 384 }, 'right');
       this.climaxBurstProgress = 0;
       this.isBurstAnimating = false;
       this.hazardCooldown = 0;
@@ -299,7 +547,20 @@ export class LuKhachKyUcGame {
     }
   }
 
+  public findNearestInteractionCandidate(): InteractionCandidate | null {
+    return this.interactionSystem.findNearestCandidate(
+      { x: this.playerX, y: this.playerY },
+      this.currentMap,
+      this.currentChapter
+    );
+  }
+
   public findNearbyMilestone(): MilestoneArtifact | null {
+    const candidate = this.findNearestInteractionCandidate();
+    if (candidate?.milestone) {
+      return candidate.milestone;
+    }
+
     for (const m of this.currentChapter.milestones) {
       if (Math.abs(this.playerX - m.worldX) <= 28) {
         return m;
@@ -309,21 +570,30 @@ export class LuKhachKyUcGame {
   }
 
   public isPlayerInShelter(): boolean {
+    const inMapShelter = this.collisionWorld.isPointInShelter(this.playerX, this.playerY);
+    if (inMapShelter) return true;
     return this.store.isPlayerInShelter(
       this.playerX,
       this.currentChapter.shelters,
-      this.isCrouching
+      this.isCrouching,
+      this.playerY
     );
   }
 
   public syncHudWithState(): void {
-    const nearby = this.findNearbyMilestone();
+    const candidate = this.findNearestInteractionCandidate();
+    const nearby = candidate?.milestone ?? this.findNearbyMilestone();
     this.hud.renderSidebarCodex(
       this.currentChapter,
       this.store.getActiveMilestones(),
       nearby
     );
     this.hud.updateStageHeader(this.currentChapter, this.isPlayerInShelter());
+    this.hud.updateMapLocationBadge(
+      this.currentMap.title || this.currentChapter.locationLabel,
+      this.currentChapter.coordinates,
+      candidate?.promptText ?? null
+    );
   }
 
   private readonly gameLoop = (nowMs: number): void => {
@@ -333,8 +603,10 @@ export class LuKhachKyUcGame {
 
     this.updatePhysics(dt, timeSec);
 
-    const nearbyMilestone = this.findNearbyMilestone();
+    const candidate = this.findNearestInteractionCandidate();
+    const nearbyMilestone = candidate?.milestone ?? this.findNearbyMilestone();
     const nearClimaxGate =
+      candidate?.kind === 'climax_gate' ||
       Math.abs(this.playerX - this.currentChapter.climax.gateWorldX) <= 38;
 
     const allowWorldInput = this.store.isWorldInputAllowed();
@@ -342,8 +614,11 @@ export class LuKhachKyUcGame {
     this.renderer.render({
       chapter: this.currentChapter,
       playerX: this.playerX,
+      playerY: this.playerY,
       cameraX: this.cameraX,
+      cameraY: this.cameraY,
       facingRight: this.facingRight,
+      playerFacing: this.playerFacing,
       isMoving: this.input.isMoving(allowWorldInput),
       isSheltered: this.isPlayerInShelter(),
       collectedMilestones: this.store.getActiveMilestones(),
@@ -351,6 +626,9 @@ export class LuKhachKyUcGame {
       nearClimaxGate,
       climaxBurstProgress: this.climaxBurstProgress,
       timeSec,
+      mapData: this.useLegacyRenderer ? undefined : this.currentMap,
+      nearbyPrompt: candidate?.promptText ?? null,
+      nearbyTargetPos: candidate ? { x: candidate.x, y: candidate.y } : null,
     });
 
     requestAnimationFrame(this.gameLoop);
@@ -366,32 +644,80 @@ export class LuKhachKyUcGame {
       this.hazardCooldown = Math.max(0, this.hazardCooldown - dt);
     }
 
+    this.sceneTransition.update(dt, this.getPlayerFootRect(), this.currentMap.portals);
+    this.store.portalCooldownSec = this.sceneTransition.getCooldownRemaining();
+
     if (allowWorldInput) {
-      const speed = this.isCrouching ? 42 : 95;
+      const speed = this.useLegacyRenderer ? (this.isCrouching ? 42 : 95) : 96;
+      const dx = moveVec.x * speed * dt;
+      const dy = this.useLegacyRenderer ? 0 : moveVec.y * speed * dt;
 
-      if (moveVec.x < 0) {
-        this.playerX = Math.max(24, this.playerX + moveVec.x * speed * dt);
-        this.facingRight = false;
-      } else if (moveVec.x > 0) {
-        this.playerX = Math.min(chapter.worldWidth - 28, this.playerX + moveVec.x * speed * dt);
-        this.facingRight = true;
-      }
+      if (dx !== 0 || dy !== 0) {
+        if (this.useLegacyRenderer) {
+          this.playerX = Math.max(24, Math.min(chapter.worldWidth - 28, this.playerX + dx));
+        } else {
+          const footRect = this.getPlayerFootRect();
+          const resolved = this.collisionWorld.resolveMovement(footRect, dx, dy);
+          this.playerX = resolved.x + 6;
+          this.playerY = resolved.y + 6;
+        }
 
-      if (moveVec.x !== 0 && !this.isCrouching) {
+        if (Math.abs(moveVec.x) >= Math.abs(moveVec.y) && moveVec.x !== 0) {
+          this.playerFacing = moveVec.x < 0 ? 'left' : 'right';
+          this.facingRight = moveVec.x >= 0;
+        } else if (moveVec.y !== 0) {
+          this.playerFacing = moveVec.y < 0 ? 'up' : 'down';
+        }
+
+        this.store.playerPos = { x: this.playerX, y: this.playerY };
+        this.store.playerFacing = this.playerFacing;
+
         this.stepSoundCooldown -= dt;
         if (this.stepSoundCooldown <= 0) {
           this.sound.playStep();
           this.stepSoundCooldown = 0.28;
         }
+
+        // Kiểm tra tự động bước qua cổng (Portal) khi đi vào ô cửa
+        if (!this.useLegacyRenderer && this.sceneTransition.getCooldownRemaining() <= 0) {
+          const portalRes = this.sceneTransition.tryPortalTransition(
+            this.getPlayerFootRect(),
+            this.currentMap.portals,
+            this.allMaps,
+            this.store.questFlags
+          );
+          if (portalRes.transitioned && portalRes.targetMapId && portalRes.spawnPos) {
+            this.store.portalCooldownSec = this.sceneTransition.getCooldownRemaining();
+            this.loadMap(
+              portalRes.targetMapId,
+              portalRes.targetSpawnId,
+              portalRes.spawnPos,
+              portalRes.spawnFacing ?? 'down'
+            );
+            this.persistProgress();
+            this.syncHudWithState();
+            this.hud.showToast(`🚪 Đã chuyển tới: ${this.currentMap.title}`);
+            return;
+          }
+        }
       }
 
       // Kiểm tra va chạm Mức 1 với Đèn tuần tra / Pháo sáng (chỉ đẩy lùi nhẹ về mái hiên)
-      if (!this.isPlayerInShelter() && this.climaxBurstProgress <= 0 && this.hazardCooldown <= 0) {
+      if (
+        this.currentMap.id === 'harbor_square' &&
+        !this.isPlayerInShelter() &&
+        this.climaxBurstProgress <= 0 &&
+        this.hazardCooldown <= 0
+      ) {
         const detectionRadius = this.isCrouching ? 12 : 15;
         for (const h of chapter.hazards) {
           const sweepX = h.xCenter + Math.sin(timeSec * h.speed + h.phaseOffset) * h.radius;
           if (Math.abs(this.playerX - sweepX) < detectionRadius) {
-            this.playerX = Math.max(36, this.playerX - 48);
+            const pushedX = Math.max(36, this.playerX - 48);
+            if (!this.collisionWorld.isRectColliding(this.getPlayerFootRect(pushedX, this.playerY))) {
+              this.playerX = pushedX;
+              this.store.playerPos = { x: this.playerX, y: this.playerY };
+            }
             this.hazardCooldown = 1.0;
             this.sound.playAlertPushback();
             this.hud.showToast(`⚠️ ${h.warningToast}`);
@@ -414,13 +740,26 @@ export class LuKhachKyUcGame {
       }
     }
 
-    // Camera mượt bám theo Lữ Khách
-    const targetCamX = Math.max(
-      0,
-      Math.min(chapter.worldWidth - INTERNAL_WIDTH, this.playerX - INTERNAL_WIDTH * 0.38)
-    );
-    this.cameraX += (targetCamX - this.cameraX) * Math.min(1, dt * 8);
+    // Camera mượt bám theo Lữ Khách trong biên bản đồ 2D
+    if (this.useLegacyRenderer) {
+      const targetCamX = Math.max(
+        0,
+        Math.min(chapter.worldWidth - INTERNAL_WIDTH, this.playerX - INTERNAL_WIDTH * 0.38)
+      );
+      this.cameraX += (targetCamX - this.cameraX) * Math.min(1, dt * 8);
+      this.cameraY = 0;
+    } else {
+      const camPos = this.cameraController.update(this.playerX, this.playerY, dt);
+      this.cameraX = camPos.x;
+      this.cameraY = camPos.y;
+    }
 
+    const candidate = this.findNearestInteractionCandidate();
     this.hud.updateStageHeader(chapter, this.isPlayerInShelter());
+    this.hud.updateMapLocationBadge(
+      this.currentMap.title || chapter.locationLabel,
+      chapter.coordinates,
+      candidate?.promptText ?? null
+    );
   }
 }
