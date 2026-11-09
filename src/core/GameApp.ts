@@ -99,6 +99,7 @@ export class LuKhachKyUcGame {
 
   public climaxBurstProgress = 0;
   public isBurstAnimating = false;
+  public transitionFadeAlpha = 0;
   private activeBurstToken = 0;
 
   private lastFrameMs = performance.now();
@@ -237,6 +238,18 @@ export class LuKhachKyUcGame {
       onToggleDebugOverlay: () => {
         this.toggleDebugOverlay();
       },
+      onToggleHints: () => {
+        const nextShowHints = !this.store.settings.showHints;
+        this.updateSettings({ showHints: nextShowHints });
+        this.hud.showToast(
+          nextShowHints
+            ? '💡 Đã bật hiển thị Gợi ý Nhiệm vụ [H].'
+            : '💡 Đã tắt hiển thị Gợi ý Nhiệm vụ [H].'
+        );
+      },
+      onNumberKey: (num: 1 | 2 | 3 | 4) => {
+        this.handleNumberKeyShortcut(num);
+      },
       onEscape: () => {
         if (this.store.getMode() === 'opening') {
           return;
@@ -360,6 +373,27 @@ export class LuKhachKyUcGame {
     this.persistProgress();
     this.syncHudWithState();
     return next;
+  }
+
+  public handleNumberKeyShortcut(num: 1 | 2 | 3 | 4): void {
+    const idx = num - 1;
+    const mode = this.store.getMode();
+
+    if (mode === 'climax') {
+      const btns = document.querySelectorAll<HTMLButtonElement>(
+        '#climax-a-options .climax-option-btn'
+      );
+      btns[idx]?.click();
+      return;
+    }
+
+    const choiceBtns = document.querySelectorAll<HTMLButtonElement>(
+      '#dialogue-choices .dialogue-choice-btn'
+    );
+    const targetBtn = choiceBtns[idx];
+    if (targetBtn && !targetBtn.closest('[hidden]')) {
+      targetBtn.click();
+    }
   }
 
   public manualSave(): boolean {
@@ -599,6 +633,7 @@ export class LuKhachKyUcGame {
     }
 
     this.store.portalCooldownSec = this.sceneTransition.getCooldownRemaining();
+    this.transitionFadeAlpha = this.store.settings.reducedMotion ? 0 : 0.85;
     this.loadMap(
       res.targetMapId,
       res.targetSpawnId,
@@ -1116,6 +1151,8 @@ export class LuKhachKyUcGame {
     const renderState: RenderState & {
       debugOverlay?: boolean;
       patrolActors?: PatrolActorRenderState[];
+      reducedMotion?: boolean;
+      transitionFadeAlpha?: number;
     } = {
       chapter: this.currentChapter,
       playerX: this.playerX,
@@ -1136,6 +1173,8 @@ export class LuKhachKyUcGame {
       nearbyTargetPos: candidate ? { x: candidate.x, y: candidate.y } : null,
       debugOverlay: this.store.debugOverlayEnabled,
       patrolActors: this.stealthSystem.getRenderStates(this.hasPatrolScheduleBonus()),
+      reducedMotion: this.store.settings.reducedMotion,
+      transitionFadeAlpha: this.transitionFadeAlpha,
     };
 
     this.renderer.render(renderState);
@@ -1151,6 +1190,10 @@ export class LuKhachKyUcGame {
 
     if (this.hazardCooldown > 0) {
       this.hazardCooldown = Math.max(0, this.hazardCooldown - dt);
+    }
+
+    if (this.transitionFadeAlpha > 0) {
+      this.transitionFadeAlpha = Math.max(0, this.transitionFadeAlpha - dt * 2.6);
     }
 
     this.sceneTransition.update(dt, this.getPlayerFootRect(), this.currentMap.portals);

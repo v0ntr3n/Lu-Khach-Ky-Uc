@@ -52,6 +52,8 @@ export interface RenderState {
   nearbyTargetPos?: Vec2 | null;
   debugOverlay?: boolean;
   patrolActors?: PatrolActorRenderState[];
+  reducedMotion?: boolean;
+  transitionFadeAlpha?: number;
 }
 
 export class PixelRenderer {
@@ -366,6 +368,7 @@ export class PixelRenderer {
     // Nhân vật Lữ Khách Ký Ức 2045
     const screenPlayerX = Math.round(playerX - cameraX);
     const screenPlayerY = Math.round(playerY - cameraY);
+    const animateWalk = isMoving && !state.reducedMotion;
     depthQueue.push({
       footY: playerY,
       draw: () => {
@@ -375,7 +378,7 @@ export class PixelRenderer {
           screenPlayerX,
           screenPlayerY,
           facing,
-          isMoving,
+          animateWalk,
           isSheltered,
           timeSec
         );
@@ -417,16 +420,24 @@ export class PixelRenderer {
       );
     }
 
-    // 6. Hào quang Chiaroscuro quanh Lữ Khách
+    // 6. Hào quang Chiaroscuro quanh Lữ Khách & Vầng sáng đèn lồng/mưa đêm PixelFX
     this.drawTopDownChiaroscuro(screenPlayerX, screenPlayerY, climaxBurstProgress, isInterior);
+    this.drawEnvironmentalVfx(
+      mapData,
+      cameraX,
+      cameraY,
+      timeSec,
+      isInterior,
+      Boolean(state.reducedMotion)
+    );
 
     // 7. Đại cảnh Climax nếu kích hoạt
     if (climaxBurstProgress > 0) {
       this.drawClimaxSetPiece(chapter, climaxBurstProgress, timeSec);
     }
 
-    // 8. Hạt thời tiết (chỉ vẽ ngoài trời)
-    if (!isInterior) {
+    // 8. Hạt thời tiết (chỉ vẽ ngoài trời và khi không bật giảm chuyển động)
+    if (!isInterior && !state.reducedMotion) {
       this.drawWeatherParticles(chapter, timeSec);
     }
 
@@ -453,6 +464,58 @@ export class PixelRenderer {
         : screenPlayerY - 22;
       this.drawPromptBadge(targetX, targetY, promptLabel);
     }
+
+    // 10. Hiệu ứng mờ chuyển cảnh Sơn Mài (Scene Transition Ink-Lacquer Fade)
+    if ((state.transitionFadeAlpha ?? 0) > 0.01 && !state.reducedMotion) {
+      ctx.save();
+      ctx.fillStyle = PALETTE_12.LACQUER_VOID;
+      ctx.globalAlpha = Math.max(0, Math.min(1, state.transitionFadeAlpha ?? 0));
+      ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
+      ctx.restore();
+    }
+  }
+
+  private drawEnvironmentalVfx(
+    mapData: NormalizedMapData,
+    cameraX: number,
+    cameraY: number,
+    timeSec: number,
+    isInterior: boolean,
+    reducedMotion: boolean
+  ): void {
+    const { ctx } = this;
+    ctx.save();
+
+    // 1. Vầng sáng đèn lồng ấm (Warm Lantern & Lamp Pools) quanh Checkpoints và Portals
+    for (const inter of mapData.interactables) {
+      if (inter.kind !== 'checkpoint' && inter.kind !== 'puzzle') continue;
+      const lx = Math.round(inter.x - cameraX);
+      const ly = Math.round(inter.y - cameraY - 8);
+      if (lx < -32 || lx > INTERNAL_WIDTH + 32 || ly < -32 || ly > INTERNAL_HEIGHT + 32) continue;
+      const halo = ctx.createRadialGradient(lx, ly, 2, lx, ly, 24);
+      halo.addColorStop(0, 'rgba(212, 168, 79, 0.18)');
+      halo.addColorStop(1, 'rgba(212, 168, 79, 0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(lx - 24, ly - 24, 48, 48);
+    }
+
+    // 2. Vòng gợn mưa 3-frame trên mặt đá (PixelFX Rain Splash Ripples) khi ngoài trời & không giảm chuyển động
+    if (!isInterior && !reducedMotion) {
+      for (let i = 0; i < 10; i++) {
+        const phase = (timeSec * 2.4 + i * 0.37) % 1;
+        const rx = Math.round(((i * 97 + 44) % mapData.widthPx) - cameraX);
+        const ry = Math.round(((i * 61 + 120) % mapData.heightPx) - cameraY);
+        if (rx < 4 || rx > INTERNAL_WIDTH - 4 || ry < 4 || ry > INTERNAL_HEIGHT - 4) continue;
+        const radius = phase < 0.33 ? 1 : phase < 0.66 ? 2 : 3;
+        ctx.fillStyle =
+          phase < 0.66 ? 'rgba(230, 229, 220, 0.35)' : 'rgba(212, 165, 93, 0.22)';
+        ctx.fillRect(rx - radius, ry, 1, 1);
+        ctx.fillRect(rx + radius, ry, 1, 1);
+        ctx.fillRect(rx, ry - 1, 1, 1);
+      }
+    }
+
+    ctx.restore();
   }
 
   private drawDebugOverlay(

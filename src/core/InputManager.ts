@@ -2,7 +2,7 @@
  * @file src/core/InputManager.ts
  * @description Quản lý bàn phím và điều khiển cảm ứng/con trỏ cho "Lữ Khách Ký Ức (1930 – 2045)".
  * Đảm bảo khóa điều khiển thế giới khi mở overlay, chống lặp phím (key-repeat) cho phím tương tác,
- * và tự động xóa trạng thái phím khi mất tiêu điểm (blur / visibilitychange / pointercancel).
+ * hỗ trợ phím số 1–4 chọn nhanh hội thoại/câu hỏi và tự động xóa trạng thái phím khi mất tiêu điểm.
  */
 
 import type { Vec2 } from '../types/game';
@@ -16,6 +16,8 @@ export interface InputCallbacks {
   onToggleInventory?: () => void;
   onTogglePause?: () => void;
   onToggleDebugOverlay?: () => void;
+  onToggleHints?: () => void;
+  onNumberKey?: (num: 1 | 2 | 3 | 4) => void;
   onActionKey?: (key: string) => void;
 }
 
@@ -37,9 +39,14 @@ const ACTION_KEYS = new Set<string>([
   'j',
   'm',
   'i',
+  'h',
   'escape',
   'tab',
   'f3',
+  '1',
+  '2',
+  '3',
+  '4',
 ]);
 
 const VIRTUAL_HOLD_BUTTONS: ReadonlyArray<{ id: string; key: string }> = [
@@ -141,12 +148,17 @@ export class InputManager {
       } else if (key === 'i') {
         e.preventDefault();
         this.callbacks.onToggleInventory?.();
+      } else if (key === 'h') {
+        e.preventDefault();
+        this.callbacks.onToggleHints?.();
       } else if (key === 'tab') {
         e.preventDefault();
         this.callbacks.onTogglePause?.();
       } else if (key === 'f3') {
         e.preventDefault();
         this.callbacks.onToggleDebugOverlay?.();
+      } else if (key === '1' || key === '2' || key === '3' || key === '4') {
+        this.callbacks.onNumberKey?.(Number(key) as 1 | 2 | 3 | 4);
       }
 
       this.callbacks.onActionKey?.(key);

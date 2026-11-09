@@ -15,6 +15,7 @@ Tài liệu này ghi nhận kiến trúc runtime thực tế được triển kh
   - `WorldGraph.ts`: Đồ thị các khu vực liên thông và điều kiện mở khóa.
 - `src/runtime/` & `src/scenes/`:
   - Tích hợp Phaser 3 + Tiled TMJ/JSON, điều khiển Camera bám mục tiêu có giới hạn biên, sắp xếp chiều sâu theo trục Y (`footY`), và chuyển cảnh hai chiều có thời gian miễn nhiễm (`portalCooldown`) chống hiệu ứng dội cổng (`portal ping-pong`).
+  - `AssetLoader.ts`: Bộ nạp đệm Sprite Atlas đơn bản (`NEAREST`, không tạo `Image`/canvas mới mỗi frame) cùng kiểm định hình học `validateAtlasRects`.
 - `src/systems/`:
   - `QuestSystem.ts`: Quản lý chuỗi nhiệm vụ chính/phụ và máy trạng thái phụ thuộc mục tiêu (`locked` -> `active` -> `completed`).
   - `DialogueSystem.ts`: Cây hội thoại đa lựa chọn cho NPC có gắn nhãn xuất xứ (`ProvenanceMetadata`) và phần thưởng cờ/tư liệu/cột mốc.
@@ -24,6 +25,8 @@ Tài liệu này ghi nhận kiến trúc runtime thực tế được triển kh
 - `src/data/`:
   - `chronicles.ts`: Dữ liệu cốt lõi 4 chương thời kỳ (`1930`, `1945`, `1954_1975`, `1986_2045`).
   - `chapters/ch1_1930.ts`, `quests/ch1_quests.ts`, `npcs/ch1_npcs.ts`, `provenance/ch1_provenance.ts`: Dữ liệu Chương I chuẩn hóa cùng bài giải đố đối chiếu văn kiện `CH1_DOSSIER_PUZZLE` và danh mục xuất xứ tư liệu `CH1_PROVENANCE_MANIFEST`.
+  - `provenance/sprite_atlas_manifest.ts`: Sổ đăng ký xuất xứ, giấy phép và tọa độ khung cắt (`CURATED_SPRITE_ATLAS_MANIFEST` & `validateSpriteAtlasManifest`) theo chuẩn `docs/plans/SPRITE_ATLAS.md`.
+
 - `src/ui/`:
   - Giao diện DOM toàn màn hình (Fullscreen World Viewport 100%, thanh Chronicle Ribbon gọn nhẹ) theo hệ màu 12 Sắc Độ Sơn Mài & Giấy Dó (`DESIGN.md`), hoàn toàn chỉ đọc trạng thái và gửi hành động qua `GameStore`, không tự ý mở khóa tiến trình.
   - `GameHUD.ts`: Hộp theo dõi mục tiêu nhiệm vụ đang thực hiện (`#hud-objective-tracker`) và gợi ý dẫn đường.

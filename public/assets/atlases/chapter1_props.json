@@ -1,0 +1,428 @@
+{
+  "meta": {
+    "app": "Lu-Khach-Ky-Uc Atlas Curator",
+    "image": "chapter1_props.png",
+    "size": {
+      "w": 128,
+      "h": 128
+    },
+    "scale": 1,
+    "filter": "NEAREST",
+    "palette": [
+      "#0D0A08",
+      "#1A1410",
+      "#2E2218",
+      "#4A3525",
+      "#6E4E32",
+      "#8C2D19",
+      "#B83A2A",
+      "#C89B3C",
+      "#D4A017",
+      "#E6C699",
+      "#F4E8D1",
+      "#2B4C5E"
+    ]
+  },
+  "frames": {
+    "prop_oil_lamp_a": {
+      "id": "prop_oil_lamp_a",
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 8,
+        "y": 15
+      },
+      "reviewed": true,
+      "provenance": "curated_son_mai_12color_local"
+    },
+    "prop_sealed_scroll": {
+      "id": "prop_sealed_scroll",
+      "x": 16,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "frame": {
+        "x": 16,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rect": {
+        "x": 16,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 8,
+        "y": 14
+      },
+      "reviewed": true,
+      "provenance": "curated_son_mai_12color_local"
+    },
+    "prop_shipping_crate": {
+      "id": "prop_shipping_crate",
+      "x": 32,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "frame": {
+        "x": 32,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rect": {
+        "x": 32,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 8,
+        "y": 15
+      },
+      "reviewed": true,
+      "provenance": "curated_son_mai_12color_local"
+    },
+    "prop_dock_barrel": {
+      "id": "prop_dock_barrel",
+      "x": 48,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "frame": {
+        "x": 48,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rect": {
+        "x": 48,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 8,
+        "y": 15
+      },
+      "reviewed": true,
+      "provenance": "curated_son_mai_12color_local"
+    },
+    "prop_ledger_book": {
+      "id": "prop_ledger_book",
+      "x": 64,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "frame": {
+        "x": 64,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rect": {
+        "x": 64,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 8,
+        "y": 14
+      },
+      "reviewed": true,
+      "provenance": "curated_son_mai_12color_local"
+    },
+    "prop_ink_bottle": {
+      "id": "prop_ink_bottle",
+      "x": 80,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "frame": {
+        "x": 80,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rect": {
+        "x": 80,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 8,
+        "y": 15
+      },
+      "reviewed": true,
+      "provenance": "curated_son_mai_12color_local"
+    },
+    "prop_cipher_telegram": {
+      "id": "prop_cipher_telegram",
+      "x": 96,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "frame": {
+        "x": 96,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rect": {
+        "x": 96,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 8,
+        "y": 14
+      },
+      "reviewed": true,
+      "provenance": "curated_son_mai_12color_local"
+    },
+    "prop_safety_lantern": {
+      "id": "prop_safety_lantern",
+      "x": 112,
+      "y": 0,
+      "w": 16,
+      "h": 16,
+      "frame": {
+        "x": 112,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rect": {
+        "x": 112,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 8,
+        "y": 15
+      },
+      "reviewed": true,
+      "provenance": "curated_son_mai_12color_local"
+    },
+    "prop_tea_kettle": {
+      "id": "prop_tea_kettle",
+      "x": 0,
+      "y": 16,
+      "w": 16,
+      "h": 16,
+      "frame": {
+        "x": 0,
+        "y": 16,
+        "w": 16,
+        "h": 16
+      },
+      "rect": {
+        "x": 0,
+        "y": 16,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 8,
+        "y": 15
+      },
+      "reviewed": true,
+      "provenance": "curated_son_mai_12color_local"
+    },
+    "prop_bamboo_chest": {
+      "id": "prop_bamboo_chest",
+      "x": 16,
+      "y": 16,
+      "w": 16,
+      "h": 16,
+      "frame": {
+        "x": 16,
+        "y": 16,
+        "w": 16,
+        "h": 16
+      },
+      "rect": {
+        "x": 16,
+        "y": 16,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 8,
+        "y": 15
+      },
+      "reviewed": true,
+      "provenance": "curated_son_mai_12color_local"
+    },
+    "prop_stone_bench": {
+      "id": "prop_stone_bench",
+      "x": 32,
+      "y": 16,
+      "w": 16,
+      "h": 16,
+      "frame": {
+        "x": 32,
+        "y": 16,
+        "w": 16,
+        "h": 16
+      },
+      "rect": {
+        "x": 32,
+        "y": 16,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 8,
+        "y": 15
+      },
+      "reviewed": true,
+      "provenance": "curated_son_mai_12color_local"
+    },
+    "prop_archive_seal": {
+      "id": "prop_archive_seal",
+      "x": 48,
+      "y": 16,
+      "w": 16,
+      "h": 16,
+      "frame": {
+        "x": 48,
+        "y": 16,
+        "w": 16,
+        "h": 16
+      },
+      "rect": {
+        "x": 48,
+        "y": 16,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 8,
+        "y": 15
+      },
+      "reviewed": true,
+      "provenance": "curated_son_mai_12color_local"
+    },
+    "char_player_4dir": {
+      "id": "char_player_4dir",
+      "x": 0,
+      "y": 32,
+      "w": 64,
+      "h": 24,
+      "frame": {
+        "x": 0,
+        "y": 32,
+        "w": 64,
+        "h": 24
+      },
+      "rect": {
+        "x": 0,
+        "y": 32,
+        "w": 64,
+        "h": 24
+      },
+      "pivot": {
+        "x": 8,
+        "y": 22
+      },
+      "reviewed": true,
+      "provenance": "curated_son_mai_12color_local"
+    },
+    "char_liaison_4dir": {
+      "id": "char_liaison_4dir",
+      "x": 64,
+      "y": 32,
+      "w": 64,
+      "h": 24,
+      "frame": {
+        "x": 64,
+        "y": 32,
+        "w": 64,
+        "h": 24
+      },
+      "rect": {
+        "x": 64,
+        "y": 32,
+        "w": 64,
+        "h": 24
+      },
+      "pivot": {
+        "x": 8,
+        "y": 22
+      },
+      "reviewed": true,
+      "provenance": "curated_son_mai_12color_local"
+    },
+    "char_worker_4dir": {
+      "id": "char_worker_4dir",
+      "x": 0,
+      "y": 56,
+      "w": 64,
+      "h": 24,
+      "frame": {
+        "x": 0,
+        "y": 56,
+        "w": 64,
+        "h": 24
+      },
+      "rect": {
+        "x": 0,
+        "y": 56,
+        "w": 64,
+        "h": 24
+      },
+      "pivot": {
+        "x": 8,
+        "y": 22
+      },
+      "reviewed": true,
+      "provenance": "curated_son_mai_12color_local"
+    },
+    "char_guard_4dir": {
+      "id": "char_guard_4dir",
+      "x": 64,
+      "y": 56,
+      "w": 64,
+      "h": 24,
+      "frame": {
+        "x": 64,
+        "y": 56,
+        "w": 64,
+        "h": 24
+      },
+      "rect": {
+        "x": 64,
+        "y": 56,
+        "w": 64,
+        "h": 24
+      },
+      "pivot": {
+        "x": 8,
+        "y": 22
+      },
+      "reviewed": true,
+      "provenance": "curated_son_mai_12color_local"
+    }
+  }
+}

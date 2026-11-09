@@ -7,7 +7,17 @@
 import { PALETTE_12 } from '../data/chronicles';
 import type { Facing4, MilestoneArtifact } from '../types/game';
 
-export type CharacterAtlasRole = 'traveler' | 'courier' | 'archivist' | 'observer' | 'historian';
+export type CharacterAtlasRole =
+  | 'player'
+  | 'liaison'
+  | 'worker'
+  | 'guard'
+  | 'scholar'
+  | 'traveler'
+  | 'courier'
+  | 'archivist'
+  | 'observer'
+  | 'historian';
 
 const COLOR_MAP: Record<string, string> = {
   '.': '',
@@ -246,10 +256,15 @@ interface RolePaletteRemap {
 }
 
 const ROLE_REMAP: Record<CharacterAtlasRole, RolePaletteRemap | null> = {
+  player: null,
   traveler: null,
+  liaison: { hat: 'D', trim: 'V', scarf: 'R', coat: 'S' },
   courier: { hat: 'D', trim: 'V', scarf: 'R', coat: 'S' },
-  archivist: { hat: 'M', trim: 'G', scarf: 'P', coat: 'D' },
+  worker: { hat: 'B', trim: 'M', scarf: 'G', coat: 'M' },
   observer: { hat: 'B', trim: 'M', scarf: 'G', coat: 'M' },
+  guard: { hat: 'I', trim: 'R', scarf: 'V', coat: 'D' },
+  scholar: { hat: 'M', trim: 'G', scarf: 'P', coat: 'D' },
+  archivist: { hat: 'M', trim: 'G', scarf: 'P', coat: 'D' },
   historian: { hat: 'M', trim: 'G', scarf: 'G', coat: 'D' },
 };
 
@@ -305,6 +320,15 @@ export function drawMatrixSprite(
 
 export function drawCharacter4Dir(
   ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  role: CharacterAtlasRole,
+  facing: Facing4,
+  walkFrame: number,
+  isSheltered?: boolean
+): void;
+export function drawCharacter4Dir(
+  ctx: CanvasRenderingContext2D,
   role: CharacterAtlasRole,
   x: number,
   y: number,
@@ -312,12 +336,43 @@ export function drawCharacter4Dir(
   isMoving: boolean,
   isSheltered: boolean,
   timeSec: number
+): void;
+export function drawCharacter4Dir(
+  ctx: CanvasRenderingContext2D,
+  arg1: number | CharacterAtlasRole,
+  arg2: number,
+  arg3: CharacterAtlasRole | number,
+  facing: Facing4,
+  arg5: number | boolean,
+  arg6 = false,
+  arg7 = 0
 ): void {
-  const stepPhase = Math.floor(timeSec * 8) % 4;
+  let role: CharacterAtlasRole;
+  let x: number;
+  let y: number;
+  let stepPhase: number;
+  let isMoving: boolean;
+  const isSheltered = Boolean(arg6);
+
+  if (typeof arg1 === 'number') {
+    x = arg1;
+    y = arg2;
+    role = arg3 as CharacterAtlasRole;
+    const wf = Math.abs(Math.floor(Number(arg5)));
+    isMoving = wf > 0;
+    stepPhase = wf % 4;
+  } else {
+    role = arg1;
+    x = arg2;
+    y = Number(arg3);
+    isMoving = Boolean(arg5);
+    stepPhase = isMoving ? Math.floor(arg7 * 8) % 4 : 0;
+  }
+
   let baseMatrix: string[];
   let flipX = false;
 
-  if (isSheltered && role === 'traveler') {
+  if (isSheltered && (role === 'traveler' || role === 'player')) {
     baseMatrix = TRAVELER_CROUCH;
     flipX = facing === 'left';
   } else if (facing === 'up') {
@@ -349,10 +404,11 @@ export function drawCharacter4Dir(
 
   const finalMatrix = remapMatrixForRole(baseMatrix, role);
 
-  // Bóng đổ tiếp đất dưới chân nhân vật
+  // Bóng đổ tiếp đất hình elip dưới chân nhân vật
   ctx.save();
-  ctx.fillStyle = 'rgba(17, 14, 11, 0.55)';
+  ctx.fillStyle = 'rgba(15, 12, 10, 0.45)';
   ctx.fillRect(Math.round(x - 5), Math.round(y - 2), 10, 3);
+  ctx.fillRect(Math.round(x - 4), Math.round(y - 3), 8, 1);
   ctx.restore();
 
   drawMatrixSprite(ctx, finalMatrix, x - 6, y - finalMatrix.length, 1, flipX);
@@ -806,3 +862,92 @@ export function drawArtifactSprite(
   }
   ctx.restore();
 }
+
+export type CuratedPropId =
+  | 'prop_harbor_lantern'
+  | 'prop_cargo_crate'
+  | 'prop_tea_table'
+  | 'prop_printing_press'
+  | 'prop_archive_ledger'
+  | 'prop_banyan_tree_canopy'
+  | 'prop_conference_table'
+  | 'prop_time_rift_gate';
+
+const CURATED_PROP_SLOT_INDEX: Record<CuratedPropId, number> = {
+  prop_harbor_lantern: 0,
+  prop_cargo_crate: 1,
+  prop_tea_table: 2,
+  prop_printing_press: 3,
+  prop_archive_ledger: 4,
+  prop_banyan_tree_canopy: 5,
+  prop_conference_table: 6,
+  prop_time_rift_gate: 7,
+};
+
+let cachedPropAtlasCanvas: HTMLCanvasElement | null = null;
+
+/**
+ * Khởi tạo duy nhất 1 lần (Singleton) bộ đệm Offscreen Canvas chứa 8 tĩnh vật chuẩn hóa 16x16.
+ * Tuân thủ tuyệt đối quy tắc hiệu năng SPRITE_ATLAS.md (không cấp phát mỗi frame).
+ */
+export function getCuratedPropAtlasCanvas(): HTMLCanvasElement {
+  if (cachedPropAtlasCanvas) {
+    return cachedPropAtlasCanvas;
+  }
+
+  const canvas =
+    typeof document !== 'undefined'
+      ? document.createElement('canvas')
+      : ({ width: 128, height: 16 } as unknown as HTMLCanvasElement);
+  canvas.width = 128;
+  canvas.height = 16;
+
+  const ctx = typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null;
+  if (ctx) {
+    ctx.imageSmoothingEnabled = false;
+    // Slot 0: Harbor lantern (x = 0)
+    drawTopDownTile(ctx, 8, 0, 0, false);
+    // Slot 1: Cargo crate (x = 16)
+    drawTopDownTile(ctx, 7, 16, 0, false);
+    // Slot 2: Tea table (x = 32)
+    drawTopDownTile(ctx, 28, 32, 0, true);
+    // Slot 3: Printing press (x = 48)
+    drawTopDownTile(ctx, 26, 48, 0, true);
+    // Slot 4: Archive ledger (x = 64)
+    drawTopDownTile(ctx, 6, 64, 0, true);
+    // Slot 5: Banyan tree canopy (x = 80)
+    drawTopDownTile(ctx, 13, 80, 0, false);
+    // Slot 6: Conference table (x = 96)
+    drawTopDownTile(ctx, 23, 96, 0, true);
+    // Slot 7: Time rift gate (x = 112)
+    drawTopDownTile(ctx, 6, 112, 0, false);
+  }
+
+  cachedPropAtlasCanvas = canvas;
+  return cachedPropAtlasCanvas;
+}
+
+export function drawCuratedProp(
+  ctx: CanvasRenderingContext2D,
+  propId: CuratedPropId,
+  x: number,
+  y: number
+): void {
+  const atlas = getCuratedPropAtlasCanvas();
+  const slotIdx = CURATED_PROP_SLOT_INDEX[propId] ?? 0;
+  const sx = slotIdx * 16;
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  if (typeof ctx.drawImage === 'function' && typeof document !== 'undefined') {
+    try {
+      ctx.drawImage(atlas, sx, 0, 16, 16, Math.round(x), Math.round(y), 16, 16);
+      ctx.restore();
+      return;
+    } catch {
+      // Fallback dưới môi trường giả lập headless không hỗ trợ drawImage
+    }
+  }
+  drawTopDownTile(ctx, slotIdx + 1, Math.round(x), Math.round(y), false);
+  ctx.restore();
+}
+
