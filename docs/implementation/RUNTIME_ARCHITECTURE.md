@@ -25,19 +25,18 @@ Tài liệu này ghi nhận kiến trúc runtime thực tế được triển kh
 - `src/data/`:
   - `chronicles.ts`: Dữ liệu cốt lõi 4 chương thời kỳ (`1930`, `1945`, `1954_1975`, `1986_2045`).
   - `chapters/ch1_1930.ts`, `quests/ch1_quests.ts`, `npcs/ch1_npcs.ts`, `provenance/ch1_provenance.ts`: Dữ liệu Chương I chuẩn hóa cùng bài giải đố đối chiếu văn kiện `CH1_DOSSIER_PUZZLE` và danh mục xuất xứ tư liệu `CH1_PROVENANCE_MANIFEST`.
+  - `chapters/ch2_3_4_mechanics.ts`: Các bài toán chiến thuật đặc thù cho Chương II (`CH2_DISPATCH_NETWORK_PUZZLE`), Chương III (`CH3_SUPPLY_LOGISTICS_PUZZLE`) và Chương IV (`CH4_CAUSAL_POLICY_PUZZLE`).
   - `provenance/sprite_atlas_manifest.ts`: Sổ đăng ký xuất xứ, giấy phép và tọa độ khung cắt (`CURATED_SPRITE_ATLAS_MANIFEST` & `validateSpriteAtlasManifest`) theo chuẩn `docs/plans/SPRITE_ATLAS.md`.
 
 - `src/ui/`:
   - Giao diện DOM toàn màn hình (Fullscreen World Viewport 100%, thanh Chronicle Ribbon gọn nhẹ) theo hệ màu 12 Sắc Độ Sơn Mài & Giấy Dó (`DESIGN.md`), hoàn toàn chỉ đọc trạng thái và gửi hành động qua `GameStore`, không tự ý mở khóa tiến trình.
   - `GameHUD.ts`: Hộp theo dõi mục tiêu nhiệm vụ đang thực hiện (`#hud-objective-tracker`) và gợi ý dẫn đường.
-  - `DialoguePanel.ts`: Hộp thoại NPC đa lựa chọn và thẻ xuất xứ tư liệu (`#dialogue-provenance-badge`).
+  - `DialoguePanel.ts`: Hộp thoại NPC đa lựa chọn và thẻ xuất xứ tư liệu (`#dialogue-provenance-badge`: `historical_fact`, `fictional_npc`, `speculative_2045`).
   - `JournalPanel.ts`: Nhật ký nhiệm vụ chính/phụ (`[J]`, `#journal-modal`).
   - `InventoryPanel.ts`: Túi tư liệu & trình tra cứu bằng chứng lịch sử (`[I]`, `#inventory-modal`).
-  - `PuzzlePanel.ts`: Bàn giải đố đối chiếu văn kiện lịch sử (`#dossier-puzzle-modal`) với gợi ý học thuật lũy tiến sau 2 lần thử.
-  - `WorldMapPanel.ts`: Sơ đồ liên thông 8 khu vực Chương I (`[M]`, `#world-map-modal`), hiển thị trạng thái Đang đứng / Đã khám phá / Khu vực ẩn và điều khiển Dịch chuyển nhanh giữa các Đèn Báo An Toàn (`checkpoint`) đã mở khóa.
+  - `PuzzlePanel.ts`: Bàn giải đố lịch sử đa chương (`#dossier-puzzle-modal`) với gợi ý học thuật lũy tiến sau 2 lần thử.
+  - `WorldMapPanel.ts`: Sơ đồ liên thông 14 khu vực trên toàn bộ 4 Thời kỳ (`[M]`, `#world-map-modal`), hiển thị trạng thái Đang đứng / Đã khám phá / Khu vực ẩn và điều khiển Dịch chuyển nhanh giữa các Đèn Báo An Toàn (`checkpoint`) đã mở khóa.
   - `PausePanel.ts`: Menu tạm dừng, lưu/xóa tiến trình và thiết lập trợ năng (`[Tab]`, `#pause-modal`).
-- `tools/validate_maps.ts`:
-  - Công cụ dòng lệnh (`npm run validate:maps`) chạy trực tiếp trên Node 24 (`--experimental-strip-types`), kiểm định toàn bộ file `.tmj` trong `public/maps/ch1/` cùng đồ thị `CHAPTER1_WORLD_GRAPH` (kiểm tra va chạm spawn, khoảng cách an toàn với portal, và BFS `16×16` tới mọi lối ra/mục tiêu).
-
-
-
+- `tools/validate_maps.ts` & `.github/workflows/ci.yml`:
+  - Công cụ dòng lệnh (`npm run validate:maps`) chạy trực tiếp trên Node 24 (`--experimental-strip-types`), kiểm định toàn bộ 14 file `.tmj` trong `public/maps/{ch1,ch2,ch3,ch4}/` cùng đồ thị thế giới (kiểm tra va chạm spawn, khoảng cách an toàn với portal, và BFS `16×16` tới mọi lối ra/mục tiêu).
+  - Quy trình CI tự động trên GitHub Actions kiểm tra `validate:maps`, `build`, `test:unit` (Vitest) và `test:e2e` (Playwright Chromium).

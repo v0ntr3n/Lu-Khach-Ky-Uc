@@ -1,7 +1,7 @@
 /**
  * @file tools/validate_maps.ts
- * @description Công cụ CLI kiểm định toàn bộ 8 bản đồ Tiled (.tmj) của Chương I (Hương Cảng 1930)
- * và đồ thị liên thông `CHAPTER1_WORLD_GRAPH`.
+ * @description Công cụ CLI kiểm định toàn bộ 14 bản đồ Tiled (.tmj) của 4 Chương (1930 – 2045)
+ * tại `public/maps/ch{1,2,3,4}/` và đồ thị liên thông `CHAPTER1_WORLD_GRAPH` / `ALL_ERA_ZONES`.
  * Chạy trực tiếp bằng: `node --experimental-strip-types tools/validate_maps.ts`
  */
 
@@ -10,7 +10,6 @@ import { register } from 'node:module';
 import path from 'node:path';
 import process from 'node:process';
 
-// Đăng ký trình phân giải đuôi .ts tự động cho các lệnh import tương đối không đuôi khi chạy trực tiếp bằng Node ESM
 const resolveHookCode = `
 export async function resolve(specifier, context, nextResolve) {
   try {
@@ -61,46 +60,53 @@ export async function runMapValidationCli(
   const { validateMapData } = await import('../src/world/MapValidator.ts');
   const { CHAPTER1_WORLD_GRAPH } = await import('../src/world/WorldGraph.ts');
 
-  const mapsDir = path.resolve(process.cwd(), 'public/maps/ch1');
+  const chapterDirs = ['ch1', 'ch2', 'ch3', 'ch4'];
   const errors: string[] = [];
   const warnings: string[] = [];
-
-  if (!fs.existsSync(mapsDir)) {
-    errors.push(`Directory not found: ${mapsDir}`);
-    return { valid: false, zoneCount: 0, errors, warnings };
-  }
-
-  const tmjFiles = fs
-    .readdirSync(mapsDir)
-    .filter((f) => f.endsWith('.tmj'))
-    .sort();
 
   const parsedFromDisk: Record<string, NormalizedMapData> = {};
   const validatableFromDisk: Record<string, ValidatableMap> = {};
 
-  for (const file of tmjFiles) {
-    const id = file.replace(/\.tmj$/, '');
-    const fullPath = path.join(mapsDir, file);
-    const raw = JSON.parse(fs.readFileSync(fullPath, 'utf-8')) as TiledMapJson;
-    const norm = parseTiledMapJson(id, raw);
-    parsedFromDisk[norm.id] = norm;
-    validatableFromDisk[norm.id] = toValidatableMap(norm);
+  for (const ch of chapterDirs) {
+    const mapsDir = path.resolve(process.cwd(), 'public/maps', ch);
+    if (!fs.existsSync(mapsDir)) {
+      continue;
+    }
+
+    const tmjFiles = fs
+      .readdirSync(mapsDir)
+      .filter((f) => f.endsWith('.tmj'))
+      .sort();
+
+    for (const file of tmjFiles) {
+      const id = file.replace(/\.tmj$/, '');
+      const fullPath = path.join(mapsDir, file);
+      const raw = JSON.parse(fs.readFileSync(fullPath, 'utf-8')) as TiledMapJson;
+      const norm = parseTiledMapJson(id, raw);
+      parsedFromDisk[norm.id] = norm;
+      validatableFromDisk[norm.id] = toValidatableMap(norm);
+    }
   }
 
   // Đối chiếu với getAllBuiltInMaps()
   const builtInMaps = getAllBuiltInMaps();
   for (const [id, builtIn] of Object.entries(builtInMaps)) {
     if (!parsedFromDisk[id]) {
-      errors.push(`Built-in map "${id}" is missing a corresponding .tmj file in public/maps/ch1/.`);
+      errors.push(
+        `Built-in map "${id}" is missing a corresponding .tmj file in public/maps/ch{1,2,3,4}/.`
+      );
     } else if (
       parsedFromDisk[id].widthPx !== builtIn.widthPx ||
       parsedFromDisk[id].heightPx !== builtIn.heightPx
     ) {
-      errors.push(`Dimension mismatch between disk .tmj and built-in map for "${id}".`);
+      errors.push(
+        `Dimension mismatch between disk .tmj and built-in map for "${id}".`
+      );
     }
   }
 
   const tableRows: Array<{
+    eraId: string;
     zoneId: string;
     dimensions: string;
     spawns: number;
@@ -118,6 +124,7 @@ export async function runMapValidationCli(
 
     const norm = parsedFromDisk[id];
     tableRows.push({
+      eraId: norm.eraId,
       zoneId: id,
       dimensions: `${norm.widthInTiles}x${norm.heightInTiles} (${norm.widthPx}x${norm.heightPx}px)`,
       spawns: norm.spawns.length,
@@ -133,10 +140,12 @@ export async function runMapValidationCli(
   }
 
   if (!silent) {
-    console.log('\n=== LỮ KHÁCH KÝ ỨC — CHAPTER I TILED MAP & WORLD GRAPH VALIDATOR ===');
+    console.log(
+      '\n=== LỮ KHÁCH KÝ ỨC — CHAPTERS I–IV TILED MAP & WORLD GRAPH VALIDATOR ==='
+    );
     console.table(tableRows);
     console.log(
-      `WorldGraph (8 Zones) Integrity: ${graphRes.valid ? 'PASS' : 'FAIL'}`
+      `WorldGraph (${tableRows.length} Zones Across 4 Eras) Integrity: ${graphRes.valid ? 'PASS' : 'FAIL'}`
     );
     if (errors.length > 0) {
       console.error('\nValidation Errors:');
@@ -144,7 +153,9 @@ export async function runMapValidationCli(
         console.error(`  - ${err}`);
       }
     } else {
-      console.log(`\n✓ All ${tableRows.length} Tiled maps and WorldGraph routes validated with 0 errors.`);
+      console.log(
+        `\n✓ All ${tableRows.length} Tiled maps and WorldGraph routes validated with 0 errors.`
+      );
     }
   }
 

@@ -214,6 +214,137 @@ export const CHAPTER1_WORLD_ZONES: WorldZoneNode[] = [
   },
 ];
 
+export const ALL_WORLD_ZONES: WorldZoneNode[] = [
+  ...CHAPTER1_WORLD_ZONES,
+  {
+    id: 'tan_trao_banyan',
+    title: 'Đình Tân Trào & Cây Đa Lịch Sử (8/1945)',
+    eraId: '1945',
+    districtType: 'hub',
+    description: 'Thủ đô Khu giải phóng Việt Bắc, nơi phát lệnh Tổng khởi nghĩa Tháng Tám 1945.',
+    gridPos: { x: 0, y: 0 },
+    checkpointId: 'cp_tan_trao_banyan',
+    checkpointSpawnId: 'cp_tan_trao_banyan',
+    objectiveCount: 2,
+    edges: [
+      {
+        fromZoneId: 'tan_trao_banyan',
+        toZoneId: 'ba_dinh_square',
+        portalId: 'portal_tantrao_to_badinh',
+        destinationSpawn: 'from_tan_trao',
+        label: 'Quảng trường Ba Đình (2/9/1945)',
+      },
+    ],
+  },
+  {
+    id: 'ba_dinh_square',
+    title: 'Quảng Trường Ba Đình Lịch Sử (2/9/1945)',
+    eraId: '1945',
+    districtType: 'finale',
+    description: 'Nơi Chủ tịch Hồ Chí Minh đọc Tuyên ngôn Độc lập khai sinh nước Việt Nam Dân chủ Cộng hòa.',
+    gridPos: { x: 1, y: 0 },
+    checkpointId: 'cp_ba_dinh_square',
+    checkpointSpawnId: 'cp_ba_dinh_square',
+    objectiveCount: 1,
+    edges: [
+      {
+        fromZoneId: 'ba_dinh_square',
+        toZoneId: 'tan_trao_banyan',
+        portalId: 'portal_badinh_to_tantrao',
+        destinationSpawn: 'from_ba_dinh',
+        label: 'Đình Tân Trào',
+      },
+    ],
+  },
+  {
+    id: 'pha_din_pass',
+    title: 'Đèo Pha Đin & Tuyến Lửa Điện Biên (1954)',
+    eraId: '1954_1975',
+    districtType: 'hub',
+    description: 'Tuyến đường huyết mạch nơi đoàn dân công xe đạp thồ và pháo binh tiến vào lòng chảo Điện Biên.',
+    gridPos: { x: 0, y: 0 },
+    checkpointId: 'cp_pha_din_pass',
+    checkpointSpawnId: 'cp_pha_din_pass',
+    objectiveCount: 2,
+    edges: [
+      {
+        fromZoneId: 'pha_din_pass',
+        toZoneId: 'spring_1975_corridor',
+        portalId: 'portal_phadin_to_spring1975',
+        destinationSpawn: 'from_pha_din',
+        label: 'Hành Lang Mùa Xuân 1975',
+      },
+    ],
+  },
+  {
+    id: 'spring_1975_corridor',
+    title: 'Hành Lang Thần Tốc Mùa Xuân 1975',
+    eraId: '1954_1975',
+    districtType: 'finale',
+    description: 'Bản đồ tác chiến Chiến dịch Hồ Chí Minh lịch sử tiến về Dinh Độc Lập trưa 30/4/1975.',
+    gridPos: { x: 1, y: 0 },
+    checkpointId: 'cp_spring_1975_corridor',
+    checkpointSpawnId: 'cp_spring_1975_corridor',
+    objectiveCount: 1,
+    edges: [
+      {
+        fromZoneId: 'spring_1975_corridor',
+        toZoneId: 'pha_din_pass',
+        portalId: 'portal_spring1975_to_phadin',
+        destinationSpawn: 'from_spring_1975',
+        label: 'Đèo Pha Đin (1954)',
+      },
+    ],
+  },
+  {
+    id: 'doi_moi_avenue',
+    title: 'Đại Lộ Đổi Mới (Đại Hội VI — 12/1986)',
+    eraId: '1986_2045',
+    districtType: 'hub',
+    description: 'Không gian chuyển mình lịch sử từ cơ chế bao cấp sang nền kinh tế hàng hóa nhiều thành phần.',
+    gridPos: { x: 0, y: 0 },
+    checkpointId: 'cp_doi_moi_avenue',
+    checkpointSpawnId: 'cp_doi_moi_avenue',
+    objectiveCount: 2,
+    edges: [
+      {
+        fromZoneId: 'doi_moi_avenue',
+        toZoneId: 'nexus_2045_plaza',
+        portalId: 'portal_doimoi_to_nexus2045',
+        destinationSpawn: 'from_doi_moi',
+        label: 'Quảng Trường Kỷ Nguyên Số 2045',
+      },
+    ],
+  },
+  {
+    id: 'nexus_2045_plaza',
+    title: 'Quảng Trường Kỷ Nguyên Số 2045',
+    eraId: '1986_2045',
+    districtType: 'finale',
+    description: 'Viện Lưu Trữ Quốc Gia 2045 kỷ niệm 100 năm lập nước, nơi hội tụ 12 cột mốc lịch sử.',
+    gridPos: { x: 1, y: 0 },
+    checkpointId: 'cp_nexus_2045_plaza',
+    checkpointSpawnId: 'cp_nexus_2045_plaza',
+    objectiveCount: 1,
+    edges: [
+      {
+        fromZoneId: 'nexus_2045_plaza',
+        toZoneId: 'doi_moi_avenue',
+        portalId: 'portal_nexus2045_to_doimoi',
+        destinationSpawn: 'from_nexus_2045',
+        label: 'Đại Lộ Đổi Mới (1986)',
+      },
+    ],
+  },
+];
+
+const ERA_WORLD_MAP_TITLES: Record<WorldZoneNode['eraId'], string> = {
+  '1930': 'SƠ ĐỒ LIÊN THÔNG KHU VỰC — HƯƠNG CẢNG 1930',
+  '1945': 'SƠ ĐỒ LIÊN THÔNG KHU VỰC — TÂN TRÀO & BA ĐÌNH 1945',
+  '1954_1975': 'SƠ ĐỒ LIÊN THÔNG KHU VỰC — ĐIỆN BIÊN PHỦ & MÙA XUÂN 1975',
+  '1986_2045': 'SƠ ĐỒ LIÊN THÔNG KHU VỰC — ĐẠI LỘ ĐỔI MỚI & KỶ NGUYÊN 2045',
+};
+
 const DISTRICT_BADGE_LABELS: Record<WorldZoneNode['districtType'], string> = {
   hub: 'TRUNG TÂM (HUB)',
   outdoor: 'NGOÀI TRỜI',
@@ -303,13 +434,22 @@ export class WorldMapPanel {
   }
 
   public render(): void {
+    const titleEl = document.getElementById('world-map-title');
     const summaryEl = document.getElementById('world-map-summary');
     const graphEl = document.getElementById('world-map-graph');
     const detailEl = document.getElementById('world-map-zone-detail');
 
-    const totalZones = CHAPTER1_WORLD_ZONES.length;
-    const discoveredCount = CHAPTER1_WORLD_ZONES.filter((z) => this.isZoneDiscovered(z)).length;
-    const unlockedCount = CHAPTER1_WORLD_ZONES.filter((z) => this.isCheckpointUnlocked(z)).length;
+    const activeNode = ALL_WORLD_ZONES.find((z) => z.id === this.currentMapId);
+    const activeEraId: WorldZoneNode['eraId'] = activeNode?.eraId ?? '1930';
+    const eraZones = ALL_WORLD_ZONES.filter((z) => z.eraId === activeEraId);
+
+    if (titleEl) {
+      titleEl.textContent = ERA_WORLD_MAP_TITLES[activeEraId];
+    }
+
+    const totalZones = eraZones.length;
+    const discoveredCount = eraZones.filter((z) => this.isZoneDiscovered(z)).length;
+    const unlockedCount = eraZones.filter((z) => this.isCheckpointUnlocked(z)).length;
 
     if (summaryEl) {
       summaryEl.textContent = `Đã khám phá ${discoveredCount}/${totalZones} khu vực · ${unlockedCount}/${totalZones} Đèn Báo An Toàn${
@@ -319,7 +459,7 @@ export class WorldMapPanel {
 
     if (graphEl) {
       graphEl.innerHTML = '';
-      for (const zone of CHAPTER1_WORLD_ZONES) {
+      for (const zone of eraZones) {
         const isCurrent = zone.id === this.currentMapId;
         const isDiscovered = this.isZoneDiscovered(zone);
         const hasCheckpoint = this.isCheckpointUnlocked(zone);
@@ -366,7 +506,12 @@ export class WorldMapPanel {
 
     if (detailEl) {
       detailEl.innerHTML = '';
-      for (const zone of CHAPTER1_WORLD_ZONES) {
+      const otherUnlockedZones = ALL_WORLD_ZONES.filter(
+        (z) => z.eraId !== activeEraId && this.isZoneDiscovered(z) && this.isCheckpointUnlocked(z)
+      );
+      const displayZones = [...eraZones, ...otherUnlockedZones];
+
+      for (const zone of displayZones) {
         const isCurrent = zone.id === this.currentMapId;
         const isDiscovered = this.isZoneDiscovered(zone);
         const canFastTravel = isDiscovered && this.isCheckpointUnlocked(zone);

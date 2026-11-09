@@ -1,14 +1,15 @@
 /**
  * @file src/world/WorldGraph.ts
- * @description Đồ thị liên thông 8 khu vực (Zone Topology Graph) của Chương I — Hương Cảng 1930:
- * - Quản lý các đỉnh (WorldZoneNode) và cạnh nối (WorldZoneEdge) giữa 8 bản đồ Tiled.
- * - Kiểm tra điều kiện đi qua cổng (`canTraverseEdge`), điều kiện dịch chuyển nhanh hợp lệ giữa các
- *   checkpoint đã mở khóa (`canFastTravel`, có tách biệt chế độ Giảng viên `isPresenterMode`).
- * - Tìm đường đi ngắn nhất bằng BFS (`findShortestRoute`) cho cả tuyến chính và tuyến phụ.
- * - Kiểm định tính toàn vẹn của đồ thị đối chiếu với dữ liệu bản đồ thực tế (`validateWorldGraph`).
+ * @description Đồ thị liên thông các khu vực (Zone Topology Graph) cho cả 4 Chương (1930 – 2045):
+ * - Chương I (1930): 8 khu vực liên thông tại Hương Cảng (`CHAPTER1_ZONES`).
+ * - Chương II (1945): 2 khu vực liên thông (`tan_trao_banyan` <-> `ba_dinh_square`).
+ * - Chương III (1954–1975): 2 khu vực liên thông (`pha_din_pass` <-> `spring_1975_corridor`).
+ * - Chương IV (1986–2045): 2 khu vực liên thông (`doi_moi_avenue` <-> `nexus_2045_plaza`).
+ * - Tổng cộng 14 khu vực (`ALL_ERA_ZONES`).
  */
 
 import type {
+  EraId,
   NormalizedMapData,
   WorldZoneEdge,
   WorldZoneNode,
@@ -244,16 +245,191 @@ export const CHAPTER1_ZONES: WorldZoneNode[] = [
   },
 ];
 
+export const CHAPTER2_ZONES: WorldZoneNode[] = [
+  {
+    id: 'tan_trao_banyan',
+    title: 'Đình Tân Trào & Cây Đa Lịch Sử (08/1945)',
+    eraId: '1945',
+    districtType: 'hub',
+    description:
+      'Chiến khu Tân Trào tháng 8/1945, nơi Quốc dân Đại hội thông qua Lệnh Tổng khởi nghĩa và kết nối mạng lưới giao liên toàn quốc.',
+    gridPos: { x: 0, y: 0 },
+    checkpointId: 'cp_tan_trao_banyan',
+    checkpointSpawnId: 'default_spawn',
+    objectiveCount: 2,
+    edges: [
+      {
+        fromZoneId: 'tan_trao_banyan',
+        toZoneId: 'ba_dinh_square',
+        portalId: 'portal_to_ba_dinh',
+        destinationSpawn: 'from_tan_trao',
+        label: 'Tiến Về Quảng Trường Ba Đình',
+      },
+    ],
+  },
+  {
+    id: 'ba_dinh_square',
+    title: 'Quảng Trường Ba Đình Lịch Sử (02/09/1945)',
+    eraId: '1945',
+    districtType: 'finale',
+    description:
+      'Quảng trường Ba Đình ngày 02/09/1945, nơi Chủ tịch Hồ Chí Minh đọc bản Tuyên ngôn Độc lập khai sinh nước Việt Nam Dân chủ Cộng hòa.',
+    gridPos: { x: 1, y: 0 },
+    checkpointId: 'cp_ba_dinh_tribune',
+    checkpointSpawnId: 'from_tan_trao',
+    objectiveCount: 1,
+    edges: [
+      {
+        fromZoneId: 'ba_dinh_square',
+        toZoneId: 'tan_trao_banyan',
+        portalId: 'portal_to_tan_trao',
+        destinationSpawn: 'from_ba_dinh',
+        label: 'Về Chiến Khu Tân Trào',
+      },
+    ],
+  },
+];
+
+export const CHAPTER3_ZONES: WorldZoneNode[] = [
+  {
+    id: 'pha_din_pass',
+    title: 'Đèo Pha Đin & Tuyến Tiếp Vận Điện Biên Phủ (1954)',
+    eraId: '1954_1975',
+    districtType: 'hub',
+    description:
+      'Tuyến đường huyết mạch lên chiến trường Điện Biên Phủ năm 1954, nơi các đoàn dân công xe thồ vượt đèo bảo đảm hậu cần chiến dịch.',
+    gridPos: { x: 0, y: 0 },
+    checkpointId: 'cp_pha_din_depot',
+    checkpointSpawnId: 'default_spawn',
+    objectiveCount: 2,
+    edges: [
+      {
+        fromZoneId: 'pha_din_pass',
+        toZoneId: 'spring_1975_corridor',
+        portalId: 'portal_to_spring_1975',
+        destinationSpawn: 'from_pha_din',
+        label: 'Tiến Tới Hành Lang Chiến Dịch Hồ Chí Minh (1975)',
+      },
+    ],
+  },
+  {
+    id: 'spring_1975_corridor',
+    title: 'Hành Lang Chiến Dịch Hồ Chí Minh (30/04/1975)',
+    eraId: '1954_1975',
+    districtType: 'finale',
+    description:
+      'Sở chỉ huy tiền phương và hành lang tiến quân thần tốc mùa Xuân năm 1975, hoàn thành sự nghiệp thống nhất đất nước.',
+    gridPos: { x: 1, y: 0 },
+    checkpointId: 'cp_spring_1975_post',
+    checkpointSpawnId: 'from_pha_din',
+    objectiveCount: 1,
+    edges: [
+      {
+        fromZoneId: 'spring_1975_corridor',
+        toZoneId: 'pha_din_pass',
+        portalId: 'portal_to_pha_din',
+        destinationSpawn: 'from_spring_1975',
+        label: 'Về Đèo Pha Đin',
+      },
+    ],
+  },
+];
+
+export const CHAPTER4_ZONES: WorldZoneNode[] = [
+  {
+    id: 'doi_moi_avenue',
+    title: 'Đại Lộ Đổi Mới & Hội Nhập (1986 – 2011)',
+    eraId: '1986_2045',
+    districtType: 'hub',
+    description:
+      'Không gian đô thị chuyển mình từ Đại hội VI (1986) qua Cương lĩnh 1991/2011, phản ánh công cuộc Đổi mới toàn diện và hội nhập quốc tế.',
+    gridPos: { x: 0, y: 0 },
+    checkpointId: 'cp_doi_moi_station',
+    checkpointSpawnId: 'default_spawn',
+    objectiveCount: 2,
+    edges: [
+      {
+        fromZoneId: 'doi_moi_avenue',
+        toZoneId: 'nexus_2045_plaza',
+        portalId: 'portal_to_nexus_2045',
+        destinationSpawn: 'from_doi_moi',
+        label: 'Tiến Tới Quảng Trường Kỷ Nguyên Số (2021–2045)',
+      },
+    ],
+  },
+  {
+    id: 'nexus_2045_plaza',
+    title: 'Quảng Trường Kỷ Nguyên Số (2021 – Viễn Cảnh 2045)',
+    eraId: '1986_2045',
+    districtType: 'finale',
+    description:
+      'Không gian viễn cảnh 2045 kết nối văn kiện Đại hội XIII (2021) với mục tiêu 100 năm thành lập nước, nơi lưu trữ trọn vẹn ký ức lịch sử.',
+    gridPos: { x: 1, y: 0 },
+    checkpointId: 'cp_nexus_2045_terminal',
+    checkpointSpawnId: 'from_doi_moi',
+    objectiveCount: 1,
+    edges: [
+      {
+        fromZoneId: 'nexus_2045_plaza',
+        toZoneId: 'doi_moi_avenue',
+        portalId: 'portal_to_doi_moi',
+        destinationSpawn: 'from_nexus_2045',
+        label: 'Về Đại Lộ Đổi Mới (1986)',
+      },
+    ],
+  },
+];
+
+export const ALL_ERA_ZONES: readonly WorldZoneNode[] = [
+  ...CHAPTER1_ZONES,
+  ...CHAPTER2_ZONES,
+  ...CHAPTER3_ZONES,
+  ...CHAPTER4_ZONES,
+];
+
+export function getZonesForEra(eraId: EraId): WorldZoneNode[] {
+  return ALL_ERA_ZONES.filter((z) => z.eraId === eraId).map((z) => ({
+    ...z,
+    gridPos: { ...z.gridPos },
+    edges: z.edges.map((e) => ({ ...e })),
+  }));
+}
+
+export function getDefaultZoneForEra(eraId: EraId): string {
+  switch (eraId) {
+    case '1930':
+      return 'harbor_square';
+    case '1945':
+      return 'tan_trao_banyan';
+    case '1954_1975':
+      return 'pha_din_pass';
+    case '1986_2045':
+      return 'doi_moi_avenue';
+    default:
+      return 'harbor_square';
+  }
+}
+
 export class WorldGraph {
+  private readonly primaryZones: WorldZoneNode[] = [];
   private readonly zonesById = new Map<string, WorldZoneNode>();
 
   constructor(zones: readonly WorldZoneNode[] = CHAPTER1_ZONES) {
-    for (const z of zones) {
+    for (const z of ALL_ERA_ZONES) {
       this.zonesById.set(z.id, {
         ...z,
         gridPos: { ...z.gridPos },
         edges: z.edges.map((e) => ({ ...e })),
       });
+    }
+    for (const z of zones) {
+      const cloned: WorldZoneNode = {
+        ...z,
+        gridPos: { ...z.gridPos },
+        edges: z.edges.map((e) => ({ ...e })),
+      };
+      this.primaryZones.push(cloned);
+      this.zonesById.set(z.id, cloned);
     }
   }
 
@@ -262,6 +438,10 @@ export class WorldGraph {
   }
 
   public getAllZones(): WorldZoneNode[] {
+    return [...this.primaryZones];
+  }
+
+  public getAllEraZones(): WorldZoneNode[] {
     return Array.from(this.zonesById.values());
   }
 
@@ -293,9 +473,6 @@ export class WorldGraph {
 
   /**
    * Kiểm tra điều kiện dịch chuyển nhanh (Fast Travel) giữa các khu vực trên Bản Đồ Thế Giới (phím M).
-   * - Trong chế độ chơi thường: bắt buộc khu vực đích đã được khám phá (`discoveredMaps`) VÀ
-   *   điểm lưu (`checkpointId` / `toZoneId`) đã được mở khóa.
-   * - Trong chế độ Giảng viên (`isPresenterMode === true`): cho phép di chuyển trình chiếu tới mọi khu vực hợp lệ.
    */
   public canFastTravel(
     _fromZoneId: string,
@@ -405,19 +582,24 @@ export class WorldGraph {
   }
 
   /**
-   * Kiểm định tính toàn vẹn của đồ thị thế giới đối chiếu với tập bản đồ `allMaps`:
-   * - Mọi khu vực trong đồ thị đều tồn tại trong `allMaps`.
-   * - Mọi cạnh nối (`edge.portalId`) đều tồn tại trong `allMaps[fromZoneId].portals`.
-   * - Mọi điểm đến (`edge.destinationSpawn`) đều tồn tại trong `allMaps[toZoneId].spawns`.
-   * - Đảm bảo cả tuyến chính (`includeOptional = false`) và tuyến phụ (`includeOptional = true`)
-   *   đều có đường đi hợp lệ từ `harbor_square` tới `secret_archive`.
+   * Kiểm định tính toàn vẹn của đồ thị thế giới đối chiếu với tập bản đồ `allMaps`.
    */
   public validateWorldGraph(
     allMaps: Record<string, NormalizedMapData>
   ): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
 
-    for (const zone of this.zonesById.values()) {
+    const zonesToValidate: WorldZoneNode[] = [...this.primaryZones];
+    for (const z of this.zonesById.values()) {
+      if (
+        !zonesToValidate.some((p) => p.id === z.id) &&
+        Boolean(allMaps[z.id])
+      ) {
+        zonesToValidate.push(z);
+      }
+    }
+
+    for (const zone of zonesToValidate) {
       const mapData = allMaps[zone.id];
       if (!mapData) {
         errors.push(`Zone "${zone.id}" is missing from loaded maps.`);

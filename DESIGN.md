@@ -1,10 +1,6 @@
 # DESIGN.md — Hệ Thống Thiết Kế "Sơn Mài & Giấy Dó" HD-2D (*Lữ Khách Ký Ức: 1930 – 2045*)
 
-> **Ghi chú chuyển giao kiến trúc (10/11/2026 — đang lập kế hoạch, chưa triển khai):** Runtime hiện tại vẫn là **Canvas 2D side-scroller**, người chơi đi trái/phải, viewport logic `320×180` và HUD kiểu `1/5 + 4/5`. **Mục tiêu mới** là RPG Exploration **top-down 2D góc nhìn 3/4**, di chuyển XY 8 hướng, xây map bằng **Tiled**, có NPC, tương tác theo vùng, va chạm và ra/vào nhà; **WorkAdventure chỉ là tham khảo thiết kế bản đồ**, không phải runtime hay dịch vụ multiplayer. M1 sẽ là **thử nghiệm Phaser 3 + Tiled cô lập**, chỉ thay runtime sau khi build và playtest đạt tiêu chí.
->
-> **Phạm vi tài liệu:** Các mô tả side-scrolling, `1/5 + 4/5`, parallax đi ngang, phím `A/D` và quy trình Climax trong các mục bên dưới là **đặc tả/baseline cũ**, không phải UI/gameplay mục tiêu. **Giữ lại** hệ màu Sơn Mài & Giấy Dó, hiệu ứng OpeningFracture, định hướng kể chuyện và nguyên tắc nguồn sử liệu; **UI đích** là game world toàn màn hình với HUD theo ngữ cảnh, nhật ký/bản đồ mở riêng. Quy ước thư mục đích **chỉ có một nguồn chuẩn** tại [WORKADVENTURE_TOPDOWN.md — Canonical target directory layout](docs/plans/WORKADVENTURE_TOPDOWN.md#canonical-target-directory-layout), nhất quán với [RPG_EXPLORATION.md](docs/plans/RPG_EXPLORATION.md).
-
-Tựa game **Lữ Khách Ký Ức (1930 – 2045)** kế thừa trực tiếp vũ trụ thị giác của [`v0ntr3n/SPST`](https://github.com/v0ntr3n/SPST) và tiêu chuẩn biên tập từ [`pbakaus/impeccable`](https://github.com/pbakaus/impeccable), chuyển hóa thành kiến trúc **Game Đi Cảnh Giải Đố & Điện Ảnh Pixel HD-2D (320×180 Integer-Scaled)** với bảng màu **12 Sắc Độ Sơn Mài & Giấy Dó**.
+Tựa game **Lữ Khách Ký Ức (1930 – 2045)** kế thừa vũ trụ thị giác của [`v0ntr3n/SPST`](https://github.com/v0ntr3n/SPST) và tiêu chuẩn biên tập từ [`pbakaus/impeccable`](https://github.com/pbakaus/impeccable), vận hành trên kiến trúc **2D Top-Down RPG Exploration (Góc nhìn 3/4, 320×180 Integer-Scaled)** với bảng màu **12 Sắc Độ Sơn Mài & Giấy Dó**.
 
 ---
 
@@ -21,31 +17,33 @@ Từ năm **2045** (Kỷ niệm 100 năm thành lập nước), Lữ Khách bư�
 
 ## 2. Hệ Thống Bảng Màu Pixel 12 Sắc Độ (`oklch()` — Sơn Mài & Giấy Dó)
 
-Tuyệt đối loại bỏ màu neon tím/xanh dương AI slop. Toàn bộ ma trận điểm ảnh (`SpriteAtlas`), nền Parallax 4 lớp và ánh sáng Chiaroscuro chỉ sử dụng 12 sắc độ:
+Tuyệt đối loại bỏ màu neon tím/xanh dương AI slop. Toàn bộ ma trận điểm ảnh (`SpriteAtlas`), bản đồ Tiled `.tmj` 5 lớp và ánh sáng Chiaroscuro chỉ sử dụng 12 sắc độ:
 
 | Mã Token | Hex | Vai trò trong Khung Hình Pixel HD-2D & UI |
 | :--- | :--- | :--- |
 | `--lacquer-void` | `#110E0B` | Nền đêm Sơn Mài sâu thẳm, viền bóng tối nhân vật |
-| `--lacquer-deep` | `#1B1612` | Lớp kiến trúc nền xa (Parallax Layer 1) |
-| `--lacquer-elevated` | `#241D17` | Lớp mái ngói, hầm hào, mặt đường (Parallax Layer 2) |
+| `--lacquer-deep` | `#1B1612` | Lớp nền giao diện, mặt nước cảng đêm, tường sâu |
+| `--lacquer-elevated` | `#241D17` | Lớp mái ngói, mặt đường đá cuội, thẻ HUD nổi |
 | `--ink-primary` | `#232116` | Chữ chính trên nền Sổ tay Giấy Dó (Chuẩn AAA) |
 | `--ink-secondary` | `#3E3A2C` | Chữ phụ, bóng đổ trung gian |
-| `--bronze-muted` | `#6E4720` | Gỗ cổ, thân cây đa Tân Trào, bánh xe đạp thồ |
-| `--bronze-antique` | `#8A5A2B` | Viền khung đồng cổ, chi tiết trang phục |
+| `--bronze-muted` | `#6E4720` | Gỗ cổ, thân cây đa Tân Trào, thùng hàng bến cảng |
+| `--bronze-antique` | `#8A5A2B` | Viền khung đồng cổ, chi tiết trang phục, bàn gỗ |
 | `--bronze-bright` | `#D4A55D` | Ánh đèn dầu Cửu Long, tia sáng Chiaroscuro, sao vàng |
 | `--crimson-seal` | `#9E3321` | Đỏ Son Triện, sắc cờ Cách mạng, dấu xác thực sử liệu |
-| `--crimson-vermilion` | `#DF6B57` | Điểm sáng Chu Sa, tia lửa lịch sử |
-| `--parchment-warm` | `#E6E5DC` | Nền Sổ tay Giấy Dó, sương mù, trang sách cổ |
+| `--crimson-vermilion` | `#DF6B57` | Điểm sáng Chu Sa, đèn báo an toàn, tia lửa lịch sử |
+| `--parchment-warm` | `#E6E5DC` | Nền Sổ tay Giấy Dó, thẻ nhiệm vụ, trang sách cổ |
 | `--parchment-light` | `#F4EFE4` | Điểm sáng cao nhất (Highlight), chữ trên nền Sơn Mài |
 
 ---
 
-## 3. Bố Cục Điện Ảnh `1/5 + 4/5` & Cơ Chế Gameplay (Mức 1 + Climax A+B)
+## 3. Kiến Trúc Không Gian Top-Down 2D & Giao Diện Toàn Màn Hình (M1 – M6)
 
-- **Cột Trái Cố Định `1/5` (`#codex-sidebar`)**: Hiển thị **12 Cột Mốc La Mã (`I – XII`)** tương ứng với 12 di vật lịch sử cần khôi phục qua 4 chương. Bấm vào bất kỳ mốc nào sẽ dịch chuyển Lữ Khách tới ngay tọa độ thời gian đó.
-- **Sân Khấu Chính `4/5` (`#stage-viewport`)**:
-  - **Khung Hình Pixel `320×180` (`#pixel-canvas`)**: Dựng cảnh đi ngang (Side-scrolling) với 4 lớp Parallax, hiệu ứng đèn rọi tuần tra (1930), dây thông tin (1945), xe đạp thồ vượt đèo (1954–1975) và kiến thiết đô thị số (1986–2045).
-  - **Độ Khó Mức 1 (Story-Driven / Không có Game Over)**: Khi người chơi bước vào vùng đèn tuần tra hoặc pháo sáng, màn hình chỉ gợn sóng nhẹ (*"Dòng thời gian chao đảo — Lùi về điểm ẩn nấp gần nhất"*) và đưa Lữ Khách lùi lại vài bước ngay tại chỗ.
-  - **Khoảnh Khắc Quyết Định Cuối Chương (Climax C = A + B)**:
-    - **Bước A (Quyết Sách Biện Chứng)**: Ghép đúng văn kiện / chọn đúng đường lối chiến lược kèm số trang *Giáo trình Lịch sử Đảng Cộng sản Việt Nam 2021*.
-    - **Bước B (Đại Cảnh Tương Tác Bùng Nổ)**: Kích hoạt đại cảnh điện ảnh ngay trên canvas (Thắp đuốc Cương lĩnh 1930, Kéo cờ Ba Đình 2/9/1945, Cờ tung bay Điện Biên & Xe tăng tiến vào Dinh Độc Lập 30/4/1975, Đại đô thị số 2045).
+1. **Khung Nhìn Thế Giới Toàn Màn Hình (`.workspace-grid` 100% Width)**:
+   - Thay thế cột dọc `1/5` cũ bằng **Dải Biên Niên Sử La Mã Ngang (`#codex-sidebar.codex-sidebar`)** cao tối đa `54px`, giữ hiển thị tiến độ `#codex-progress-count` (`0 / 12 CỘT MỐC`) và 12 nút mốc `I – XII`.
+   - Khung dựng hình `#pixel-canvas` (`320×180` Integer-Scaled, `imageSmoothingEnabled = false`) sắp xếp độ sâu động theo trục Y (`footY`) cho nhân vật 4 hướng, NPC, lính tuần tra và lớp mái hiên/tán cây (`Foreground`).
+2. **HUD Ngữ Cảnh & Hệ Thống Cửa Sổ Độc Quyền Trạng Thái (`GameMode`)**:
+   - **Objective Tracker (`#hud-objective-tracker`)**: Hiển thị nhiệm vụ chính đang kích hoạt, bước mục tiêu hiện hành và dòng gợi ý dẫn đường (`#hud-active-objective-hint`, bật/tắt bằng phím `H`).
+   - **Hộp Thoại Đa Nhánh & Nhãn Nguồn Sử Liệu (`DialoguePanel` / `#dialogue-modal`)**: Phân biệt rõ `historical_fact` (Triện Đỏ Son), `fictional_npc` (Giấy Dó) và `speculative_2045` (Đồng Cổ 2045).
+   - **Nhật Ký Nhiệm Vụ (`JournalPanel` — `J`)**, **Túi Tư Liệu (`InventoryPanel` — `I`)**, **Sơ Đồ Liên Thông 14 Khu Vực (`WorldMapPanel` — `M`)**, **Bàn Kiểm Định Hồ Sơ (`PuzzlePanel`)**, **Cố Vấn Sử Học (`Q`)** và **Tạm Dừng / Trợ Năng (`PausePanel` — `Tab`/`Esc`)** đều khóa hoàn toàn điều khiển thế giới khi mở và cuộn mượt (`max-height: 90vh; overflow-y: auto`).
+3. **Đáp Ứng Đa Thiết Bị & Trợ Năng**:
+   - Hỗ trợ đầy đủ cả màn hình máy tính (`1280×800`) và điện thoại xoay ngang (`844×390` qua `@media (max-height: 500px) and (orientation: landscape)`), chế độ Giảm chuyển động (`body.reduced-motion`) và Cỡ chữ lớn (`body.text-scale-large`).

@@ -124,10 +124,10 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
     id: 'q_ch2_main_august_revolution',
     eraId: '1945',
     title: 'Chuyển Hướng Chiến Lược & Tổng Khởi Nghĩa (1939 – 1945)',
-    subtitle: 'Chương II · Pác Bó – Tân Trào – Ba Đình',
+    subtitle: 'Chương II · Tân Trào – Quảng Trường Ba Đình',
     category: 'main',
     summary:
-      'Khôi phục 3 cột mốc Hội nghị Trung ương 8 (05/1941), Cao trào kháng Nhật và Tuyên ngôn Độc lập (02/09/1945).',
+      'Điều phối mạng lưới giao liên từ Cây Đa Tân Trào về Quảng trường Ba Đình, khôi phục 3 cột mốc Hội nghị Trung ương 8 (05/1941), Lệnh Tổng khởi nghĩa (08/1945) và Tuyên ngôn Độc lập (02/09/1945).',
     rewardFlag: 'ch2_main_quest_complete',
     provenance: {
       type: 'historical_fact',
@@ -138,33 +138,39 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
     objectives: [
       {
         id: 'obj_ch2_pac_bo',
-        title: 'Khôi phục Nghị quyết Trung ương 8 tại Pác Bó (05/1941)',
+        title: 'Bắt liên lạc tại Cây Đa Tân Trào & Khôi phục Nghị quyết Trung ương 8 (05/1941)',
         description:
-          'Đặt nhiệm vụ giải phóng dân tộc lên hàng đầu và thành lập Mặt trận Việt Minh (Cột mốc IV).',
-        zoneId: 'harbor_square',
+          'Gặp Giao Liên Việt Minh tại Tân Trào để khôi phục Cột mốc IV: Đặt nhiệm vụ giải phóng dân tộc lên hàng đầu.',
+        zoneId: 'tan_trao_banyan',
         completedByMilestone: 'IV',
+        completedByFlag: 'ch2_met_messenger',
         hintText:
-          'Di chuyển tới Cột mốc IV và nhấn [E] để khôi phục văn kiện Hội nghị Trung ương 8.',
+          'Gặp Giao Liên Việt Minh tại Cây Đa Tân Trào và nhấn [E] để khôi phục Cột mốc IV.',
       },
       {
         id: 'obj_ch2_tan_trao',
-        title: 'Phát lệnh Tổng khởi nghĩa tại Tân Trào (08/1945)',
+        title: 'Điều phối Mạng Lưới Giao Liên & Quân Lệnh Số 1 tại Lán Nà Nưa (08/1945)',
         description:
-          'Khôi phục Chỉ thị Nhật - Pháp bắn nhau và hành động của chúng ta cùng Quân lệnh số 1 (Cột mốc V).',
-        zoneId: 'harbor_square',
+          'Giải bài toán Điều phối Mạng lưới Giao liên Tổng khởi nghĩa tại Tân Trào để khôi phục Cột mốc V.',
+        zoneId: 'tan_trao_banyan',
         requiresMilestones: ['IV'],
         completedByMilestone: 'V',
-        hintText: 'Tiếp tục tiến tới Cột mốc V và nhấn [E].',
+        completedByFlag: 'ch2_network_coordinated',
+        completedByEvidence: 'ev_ch2_tan_trao_order',
+        hintText:
+          'Tương tác với Bàn Điều Phối Mạng Lưới Giao Liên tại Tân Trào [E] để phát lệnh Tổng khởi nghĩa (Cột mốc V).',
       },
       {
         id: 'obj_ch2_ba_dinh',
-        title: 'Tuyên ngôn Độc lập tại Quảng trường Ba Đình (02/09/1945)',
+        title: 'Tiến về Quảng Trường Ba Đình & Khôi phục Tuyên ngôn Độc lập (02/09/1945)',
         description:
-          'Khôi phục Cột mốc VI và mở Cổng Thời Gian Chương II.',
-        zoneId: 'harbor_square',
+          'Đi qua cổng tiến về Quảng trường Ba Đình, gặp Nhân chứng Lịch sử khôi phục Cột mốc VI và mở Cổng Thời Gian Chương II.',
+        zoneId: 'ba_dinh_square',
         requiresMilestones: ['IV', 'V'],
         completedByMilestone: 'VI',
-        hintText: 'Tiến tới Cột mốc VI và Cổng Thời Gian cuối màn.',
+        completedByFlag: 'ch2_met_witness',
+        hintText:
+          'Đi qua lối chuyển cảnh sang Quảng Trường Ba Đình, khôi phục Cột mốc VI và mở Cổng Thời Gian.',
       },
     ],
   },
@@ -172,10 +178,10 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
     id: 'q_ch3_main_reunification',
     eraId: '1954_1975',
     title: 'Hai Chiến Lược Cách Mạng & Thống Nhất Đất Nước (1945 – 1975)',
-    subtitle: 'Chương III · Điện Biên Phủ – Trường Sơn – Sài Gòn',
+    subtitle: 'Chương III · Đèo Pha Đin – Hành Lang Mùa Xuân 1975',
     category: 'main',
     summary:
-      'Khôi phục 3 cột mốc Toàn quốc kháng chiến (1946), Chiến thắng Điện Biên Phủ (1954) và Đại thắng mùa Xuân (1975).',
+      'Điều phối tuyến tiếp vận chiến dịch Điện Biên Phủ trên đèo Pha Đin và tiến vào Hành lang Mùa Xuân 1975, khôi phục Cột mốc VII, VIII, IX.',
     rewardFlag: 'ch3_main_quest_complete',
     provenance: {
       type: 'historical_fact',
@@ -186,29 +192,39 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
     objectives: [
       {
         id: 'obj_ch3_resistance_1946',
-        title: 'Khôi phục Lời kêu gọi Toàn quốc kháng chiến (19/12/1946)',
-        description: 'Khôi phục Cột mốc VII và đường lối kháng chiến toàn dân, toàn diện.',
-        zoneId: 'harbor_square',
+        title: 'Gặp Đội Trưởng Dân Công tại Đèo Pha Đin & Khôi phục Cột mốc VII',
+        description:
+          'Khôi phục Lời kêu gọi Toàn quốc kháng chiến (19/12/1946) và đường lối kháng chiến toàn dân, toàn diện.',
+        zoneId: 'pha_din_pass',
         completedByMilestone: 'VII',
-        hintText: 'Tiến tới Cột mốc VII và nhấn [E].',
+        completedByFlag: 'ch3_met_quartermaster',
+        hintText:
+          'Trò chuyện với Đội Trưởng Dân Công Hậu Cần tại Đèo Pha Đin [E] để khôi phục Cột mốc VII.',
       },
       {
         id: 'obj_ch3_dien_bien_1954',
-        title: 'Chiến thắng Điện Biên Phủ (07/05/1954)',
-        description: 'Khôi phục Cột mốc VIII: Lừng lẫy năm châu, chấn động địa cầu.',
-        zoneId: 'harbor_square',
+        title: 'Giải Sa Bàn Tiếp Vận Pha Đin — Chiến thắng Điện Biên Phủ (07/05/1954)',
+        description:
+          'Điều phối phương châm "Đánh chắc, tiến chắc" và tuyến xe thồ Điện Biên trên Sa bàn Hậu cần để khôi phục Cột mốc VIII.',
+        zoneId: 'pha_din_pass',
         requiresMilestones: ['VII'],
         completedByMilestone: 'VIII',
-        hintText: 'Tiến tới Cột mốc VIII và nhấn [E].',
+        completedByFlag: 'ch3_logistics_allocated',
+        completedByEvidence: 'ev_ch3_pha_din_dispatch',
+        hintText:
+          'Tương tác với Sa Bàn Tiếp Vận Chiến Dịch tại Đèo Pha Đin [E] để khôi phục Cột mốc VIII.',
       },
       {
         id: 'obj_ch3_spring_1975',
-        title: 'Đại thắng mùa Xuân & Chiến dịch Hồ Chí Minh (30/04/1975)',
-        description: 'Khôi phục Cột mốc IX và mở Cổng Thời Gian Chương III.',
-        zoneId: 'harbor_square',
+        title: 'Tiến vào Hành Lang Mùa Xuân 1975 & Chiến dịch Hồ Chí Minh (30/04/1975)',
+        description:
+          'Chuyển cảnh sang Hành Lang Mùa Xuân 1975, khôi phục Cột mốc IX và mở Cổng Thời Gian Chương III.',
+        zoneId: 'spring_1975_corridor',
         requiresMilestones: ['VII', 'VIII'],
         completedByMilestone: 'IX',
-        hintText: 'Tiến tới Cột mốc IX và Cổng Thời Gian cuối màn.',
+        completedByFlag: 'ch3_met_signal',
+        hintText:
+          'Đi qua cổng sang Hành Lang Mùa Xuân 1975, khôi phục Cột mốc IX và mở Cổng Thời Gian.',
       },
     ],
   },
@@ -216,10 +232,10 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
     id: 'q_ch4_main_doi_moi',
     eraId: '1986_2045',
     title: 'Đổi Mới Toàn Diện & Khát Vọng Việt Nam 2045 (1986 – 2045)',
-    subtitle: 'Chương IV · Hà Nội Đổi Mới – Kỷ Nguyên Số 2045',
+    subtitle: 'Chương IV · Đại Lộ Đổi Mới 1986 – Quảng Trường Kỷ Nguyên Số 2045',
     category: 'main',
     summary:
-      'Khôi phục 3 cột mốc Đại hội VI Đổi mới (1986), Cương lĩnh 1991/2011 và Tầm nhìn Đại hội XIII đến năm 2045.',
+      'Khôi phục Nghị quyết Đại hội VI (1986), giải Ma trận Nhân quả Quyết sách Đổi mới và tiến tới Quảng trường Kỷ Nguyên Số 2045 hoàn thành trọn vẹn 12/12 Cột mốc.',
     rewardFlag: 'ch4_main_quest_complete',
     provenance: {
       type: 'historical_fact',
@@ -230,29 +246,39 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
     objectives: [
       {
         id: 'obj_ch4_doi_moi_1986',
-        title: 'Khôi phục Nghị quyết Đại hội VI — Khởi xướng Đổi mới (12/1986)',
-        description: 'Khôi phục Cột mốc X: Đổi mới tư duy kinh tế.',
-        zoneId: 'harbor_square',
+        title: 'Gặp Chuyên Gia Kinh Tế tại Đại Lộ Đổi Mới & Khôi phục Đại hội VI (12/1986)',
+        description:
+          'Khôi phục Cột mốc X: Đổi mới tư duy kinh tế, xóa bỏ cơ chế tập trung quan liêu bao cấp.',
+        zoneId: 'doi_moi_avenue',
         completedByMilestone: 'X',
-        hintText: 'Tiến tới Cột mốc X và nhấn [E].',
+        completedByFlag: 'ch4_met_economist',
+        hintText:
+          'Trò chuyện với Chuyên Gia Nghiên Cứu Đổi Mới tại Đại Lộ Đổi Mới 1986 [E] để khôi phục Cột mốc X.',
       },
       {
         id: 'obj_ch4_platform_2011',
-        title: 'Khôi phục Cương lĩnh 1991 & Cương lĩnh (Bổ sung, phát triển 2011)',
-        description: 'Khôi phục Cột mốc XI: Công nghiệp hóa, hiện đại hóa và hội nhập quốc tế.',
-        zoneId: 'harbor_square',
+        title: 'Giải Ma Trận Nhân Quả Quyết Sách — Cương lĩnh 1991 & 2011',
+        description:
+          'Liên kết chuỗi nhân quả quyết sách Đổi mới và mô hình kinh tế thị trường định hướng XHCN để khôi phục Cột mốc XI.',
+        zoneId: 'doi_moi_avenue',
         requiresMilestones: ['X'],
         completedByMilestone: 'XI',
-        hintText: 'Tiến tới Cột mốc XI và nhấn [E].',
+        completedByFlag: 'ch4_policy_linked',
+        completedByEvidence: 'ev_ch4_doi_moi_resolution',
+        hintText:
+          'Tương tác với Bàn Ma Trận Quyết Sách Đổi Mới [E] để khôi phục Cột mốc XI.',
       },
       {
         id: 'obj_ch4_vision_2045',
-        title: 'Khôi phục Nghị quyết Đại hội XIII & Khát vọng 2045',
-        description: 'Khôi phục Cột mốc XII và hoàn thành trọn vẹn Biên niên sử 1930 – 2045.',
-        zoneId: 'harbor_square',
+        title: 'Tiến tới Quảng Trường Kỷ Nguyên Số 2045 & Khôi phục Tầm nhìn Đại hội XIII',
+        description:
+          'Bước sang Quảng Trường Kỷ Nguyên Số 2045, khôi phục Cột mốc XII và hoàn thành Biên niên sử 1930 – 2045.',
+        zoneId: 'nexus_2045_plaza',
         requiresMilestones: ['X', 'XI'],
         completedByMilestone: 'XII',
-        hintText: 'Tiến tới Cột mốc XII và Cổng Thời Gian cuối màn.',
+        completedByFlag: 'ch4_met_archivist_2045',
+        hintText:
+          'Đi qua cổng sang Quảng Trường Kỷ Nguyên Số 2045, khôi phục Cột mốc XII và mở Cổng Thời Gian.',
       },
     ],
   },

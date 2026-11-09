@@ -8,6 +8,7 @@
  */
 
 import { CH1_DOSSIER_PUZZLE } from '../data/chapters/ch1_1930';
+import { getEraPuzzleForMapOrId } from '../data/chapters/ch2_3_4_mechanics';
 import { CHAPTERS } from '../data/chronicles';
 import { OpeningFractureController } from '../engine/OpeningFracture';
 import {
@@ -420,9 +421,14 @@ export class LuKhachKyUcGame {
     this.hud.showToast('🔄 Đã xóa dữ liệu lưu và đặt lại hành trình từ đầu Chương I!');
   }
 
-  public openDossierPuzzle(puzzle: DossierPuzzleDefinition = CH1_DOSSIER_PUZZLE): void {
-    const attempts = this.puzzleAttemptCounts.get(puzzle.id) ?? 0;
-    (this.hud as unknown as HudExtendedMethods).openDossierPuzzleModal?.(puzzle, attempts);
+  public openDossierPuzzle(puzzle?: DossierPuzzleDefinition): void {
+    const resolved =
+      puzzle ?? getEraPuzzleForMapOrId(this.currentMap.id, this.currentChapter.id);
+    const attempts = this.puzzleAttemptCounts.get(resolved.id) ?? 0;
+    (this.hud as unknown as HudExtendedMethods).openDossierPuzzleModal?.(
+      resolved,
+      attempts
+    );
   }
 
   public submitDossierPuzzle(
@@ -434,10 +440,13 @@ export class LuKhachKyUcGame {
     feedback: string;
     showProgressiveHint: boolean;
   } {
-    const puzzle = CH1_DOSSIER_PUZZLE;
-    const prevAttempts = this.puzzleAttemptCounts.get(puzzleId || puzzle.id) ?? 0;
+    const puzzle = getEraPuzzleForMapOrId(
+      puzzleId || this.currentMap.id,
+      this.currentChapter.id
+    );
+    const prevAttempts = this.puzzleAttemptCounts.get(puzzle.id) ?? 0;
     const attemptCount = prevAttempts + 1;
-    this.puzzleAttemptCounts.set(puzzleId || puzzle.id, attemptCount);
+    this.puzzleAttemptCounts.set(puzzle.id, attemptCount);
 
     let allAuthentic = true;
     for (const slot of puzzle.slots) {
@@ -455,7 +464,7 @@ export class LuKhachKyUcGame {
         solved: false,
         attemptCount,
         feedback:
-          'Chưa chính xác! Hãy đối chiếu kỹ nội dung Chánh cương vắn tắt (02/1930) và thử lại.',
+          'Chưa chính xác! Hãy đối chiếu kỹ nội dung văn kiện lịch sử và thử lại.',
         showProgressiveHint: attemptCount >= 2,
       };
     }
@@ -477,14 +486,13 @@ export class LuKhachKyUcGame {
     this.sound.playSealStamp();
     this.syncHudWithState();
     this.hud.showToast(
-      '✓ Đã xác thực Cương lĩnh chính trị đầu tiên (02/1930) & khôi phục Cột mốc III!'
+      `✓ Đã xác thực ${puzzle.title} & khôi phục Cột mốc ${puzzle.rewardMilestone ?? 'III'}!`
     );
 
     return {
       solved: true,
       attemptCount,
-      feedback:
-        '✓ Xác thực hoàn tất! Đã khôi phục Cột mốc III (1930 – 1931) và mở khóa Cổng Thời Gian 1930.',
+      feedback: `✓ Xác thực hoàn tất! Đã khôi phục Cột mốc ${puzzle.rewardMilestone ?? 'III'} và mở khóa tiến trình tiếp theo.`,
       showProgressiveHint: false,
     };
   }
@@ -699,13 +707,34 @@ export class LuKhachKyUcGame {
     this.saveManager.save(data);
   }
 
+  private getDefaultZoneForEra(eraId: EraId): string {
+    this.allMaps = getAllBuiltInMaps();
+    if (eraId === '1945' && this.allMaps['tan_trao_banyan']) {
+      return 'tan_trao_banyan';
+    }
+    if (eraId === '1954_1975' && this.allMaps['pha_din_pass']) {
+      return 'pha_din_pass';
+    }
+    if (eraId === '1986_2045' && this.allMaps['doi_moi_avenue']) {
+      return 'doi_moi_avenue';
+    }
+    return 'harbor_square';
+  }
+
   public switchEra(eraId: EraId): void {
     const idx = CHAPTERS.findIndex((c) => c.id === eraId);
     if (idx === -1) return;
 
     this.store.bumpTransitionToken();
     this.store.currentChapterIndex = idx;
-    this.loadMap('harbor_square', 'default_spawn', { x: 85, y: 384 }, 'right');
+    const defaultZoneId = this.getDefaultZoneForEra(eraId);
+    this.store.unlockCheckpoint(defaultZoneId, defaultZoneId);
+    this.loadMap(
+      defaultZoneId,
+      'default_spawn',
+      defaultZoneId === 'harbor_square' ? { x: 85, y: 384 } : undefined,
+      'right'
+    );
     this.climaxBurstProgress = 0;
     this.isBurstAnimating = false;
     this.hazardCooldown = 0;
@@ -828,9 +857,13 @@ export class LuKhachKyUcGame {
       return true;
     }
 
-    // 3. Tương tác với Bàn Đối Chiếu Hồ Sơ Lịch Sử (Dossier Puzzle)
+    // 3. Tương tác với Bàn Đối Chiếu Hồ Sơ / Sa Bàn Chiến Lược (Dossier Puzzle)
     if (candidate?.kind === 'puzzle') {
-      this.openDossierPuzzle(CH1_DOSSIER_PUZZLE);
+      const puzzle = getEraPuzzleForMapOrId(
+        candidate.interactable?.id ?? this.currentMap.id,
+        chapter.id
+      );
+      this.openDossierPuzzle(puzzle);
       return true;
     }
 
@@ -973,7 +1006,14 @@ export class LuKhachKyUcGame {
 
     if (this.store.currentChapterIndex < CHAPTERS.length - 1) {
       this.store.currentChapterIndex++;
-      this.loadMap('harbor_square', 'default_spawn', { x: 85, y: 384 }, 'right');
+      const defaultZoneId = this.getDefaultZoneForEra(this.currentChapter.id);
+      this.store.unlockCheckpoint(defaultZoneId, defaultZoneId);
+      this.loadMap(
+        defaultZoneId,
+        'default_spawn',
+        defaultZoneId === 'harbor_square' ? { x: 85, y: 384 } : undefined,
+        'right'
+      );
       this.climaxBurstProgress = 0;
       this.isBurstAnimating = false;
       this.hazardCooldown = 0;

@@ -2424,6 +2424,1156 @@ function buildSecretArchiveRaw(): TiledMapJson {
   };
 }
 
+function buildTanTraoBanyanRaw(): TiledMapJson {
+  const cols = 48;
+  const rows = 36;
+  const ts = 16;
+
+  const ground = createGrid(cols, rows, 1);
+  fillRect(ground, cols, rows, 64, 224, 672, 160, ts, 2);
+
+  const structures = createGrid(cols, rows, 0);
+  fillRect(structures, cols, rows, 224, 64, 320, 96, ts, 9);
+  fillRect(structures, cols, rows, 160, 192, 16, 16, ts, 11);
+
+  const foreground = createGrid(cols, rows, 0);
+  fillRect(foreground, cols, rows, 224, 48, 320, 24, ts, 12);
+  fillRect(foreground, cols, rows, 144, 160, 48, 48, ts, 13);
+
+  const collision = createGrid(cols, rows, 0);
+  fillRect(collision, cols, rows, 224, 64, 320, 96, ts, 16);
+  fillRect(collision, cols, rows, 160, 192, 16, 16, ts, 16);
+
+  return {
+    width: cols,
+    height: rows,
+    tilewidth: ts,
+    tileheight: ts,
+    orientation: 'orthogonal',
+    renderorder: 'right-down',
+    properties: [
+      { name: 'id', type: 'string', value: 'tan_trao_banyan' },
+      { name: 'title', type: 'string', value: 'Đình Tân Trào & Cây Đa Lịch Sử (08/1945)' },
+      { name: 'eraId', type: 'string', value: '1945' },
+      { name: 'districtType', type: 'string', value: 'hub' },
+      { name: 'defaultSpawnId', type: 'string', value: 'default_spawn' },
+    ],
+    tilesets: [
+      {
+        firstgid: 1,
+        name: 'harbor_tiles',
+        image: '/tilesets/ch1/harbor_tiles.png',
+        tilewidth: 16,
+        tileheight: 16,
+        tilecount: 64,
+        columns: 8,
+      },
+    ],
+    layers: makeStandardLayers(cols, rows, {
+      ground,
+      structures,
+      foreground,
+      collision,
+      lightOccluders: [
+        {
+          id: 101,
+          name: 'shelter_banyan_canopy',
+          type: 'shelter',
+          x: 128,
+          y: 160,
+          width: 96,
+          height: 64,
+          properties: [{ name: 'label', type: 'string', value: 'Tán Cây Đa Tân Trào' }],
+        },
+        {
+          id: 102,
+          name: 'shelter_dinh_tan_trao_porch',
+          type: 'shelter',
+          x: 256,
+          y: 160,
+          width: 160,
+          height: 48,
+          properties: [{ name: 'label', type: 'string', value: 'Hiên Đình Tân Trào' }],
+        },
+      ],
+      npcs: [
+        {
+          id: 201,
+          name: 'npc_tan_trao_messenger',
+          type: 'npc',
+          x: 240,
+          y: 272,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'npcId', type: 'string', value: 'npc_tan_trao_messenger' },
+            { name: 'name', type: 'string', value: 'Giao Liên Hoàng Việt' },
+            { name: 'role', type: 'string', value: 'Giao Liên Chiến Khu Tân Trào' },
+            { name: 'facing', type: 'string', value: 'down' },
+            { name: 'dialogueId', type: 'string', value: 'dlg_tan_trao_messenger' },
+            { name: 'fictionTag', type: 'string', value: 'fictional_npc' },
+            { name: 'approachRadius', type: 'int', value: 36 },
+            { name: 'milestoneRoman', type: 'string', value: 'IV' },
+          ],
+        },
+      ],
+      interactables: [
+        {
+          id: 301,
+          name: 'ev_ch2_tan_trao_order',
+          type: 'evidence',
+          x: 368,
+          y: 240,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'evidence' },
+            {
+              name: 'label',
+              type: 'string',
+              value: 'Quân Lệnh Số 1 & Nghị Quyết Quốc Dân Đại Hội Tân Trào',
+            },
+            { name: 'actionId', type: 'string', value: 'inspect_tan_trao_order' },
+            { name: 'evidenceId', type: 'string', value: 'ev_ch2_tan_trao_order' },
+            { name: 'milestoneId', type: 'string', value: 'IV' },
+            { name: 'grantsFlag', type: 'string', value: 'ch2_read_order' },
+          ],
+        },
+        {
+          id: 302,
+          name: 'puzzle_ch2_dispatch_network',
+          type: 'puzzle',
+          x: 496,
+          y: 272,
+          width: 32,
+          height: 24,
+          properties: [
+            { name: 'kind', type: 'string', value: 'puzzle' },
+            {
+              name: 'label',
+              type: 'string',
+              value: 'Trạm Điều Phối Mạng Lưới Giao Liên Tổng Khởi Nghĩa (08/1945)',
+            },
+            { name: 'actionId', type: 'string', value: 'open_dossier_puzzle' },
+            { name: 'grantsFlag', type: 'string', value: 'ch2_network_coordinated' },
+            { name: 'milestoneId', type: 'string', value: 'V' },
+          ],
+        },
+        {
+          id: 303,
+          name: 'cp_tan_trao_banyan',
+          type: 'checkpoint',
+          x: 192,
+          y: 320,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'checkpoint' },
+            { name: 'label', type: 'string', value: 'Đèn Báo An Toàn Gốc Đa Tân Trào' },
+            { name: 'actionId', type: 'string', value: 'activate_checkpoint' },
+          ],
+        },
+      ],
+      entrances: [
+        {
+          id: 401,
+          name: 'default_spawn',
+          type: 'spawn',
+          x: 128,
+          y: 304,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+        {
+          id: 402,
+          name: 'from_ba_dinh',
+          type: 'spawn',
+          x: 640,
+          y: 304,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'left' }],
+        },
+        {
+          id: 403,
+          name: 'portal_to_ba_dinh',
+          type: 'portal',
+          x: 688,
+          y: 288,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'ba_dinh_square' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_tan_trao' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Tiến Về Quảng Trường Ba Đình' },
+          ],
+        },
+      ],
+      checkpoints: [
+        {
+          id: 601,
+          name: 'cp_tan_trao_banyan',
+          type: 'checkpoint',
+          x: 192,
+          y: 320,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+      ],
+    }),
+  };
+}
+
+function buildBaDinhSquareRaw(): TiledMapJson {
+  const cols = 52;
+  const rows = 36;
+  const ts = 16;
+
+  const ground = createGrid(cols, rows, 1);
+  fillRect(ground, cols, rows, 48, 224, 736, 160, ts, 2);
+
+  const structures = createGrid(cols, rows, 0);
+  fillRect(structures, cols, rows, 288, 64, 256, 96, ts, 9);
+
+  const foreground = createGrid(cols, rows, 0);
+  fillRect(foreground, cols, rows, 288, 48, 256, 24, ts, 12);
+
+  const collision = createGrid(cols, rows, 0);
+  fillRect(collision, cols, rows, 288, 64, 256, 96, ts, 16);
+
+  return {
+    width: cols,
+    height: rows,
+    tilewidth: ts,
+    tileheight: ts,
+    orientation: 'orthogonal',
+    renderorder: 'right-down',
+    properties: [
+      { name: 'id', type: 'string', value: 'ba_dinh_square' },
+      { name: 'title', type: 'string', value: 'Quảng Trường Ba Đình Lịch Sử (02/09/1945)' },
+      { name: 'eraId', type: 'string', value: '1945' },
+      { name: 'districtType', type: 'string', value: 'finale' },
+      { name: 'defaultSpawnId', type: 'string', value: 'from_tan_trao' },
+    ],
+    tilesets: [
+      {
+        firstgid: 1,
+        name: 'harbor_tiles',
+        image: '/tilesets/ch1/harbor_tiles.png',
+        tilewidth: 16,
+        tileheight: 16,
+        tilecount: 64,
+        columns: 8,
+      },
+    ],
+    layers: makeStandardLayers(cols, rows, {
+      ground,
+      structures,
+      foreground,
+      collision,
+      lightOccluders: [
+        {
+          id: 101,
+          name: 'shelter_ba_dinh_banner',
+          type: 'shelter',
+          x: 208,
+          y: 176,
+          width: 128,
+          height: 48,
+          properties: [{ name: 'label', type: 'string', value: 'Khán Đài Quảng Trường Ba Đình' }],
+        },
+      ],
+      npcs: [
+        {
+          id: 201,
+          name: 'npc_ba_dinh_witness',
+          type: 'npc',
+          x: 352,
+          y: 272,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'npcId', type: 'string', value: 'npc_ba_dinh_witness' },
+            { name: 'name', type: 'string', value: 'Cụ Nguyễn Văn Thanh' },
+            { name: 'role', type: 'string', value: 'Nhân Chứng Quảng Trường Ba Đình' },
+            { name: 'facing', type: 'string', value: 'down' },
+            { name: 'dialogueId', type: 'string', value: 'dlg_ba_dinh_witness' },
+            { name: 'fictionTag', type: 'string', value: 'fictional_npc' },
+            { name: 'approachRadius', type: 'int', value: 36 },
+            { name: 'milestoneRoman', type: 'string', value: 'VI' },
+          ],
+        },
+      ],
+      interactables: [
+        {
+          id: 301,
+          name: 'ev_ch2_independence_declaration',
+          type: 'evidence',
+          x: 464,
+          y: 256,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'evidence' },
+            { name: 'label', type: 'string', value: 'Bản Tuyên Ngôn Độc Lập (02/09/1945)' },
+            { name: 'actionId', type: 'string', value: 'inspect_declaration' },
+            { name: 'evidenceId', type: 'string', value: 'ev_ch2_tan_trao_order' },
+            { name: 'milestoneId', type: 'string', value: 'VI' },
+            { name: 'grantsFlag', type: 'string', value: 'ch2_read_declaration' },
+          ],
+        },
+        {
+          id: 302,
+          name: 'climax_gate_1945',
+          type: 'climax_gate',
+          x: 608,
+          y: 288,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'kind', type: 'string', value: 'climax_gate' },
+            {
+              name: 'label',
+              type: 'string',
+              value: 'Cổng Thời Gian 1945 — Lễ Đài Độc Lập Ba Đình',
+            },
+            { name: 'actionId', type: 'string', value: 'trigger_climax' },
+            { name: 'milestoneId', type: 'string', value: 'VI' },
+          ],
+        },
+        {
+          id: 303,
+          name: 'cp_ba_dinh_tribune',
+          type: 'checkpoint',
+          x: 240,
+          y: 320,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'checkpoint' },
+            { name: 'label', type: 'string', value: 'Đèn Báo An Toàn Quảng Trường Ba Đình' },
+            { name: 'actionId', type: 'string', value: 'activate_checkpoint' },
+          ],
+        },
+      ],
+      entrances: [
+        {
+          id: 401,
+          name: 'default_spawn',
+          type: 'spawn',
+          x: 128,
+          y: 304,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+        {
+          id: 402,
+          name: 'from_tan_trao',
+          type: 'spawn',
+          x: 128,
+          y: 304,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+        {
+          id: 403,
+          name: 'portal_to_tan_trao',
+          type: 'portal',
+          x: 64,
+          y: 288,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'tan_trao_banyan' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_ba_dinh' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Về Chiến Khu Tân Trào' },
+          ],
+        },
+      ],
+      checkpoints: [
+        {
+          id: 601,
+          name: 'cp_ba_dinh_tribune',
+          type: 'checkpoint',
+          x: 240,
+          y: 320,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+      ],
+    }),
+  };
+}
+
+function buildPhaDinPassRaw(): TiledMapJson {
+  const cols = 52;
+  const rows = 36;
+  const ts = 16;
+
+  const ground = createGrid(cols, rows, 1);
+  fillRect(ground, cols, rows, 64, 224, 704, 160, ts, 2);
+
+  const structures = createGrid(cols, rows, 0);
+  fillRect(structures, cols, rows, 192, 64, 384, 96, ts, 9);
+
+  const collision = createGrid(cols, rows, 0);
+  fillRect(collision, cols, rows, 192, 64, 384, 96, ts, 16);
+
+  return {
+    width: cols,
+    height: rows,
+    tilewidth: ts,
+    tileheight: ts,
+    orientation: 'orthogonal',
+    renderorder: 'right-down',
+    properties: [
+      { name: 'id', type: 'string', value: 'pha_din_pass' },
+      { name: 'title', type: 'string', value: 'Đèo Pha Đin & Tuyến Tiếp Vận Điện Biên Phủ (1954)' },
+      { name: 'eraId', type: 'string', value: '1954_1975' },
+      { name: 'districtType', type: 'string', value: 'hub' },
+      { name: 'defaultSpawnId', type: 'string', value: 'default_spawn' },
+    ],
+    tilesets: [
+      {
+        firstgid: 1,
+        name: 'harbor_tiles',
+        image: '/tilesets/ch1/harbor_tiles.png',
+        tilewidth: 16,
+        tileheight: 16,
+        tilecount: 64,
+        columns: 8,
+      },
+    ],
+    layers: makeStandardLayers(cols, rows, {
+      ground,
+      structures,
+      collision,
+      lightOccluders: [
+        {
+          id: 101,
+          name: 'shelter_pha_din_camouflage',
+          type: 'shelter',
+          x: 208,
+          y: 160,
+          width: 128,
+          height: 56,
+          properties: [{ name: 'label', type: 'string', value: 'Lưới Ngụy Trang Đèo Pha Đin' }],
+        },
+      ],
+      npcs: [
+        {
+          id: 201,
+          name: 'npc_pha_din_quartermaster',
+          type: 'npc',
+          x: 256,
+          y: 272,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'npcId', type: 'string', value: 'npc_pha_din_quartermaster' },
+            { name: 'name', type: 'string', value: 'Đội Trưởng Dân Công Bùi Sơn' },
+            { name: 'role', type: 'string', value: 'Chỉ Huy Đoàn Xe Thồ Pha Đin' },
+            { name: 'facing', type: 'string', value: 'down' },
+            { name: 'dialogueId', type: 'string', value: 'dlg_pha_din_quartermaster' },
+            { name: 'fictionTag', type: 'string', value: 'fictional_npc' },
+            { name: 'approachRadius', type: 'int', value: 36 },
+            { name: 'milestoneRoman', type: 'string', value: 'VII' },
+          ],
+        },
+      ],
+      interactables: [
+        {
+          id: 301,
+          name: 'ev_ch3_pha_din_dispatch',
+          type: 'evidence',
+          x: 384,
+          y: 240,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'evidence' },
+            {
+              name: 'label',
+              type: 'string',
+              value: 'Chỉ Thị "Đánh Chắc, Tiến Chắc" & Sổ Tiếp Vận Điện Biên (1954)',
+            },
+            { name: 'actionId', type: 'string', value: 'inspect_pha_din_dispatch' },
+            { name: 'evidenceId', type: 'string', value: 'ev_ch3_pha_din_dispatch' },
+            { name: 'milestoneId', type: 'string', value: 'VII' },
+            { name: 'grantsFlag', type: 'string', value: 'ch3_read_dispatch' },
+          ],
+        },
+        {
+          id: 302,
+          name: 'puzzle_ch3_supply_logistics',
+          type: 'puzzle',
+          x: 512,
+          y: 272,
+          width: 32,
+          height: 24,
+          properties: [
+            { name: 'kind', type: 'string', value: 'puzzle' },
+            {
+              name: 'label',
+              type: 'string',
+              value: 'Sa Bàn Điều Phối Tuyến Hậu Cần Chiến Lược (1954–1975)',
+            },
+            { name: 'actionId', type: 'string', value: 'open_dossier_puzzle' },
+            { name: 'grantsFlag', type: 'string', value: 'ch3_logistics_allocated' },
+            { name: 'milestoneId', type: 'string', value: 'VIII' },
+          ],
+        },
+        {
+          id: 303,
+          name: 'cp_pha_din_depot',
+          type: 'checkpoint',
+          x: 192,
+          y: 320,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'checkpoint' },
+            { name: 'label', type: 'string', value: 'Đèn Báo An Toàn Trạm Tiếp Vận Pha Đin' },
+            { name: 'actionId', type: 'string', value: 'activate_checkpoint' },
+          ],
+        },
+      ],
+      entrances: [
+        {
+          id: 401,
+          name: 'default_spawn',
+          type: 'spawn',
+          x: 128,
+          y: 304,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+        {
+          id: 402,
+          name: 'from_spring_1975',
+          type: 'spawn',
+          x: 656,
+          y: 304,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'left' }],
+        },
+        {
+          id: 403,
+          name: 'portal_to_spring_1975',
+          type: 'portal',
+          x: 704,
+          y: 288,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'spring_1975_corridor' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_pha_din' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            {
+              name: 'label',
+              type: 'string',
+              value: 'Tiến Tới Hành Lang Chiến Dịch Hồ Chí Minh (1975)',
+            },
+          ],
+        },
+      ],
+      checkpoints: [
+        {
+          id: 601,
+          name: 'cp_pha_din_depot',
+          type: 'checkpoint',
+          x: 192,
+          y: 320,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+      ],
+    }),
+  };
+}
+
+function buildSpring1975CorridorRaw(): TiledMapJson {
+  const cols = 48;
+  const rows = 34;
+  const ts = 16;
+
+  const ground = createGrid(cols, rows, 1);
+  fillRect(ground, cols, rows, 48, 208, 672, 160, ts, 2);
+
+  const structures = createGrid(cols, rows, 0);
+  fillRect(structures, cols, rows, 224, 64, 320, 96, ts, 9);
+
+  const collision = createGrid(cols, rows, 0);
+  fillRect(collision, cols, rows, 224, 64, 320, 96, ts, 16);
+
+  return {
+    width: cols,
+    height: rows,
+    tilewidth: ts,
+    tileheight: ts,
+    orientation: 'orthogonal',
+    renderorder: 'right-down',
+    properties: [
+      { name: 'id', type: 'string', value: 'spring_1975_corridor' },
+      { name: 'title', type: 'string', value: 'Hành Lang Chiến Dịch Hồ Chí Minh (30/04/1975)' },
+      { name: 'eraId', type: 'string', value: '1954_1975' },
+      { name: 'districtType', type: 'string', value: 'finale' },
+      { name: 'defaultSpawnId', type: 'string', value: 'from_pha_din' },
+    ],
+    tilesets: [
+      {
+        firstgid: 1,
+        name: 'harbor_tiles',
+        image: '/tilesets/ch1/harbor_tiles.png',
+        tilewidth: 16,
+        tileheight: 16,
+        tilecount: 64,
+        columns: 8,
+      },
+    ],
+    layers: makeStandardLayers(cols, rows, {
+      ground,
+      structures,
+      collision,
+      lightOccluders: [
+        {
+          id: 101,
+          name: 'shelter_command_bunker',
+          type: 'shelter',
+          x: 192,
+          y: 160,
+          width: 128,
+          height: 48,
+          properties: [{ name: 'label', type: 'string', value: 'Lán Chỉ Huy Chiến Dịch' }],
+        },
+      ],
+      npcs: [
+        {
+          id: 201,
+          name: 'npc_1975_signal_officer',
+          type: 'npc',
+          x: 336,
+          y: 256,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'npcId', type: 'string', value: 'npc_1975_signal_officer' },
+            { name: 'name', type: 'string', value: 'Chiến Sĩ Thông Tin Lê Minh' },
+            { name: 'role', type: 'string', value: 'Đài Thông Tin Chiến Dịch Hồ Chí Minh' },
+            { name: 'facing', type: 'string', value: 'down' },
+            { name: 'dialogueId', type: 'string', value: 'dlg_1975_signal_officer' },
+            { name: 'fictionTag', type: 'string', value: 'fictional_npc' },
+            { name: 'approachRadius', type: 'int', value: 36 },
+            { name: 'milestoneRoman', type: 'string', value: 'IX' },
+          ],
+        },
+      ],
+      interactables: [
+        {
+          id: 301,
+          name: 'ev_ch3_campaign_telegram',
+          type: 'evidence',
+          x: 448,
+          y: 240,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'evidence' },
+            {
+              name: 'label',
+              type: 'string',
+              value: 'Mệnh Lệnh "Thần Tốc, Táo Bạo" — Chiến Dịch Hồ Chí Minh (04/1975)',
+            },
+            { name: 'actionId', type: 'string', value: 'inspect_campaign_telegram' },
+            { name: 'evidenceId', type: 'string', value: 'ev_ch3_pha_din_dispatch' },
+            { name: 'milestoneId', type: 'string', value: 'IX' },
+            { name: 'grantsFlag', type: 'string', value: 'ch3_read_telegram' },
+          ],
+        },
+        {
+          id: 302,
+          name: 'climax_gate_1975',
+          type: 'climax_gate',
+          x: 592,
+          y: 272,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'kind', type: 'string', value: 'climax_gate' },
+            {
+              name: 'label',
+              type: 'string',
+              value: 'Cổng Thời Gian 1975 — Đại Thắng Mùa Xuân Thống Nhất',
+            },
+            { name: 'actionId', type: 'string', value: 'trigger_climax' },
+            { name: 'milestoneId', type: 'string', value: 'IX' },
+          ],
+        },
+        {
+          id: 303,
+          name: 'cp_spring_1975_post',
+          type: 'checkpoint',
+          x: 224,
+          y: 304,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'checkpoint' },
+            { name: 'label', type: 'string', value: 'Đèn Báo An Toàn Sở Chỉ Huy Tiền Phương' },
+            { name: 'actionId', type: 'string', value: 'activate_checkpoint' },
+          ],
+        },
+      ],
+      entrances: [
+        {
+          id: 401,
+          name: 'default_spawn',
+          type: 'spawn',
+          x: 128,
+          y: 288,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+        {
+          id: 402,
+          name: 'from_pha_din',
+          type: 'spawn',
+          x: 128,
+          y: 288,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+        {
+          id: 403,
+          name: 'portal_to_pha_din',
+          type: 'portal',
+          x: 64,
+          y: 272,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'pha_din_pass' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_spring_1975' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Về Đèo Pha Đin' },
+          ],
+        },
+      ],
+      checkpoints: [
+        {
+          id: 601,
+          name: 'cp_spring_1975_post',
+          type: 'checkpoint',
+          x: 224,
+          y: 304,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+      ],
+    }),
+  };
+}
+
+function buildDoiMoiAvenueRaw(): TiledMapJson {
+  const cols = 48;
+  const rows = 34;
+  const ts = 16;
+
+  const ground = createGrid(cols, rows, 1);
+  fillRect(ground, cols, rows, 48, 208, 672, 160, ts, 2);
+
+  const structures = createGrid(cols, rows, 0);
+  fillRect(structures, cols, rows, 192, 64, 384, 96, ts, 9);
+
+  const collision = createGrid(cols, rows, 0);
+  fillRect(collision, cols, rows, 192, 64, 384, 96, ts, 16);
+
+  return {
+    width: cols,
+    height: rows,
+    tilewidth: ts,
+    tileheight: ts,
+    orientation: 'orthogonal',
+    renderorder: 'right-down',
+    properties: [
+      { name: 'id', type: 'string', value: 'doi_moi_avenue' },
+      { name: 'title', type: 'string', value: 'Đại Lộ Đổi Mới & Hội Nhập (1986 – 2011)' },
+      { name: 'eraId', type: 'string', value: '1986_2045' },
+      { name: 'districtType', type: 'string', value: 'hub' },
+      { name: 'defaultSpawnId', type: 'string', value: 'default_spawn' },
+    ],
+    tilesets: [
+      {
+        firstgid: 1,
+        name: 'harbor_tiles',
+        image: '/tilesets/ch1/harbor_tiles.png',
+        tilewidth: 16,
+        tileheight: 16,
+        tilecount: 64,
+        columns: 8,
+      },
+    ],
+    layers: makeStandardLayers(cols, rows, {
+      ground,
+      structures,
+      collision,
+      lightOccluders: [
+        {
+          id: 101,
+          name: 'shelter_doi_moi_arcade',
+          type: 'shelter',
+          x: 192,
+          y: 160,
+          width: 128,
+          height: 48,
+          properties: [{ name: 'label', type: 'string', value: 'Mái Hiên Đại Lộ Đổi Mới' }],
+        },
+      ],
+      npcs: [
+        {
+          id: 201,
+          name: 'npc_doi_moi_economist',
+          type: 'npc',
+          x: 256,
+          y: 256,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'npcId', type: 'string', value: 'npc_doi_moi_economist' },
+            { name: 'name', type: 'string', value: 'Chuyên Gia Kinh Tế Trần Hòa' },
+            { name: 'role', type: 'string', value: 'Ban Nghiên Cứu Đổi Mới 1986' },
+            { name: 'facing', type: 'string', value: 'down' },
+            { name: 'dialogueId', type: 'string', value: 'dlg_doi_moi_economist' },
+            { name: 'fictionTag', type: 'string', value: 'fictional_npc' },
+            { name: 'approachRadius', type: 'int', value: 36 },
+            { name: 'milestoneRoman', type: 'string', value: 'X' },
+          ],
+        },
+      ],
+      interactables: [
+        {
+          id: 301,
+          name: 'ev_ch4_doi_moi_resolution',
+          type: 'evidence',
+          x: 368,
+          y: 224,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'evidence' },
+            {
+              name: 'label',
+              type: 'string',
+              value: 'Nghị Quyết Đại Hội VI (12/1986) & Cương Lĩnh 1991/2011',
+            },
+            { name: 'actionId', type: 'string', value: 'inspect_doi_moi_resolution' },
+            { name: 'evidenceId', type: 'string', value: 'ev_ch4_doi_moi_resolution' },
+            { name: 'milestoneId', type: 'string', value: 'X' },
+            { name: 'grantsFlag', type: 'string', value: 'ch4_read_doi_moi' },
+          ],
+        },
+        {
+          id: 302,
+          name: 'puzzle_ch4_causal_policy',
+          type: 'puzzle',
+          x: 496,
+          y: 256,
+          width: 32,
+          height: 24,
+          properties: [
+            { name: 'kind', type: 'string', value: 'puzzle' },
+            {
+              name: 'label',
+              type: 'string',
+              value: 'Bảng Đối Chiếu Nhân Quả Chính Sách Đổi Mới (1986–2045)',
+            },
+            { name: 'actionId', type: 'string', value: 'open_dossier_puzzle' },
+            { name: 'grantsFlag', type: 'string', value: 'ch4_policy_linked' },
+            { name: 'milestoneId', type: 'string', value: 'XI' },
+          ],
+        },
+        {
+          id: 303,
+          name: 'cp_doi_moi_station',
+          type: 'checkpoint',
+          x: 192,
+          y: 304,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'checkpoint' },
+            { name: 'label', type: 'string', value: 'Đèn Báo An Toàn Đại Lộ Đổi Mới' },
+            { name: 'actionId', type: 'string', value: 'activate_checkpoint' },
+          ],
+        },
+      ],
+      entrances: [
+        {
+          id: 401,
+          name: 'default_spawn',
+          type: 'spawn',
+          x: 128,
+          y: 288,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+        {
+          id: 402,
+          name: 'from_nexus_2045',
+          type: 'spawn',
+          x: 624,
+          y: 288,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'left' }],
+        },
+        {
+          id: 403,
+          name: 'portal_to_nexus_2045',
+          type: 'portal',
+          x: 672,
+          y: 272,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'nexus_2045_plaza' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_doi_moi' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            {
+              name: 'label',
+              type: 'string',
+              value: 'Tiến Tới Quảng Trường Kỷ Nguyên Số (2021–2045)',
+            },
+          ],
+        },
+      ],
+      checkpoints: [
+        {
+          id: 601,
+          name: 'cp_doi_moi_station',
+          type: 'checkpoint',
+          x: 192,
+          y: 304,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+      ],
+    }),
+  };
+}
+
+function buildNexus2045PlazaRaw(): TiledMapJson {
+  const cols = 48;
+  const rows = 34;
+  const ts = 16;
+
+  const ground = createGrid(cols, rows, 1);
+  fillRect(ground, cols, rows, 48, 208, 672, 160, ts, 2);
+
+  const structures = createGrid(cols, rows, 0);
+  fillRect(structures, cols, rows, 224, 64, 320, 96, ts, 9);
+
+  const collision = createGrid(cols, rows, 0);
+  fillRect(collision, cols, rows, 224, 64, 320, 96, ts, 16);
+
+  return {
+    width: cols,
+    height: rows,
+    tilewidth: ts,
+    tileheight: ts,
+    orientation: 'orthogonal',
+    renderorder: 'right-down',
+    properties: [
+      { name: 'id', type: 'string', value: 'nexus_2045_plaza' },
+      {
+        name: 'title',
+        type: 'string',
+        value: 'Quảng Trường Kỷ Nguyên Số (2021 – Viễn Cảnh 2045)',
+      },
+      { name: 'eraId', type: 'string', value: '1986_2045' },
+      { name: 'districtType', type: 'string', value: 'finale' },
+      { name: 'defaultSpawnId', type: 'string', value: 'from_doi_moi' },
+    ],
+    tilesets: [
+      {
+        firstgid: 1,
+        name: 'harbor_tiles',
+        image: '/tilesets/ch1/harbor_tiles.png',
+        tilewidth: 16,
+        tileheight: 16,
+        tilecount: 64,
+        columns: 8,
+      },
+    ],
+    layers: makeStandardLayers(cols, rows, {
+      ground,
+      structures,
+      collision,
+      lightOccluders: [
+        {
+          id: 101,
+          name: 'shelter_solar_canopy_2045',
+          type: 'shelter',
+          x: 192,
+          y: 160,
+          width: 128,
+          height: 48,
+          properties: [{ name: 'label', type: 'string', value: 'Mái Vòm Năng Lượng 2045' }],
+        },
+      ],
+      npcs: [
+        {
+          id: 201,
+          name: 'npc_archivist_2045',
+          type: 'npc',
+          x: 336,
+          y: 256,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'npcId', type: 'string', value: 'npc_archivist_2045' },
+            { name: 'name', type: 'string', value: 'Lưu Trữ Viên Ký Ức Số Minh Châu' },
+            {
+              name: 'role',
+              type: 'string',
+              value: 'Trung Tâm Lưu Trữ Quốc Gia 2045 (Viễn Cảnh)',
+            },
+            { name: 'facing', type: 'string', value: 'down' },
+            { name: 'dialogueId', type: 'string', value: 'dlg_archivist_2045' },
+            { name: 'fictionTag', type: 'string', value: 'speculative_2045' },
+            { name: 'approachRadius', type: 'int', value: 36 },
+            { name: 'milestoneRoman', type: 'string', value: 'XII' },
+          ],
+        },
+      ],
+      interactables: [
+        {
+          id: 301,
+          name: 'ev_ch4_vision_2045',
+          type: 'evidence',
+          x: 448,
+          y: 224,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'evidence' },
+            {
+              name: 'label',
+              type: 'string',
+              value: 'Văn Kiện Đại Hội XIII (2021) & Tầm Nhìn Việt Nam 2045',
+            },
+            { name: 'actionId', type: 'string', value: 'inspect_vision_2045' },
+            { name: 'evidenceId', type: 'string', value: 'ev_ch4_doi_moi_resolution' },
+            { name: 'milestoneId', type: 'string', value: 'XII' },
+            { name: 'grantsFlag', type: 'string', value: 'ch4_read_vision_2045' },
+          ],
+        },
+        {
+          id: 302,
+          name: 'climax_gate_2045',
+          type: 'climax_gate',
+          x: 592,
+          y: 272,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'kind', type: 'string', value: 'climax_gate' },
+            {
+              name: 'label',
+              type: 'string',
+              value: 'Cổng Thời Gian 2045 — Khát Vọng 100 Năm Lập Quốc',
+            },
+            { name: 'actionId', type: 'string', value: 'trigger_climax' },
+            { name: 'milestoneId', type: 'string', value: 'XII' },
+          ],
+        },
+        {
+          id: 303,
+          name: 'cp_nexus_2045_terminal',
+          type: 'checkpoint',
+          x: 224,
+          y: 304,
+          width: 16,
+          height: 16,
+          properties: [
+            { name: 'kind', type: 'string', value: 'checkpoint' },
+            {
+              name: 'label',
+              type: 'string',
+              value: 'Trạm Lưu Trữ An Toàn Kỷ Nguyên Số 2045',
+            },
+            { name: 'actionId', type: 'string', value: 'activate_checkpoint' },
+          ],
+        },
+      ],
+      entrances: [
+        {
+          id: 401,
+          name: 'default_spawn',
+          type: 'spawn',
+          x: 128,
+          y: 288,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+        {
+          id: 402,
+          name: 'from_doi_moi',
+          type: 'spawn',
+          x: 128,
+          y: 288,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+        {
+          id: 403,
+          name: 'portal_to_doi_moi',
+          type: 'portal',
+          x: 64,
+          y: 272,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'destinationMap', type: 'string', value: 'doi_moi_avenue' },
+            { name: 'destinationSpawn', type: 'string', value: 'from_nexus_2045' },
+            { name: 'transition', type: 'string', value: 'fade' },
+            { name: 'label', type: 'string', value: 'Về Đại Lộ Đổi Mới (1986)' },
+          ],
+        },
+      ],
+      checkpoints: [
+        {
+          id: 601,
+          name: 'cp_nexus_2045_terminal',
+          type: 'checkpoint',
+          x: 224,
+          y: 304,
+          width: 16,
+          height: 16,
+          properties: [{ name: 'facing', type: 'string', value: 'right' }],
+        },
+      ],
+    }),
+  };
+}
+
 const BUILTIN_RAW_MAPS: Record<string, TiledMapJson> = {
   harbor_square: buildHarborSquareRaw(),
   warehouse_interior: buildWarehouseInteriorRaw(),
@@ -2433,6 +3583,12 @@ const BUILTIN_RAW_MAPS: Record<string, TiledMapJson> = {
   shadow_alley: buildShadowAlleyRaw(),
   archive_courtyard: buildArchiveCourtyardRaw(),
   secret_archive: buildSecretArchiveRaw(),
+  tan_trao_banyan: buildTanTraoBanyanRaw(),
+  ba_dinh_square: buildBaDinhSquareRaw(),
+  pha_din_pass: buildPhaDinPassRaw(),
+  spring_1975_corridor: buildSpring1975CorridorRaw(),
+  doi_moi_avenue: buildDoiMoiAvenueRaw(),
+  nexus_2045_plaza: buildNexus2045PlazaRaw(),
 };
 
 const BUILTIN_PARSED_CACHE: Record<string, NormalizedMapData> = {};
