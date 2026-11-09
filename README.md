@@ -42,3 +42,16 @@ npm run build    # Kiểm tra kiểu TypeScript & đóng gói ra thư mục dist
 - `src/engine/PixelRenderer.ts`: Bộ dựng hình Canvas 2D `320×180` Integer-Scaled với 4 lớp Parallax và ánh sáng Chiaroscuro Sơn Mài.
 - `src/engine/SoundSynth.ts`: Bộ tổng hợp âm thanh Chiptune Ngũ Cung 8-bit bằng Web Audio API (0KB tài nguyên ngoài).
 - `src/ui/HudController.ts`: Điều khiển cột mục lục `1/5` (`I – XII`), hộp thoại RPG, Climax Modal và Bàn Cố vấn Sử học.
+
+---
+
+## Kế hoạch phát triển RPG Exploration — map kiểu Avatar / WorkAdventure
+
+**Lưu ý:** Code hiện tại vẫn là side-scroller Canvas 2D; các mục bên dưới là **kế hoạch chưa triển khai**.
+
+- [Bản quyết định kiến trúc top-down, bản đồ, tương tác và roadmap](docs/plans/WORKADVENTURE_TOPDOWN.md) — tham khảo WorkAdventure; thiết kế game chơi đơn, local-first.
+- [RPG Exploration và gameplay từng chương](docs/plans/RPG_EXPLORATION.md)
+- [Bản đồ cũ, lưu để đối chiếu khi chuyển kiến trúc](docs/plans/WORLD_MAP.md)
+- [Kế hoạch chọn sprite từ Pixel Art Atlas](docs/plans/SPRITE_ATLAS.md)
+
+Mốc kiểm chứng đầu tiên: Phaser 3 + Tiled, nhân vật di chuyển 8 hướng, camera, vật cản, một map ngoài trời và một map bên trong nhà có cổng trở về. Không đưa multiplayer hoặc server WorkAdventure vào game.
