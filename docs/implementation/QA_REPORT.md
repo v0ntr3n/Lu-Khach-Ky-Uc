@@ -126,5 +126,37 @@ Tài liệu này cập nhật liên tục kết quả kiểm thử tự động 
 - **Browser E2E Tests (`npm run test:e2e`)**: **17/17 passed** trên Chromium (`m0_stabilization`: 5, `m1_topdown`: 4, `m2_exploration`: 3, `m3_systems_ui`: 3, `m4_chapter1_playthrough`: 2).
 - **Visual Audit Screenshots**: Đã kiểm tra trực quan `m4_stealth_alley.png`, `m4_dossier_puzzle.png`, `m4_climax_1930.png`.
 
+---
+
+## Milestone M5 — Art, Gameplay Polish & Accessibility (Hoàn tất)
+
+### 1. Hạng mục đã kiểm chứng
+
+1. **Chuẩn hóa Sprite Atlas & Sổ đăng ký Xuất xứ (`public/assets/atlases/chapter1_props.{png,json}`, `src/runtime/AssetLoader.ts`, `src/data/provenance/sprite_atlas_manifest.ts`)**:
+   - Đóng gói 12 vật phẩm môi trường tĩnh (`16×16`) và 4 dải nhân vật 4 hướng (`64×24`) vào atlas `128×128` (`filter: "NEAREST"`), nạp đệm 1 lần duy nhất qua `AssetLoader` (không tạo `Image`/canvas mới mỗi frame).
+   - Sổ đăng ký `CURATED_SPRITE_ATLAS_MANIFEST` phân định rõ vật phẩm tĩnh đã kiểm duyệt (`reviewed: true`) và nhân vật lịch sử/NPC vẽ gốc (`Lu-Khach-Ky-Uc Original Pixel Art`), đi kèm hàm `validateSpriteAtlasManifest()` kiểm tra không trùng ID, không chồng lấn `rect`, nằm gọn trong biên `128×128`.
+2. **Hoạt ảnh 4 Hướng, Hiệu ứng Môi trường (Mưa, Quầng Đèn, Bóng Đổ, Chuyển Cảnh) & Âm thanh Ngũ Cung (`SpriteAtlas.ts`, `PixelRenderer.ts`, `SoundSynth.ts`)**:
+   - `drawCharacter4Dir` và `computeAnimationFrame4Dir` hiển thị đầy đủ 4 hướng (`down`, `up`, `left`, `right`) cùng bóng đổ elip dưới chân.
+   - Hiệu ứng mưa rơi & vòng gợn nước trên đá lát ngoài trời, quầng sáng vàng ấm quanh Đèn Báo An Toàn & Bàn Đối Chiếu, và hiệu ứng mờ dần mực tàu (`transitionFadeAlpha`) khi qua cổng.
+   - Bổ sung âm thanh môi trường & hiệu ứng ngũ cung (`playDialogueBlip`, `playPortalTransition`, `playQuestComplete`, `playAmbientRainPulse`).
+3. **Trợ năng Bàn phím, Giảm Chuyển động & Giao diện Đáp ứng (`InputManager.ts`, `index.html`)**:
+   - Phím số `[1..4]` chọn nhanh phương án hội thoại hoặc Bước A Climax không cần chuột; phím `[H]` bật/tắt gợi ý nhiệm vụ trên HUD; đường viền `:focus-visible` vàng đồng rõ nét.
+   - Chế độ `reducedMotion` tắt hoàn toàn hạt mưa động, rung lắc và khóa chu kỳ nhấp nhô về `frame 0`.
+
+### 2. Lỗi phát hiện qua Visual QA (Screenshot Audit) & Đã sửa trong M5
+
+| ID | Mức độ | Phát hiện qua | Mô tả lỗi | Giải pháp đã sửa |
+| :--- | :--- | :--- | :--- | :--- |
+| **M5-V01** | **P2** | Ảnh chụp `m5_mobile_landscape.png` (`844×390`) & `m5_desktop_polished.png` | `.w26-topbar` đặt `height: 50px` cố định (`height: 36px` ở mobile landscape) khiến khi cụm nút `.topbar-actions` xuống dòng, nút `⚙️ Tạm Dừng [Tab]` bị tràn xuống đè lên chữ `0 / 12 CỘT MỐC` của thanh `Biên Niên Sử La Mã`. | Đổi `.w26-topbar` sang `min-height: 48px; height: auto; flex-wrap: wrap;`, tinh chỉnh khoảng cách nút và tối ưu `@media (max-height: 500px) and (orientation: landscape)` trong `index.html`. Đã chụp lại và xác nhận hết chồng lấn 100%. |
+
+### 3. Kết quả thực thi kiểm thử M5
+
+- **Map & WorldGraph Validator (`npm run validate:maps`)**: **8/8 zones PASS** (0 lỗi).
+- **Build & Typecheck (`npm run build`)**: Pass (`dist/index.html` 47.17 kB, `dist/assets/index-*.js` 242.94 kB / gzip 64.92 kB).
+- **Unit & Map Validation Tests (`npm run test:unit`)**: **33/33 passed** across 7 test files (`m0_stabilization`: 12, `m1_runtime`: 4, `m1_maps`: 4, `m2_world_graph`: 4, `m3_rpg_systems`: 4, `m4_vertical_slice`: 2, `m5_art_accessibility`: 3).
+- **Browser E2E Tests (`npm run test:e2e`)**: **20/20 passed** trên Chromium (`m0_stabilization`: 5, `m1_topdown`: 4, `m2_exploration`: 3, `m3_systems_ui`: 3, `m4_chapter1_playthrough`: 2, `m5_polish_accessibility`: 3).
+- **Visual Audit Screenshots**: Đã kiểm tra trực quan `m5_desktop_polished.png` (`1280×800`) và `m5_mobile_landscape.png` (`844×390`).
+
+
 
 

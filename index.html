@@ -81,11 +81,14 @@
         position: sticky;
         top: 0;
         z-index: 100;
-        height: 50px;
+        min-height: 48px;
+        height: auto;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0 20px;
+        padding: 6px 16px;
+        gap: 10px;
+        flex-wrap: wrap;
         background: rgba(17, 14, 11, 0.88);
         backdrop-filter: blur(12px);
         border-bottom: 1px solid rgba(212, 165, 93, 0.24);
@@ -109,15 +112,15 @@
 
       .brand-title {
         font-family: 'Cormorant Garamond', serif;
-        font-size: 1.15rem;
+        font-size: 1.08rem;
         font-weight: 700;
         color: var(--bronze-bright);
-        letter-spacing: 0.03em;
+        letter-spacing: 0.02em;
       }
 
       .era-tabs {
         display: flex;
-        gap: 6px;
+        gap: 5px;
       }
 
       .era-tab-btn,
@@ -125,9 +128,9 @@
         background: var(--lacquer-elevated);
         color: var(--parchment-warm);
         border: 1px solid rgba(212, 165, 93, 0.28);
-        padding: 6px 12px;
+        padding: 5px 9px;
         font-family: 'JetBrains Mono', monospace;
-        font-size: 0.74rem;
+        font-size: 0.72rem;
         cursor: pointer;
         transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s;
       }
@@ -150,7 +153,7 @@
       .utility-cluster,
       .topbar-actions {
         display: flex;
-        gap: 8px;
+        gap: 5px;
         flex-wrap: wrap;
       }
 
@@ -1170,9 +1173,86 @@
         font-size: 112%;
       }
 
+      body.reduced-motion * {
+        animation-duration: 0.001ms !important;
+        transition-duration: 0.001ms !important;
+      }
+
+      .lacquer-button:focus-visible,
+      .utility-btn:focus-visible,
+      .ctrl-btn:focus-visible,
+      .era-tab-btn:focus-visible,
+      .codex-item:focus-visible,
+      .dialogue-choice-btn:focus-visible,
+      .dossier-option-btn:focus-visible,
+      .climax-option-btn:focus-visible,
+      .inventory-item-card:focus-visible {
+        outline: 2px solid var(--bronze-bright);
+        outline-offset: 2px;
+      }
+
       @media (max-width: 900px) {
         .inventory-body-grid {
           grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-height: 500px) and (orientation: landscape) {
+        .w26-topbar {
+          min-height: 32px;
+          height: auto;
+          padding: 3px 8px;
+          gap: 4px;
+        }
+        .brand-title {
+          display: none;
+        }
+        .era-tab-btn,
+        .utility-btn {
+          padding: 2px 5px;
+          font-size: 0.6rem;
+        }
+        #codex-sidebar,
+        aside.codex-sidebar {
+          max-height: 30px;
+          padding: 2px 8px;
+          gap: 6px;
+        }
+        #stage-viewport,
+        .main-stage {
+          padding: 4px 10px 8px;
+          gap: 4px;
+        }
+        .stage-banner,
+        .stage-header {
+          display: flex;
+          flex-direction: row;
+          align-items: center;
+          justify-content: space-between;
+          padding: 2px 0;
+          gap: 8px;
+        }
+        #stage-chapter-title {
+          font-size: 1rem;
+        }
+        #hud-objective-tracker {
+          padding: 3px 8px;
+          max-width: 360px;
+        }
+        #hud-active-objective-text {
+          font-size: 0.72rem;
+        }
+        #hud-active-objective-hint {
+          display: none;
+        }
+        .pixel-frame-wrapper,
+        .canvas-frame {
+          max-height: 46vh;
+        }
+        .ctrl-btn {
+          min-height: 30px;
+          padding: 3px 8px;
+          font-size: 0.64rem;
         }
       }
 

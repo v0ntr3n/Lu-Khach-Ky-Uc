@@ -44,6 +44,49 @@ export function computeEntityDepth(footY: number): number {
   return LAYER_DEPTHS.EntitiesBase + Math.round(footY);
 }
 
+/**
+ * Tính toán khung hình hoạt ảnh 4 hướng (`directionIndex`, `frameIndex`, `bobOffsetPx`) cho nhân vật/NPC.
+ * Khi `reducedMotion === true` hoặc `!isMoving`, cố định ở `frameIndex: 0` và `bobOffsetPx: 0`
+ * để hỗ trợ khả năng tiếp cận (Accessibility Reduced Motion).
+ */
+export function computeAnimationFrame4Dir(
+  facing: Facing4,
+  isMoving: boolean,
+  timeSec: number,
+  reducedMotion = false
+): {
+  directionIndex: 0 | 1 | 2 | 3;
+  frameIndex: 0 | 1 | 2 | 3;
+  bobOffsetPx: number;
+} {
+  const directionIndex: 0 | 1 | 2 | 3 =
+    facing === 'down'
+      ? 0
+      : facing === 'up'
+        ? 1
+        : facing === 'left'
+          ? 2
+          : 3;
+
+  if (!isMoving || reducedMotion) {
+    return {
+      directionIndex,
+      frameIndex: 0,
+      bobOffsetPx: 0,
+    };
+  }
+
+  const safeTime = Math.max(0, Number.isFinite(timeSec) ? timeSec : 0);
+  const frameIndex = (Math.floor(safeTime * 8) % 4) as 0 | 1 | 2 | 3;
+  const bobOffsetPx = frameIndex % 2 === 1 ? -1 : 0;
+
+  return {
+    directionIndex,
+    frameIndex,
+    bobOffsetPx,
+  };
+}
+
 export interface ObjectiveTargetPosition {
   x: number;
   y: number;
@@ -970,11 +1013,17 @@ export class PhaserRuntime {
     facing: Facing4,
     isMoving: boolean,
     hatColor: string,
-    coatColor: string
+    coatColor: string,
+    reducedMotion = false
   ): void {
-    const bob = isMoving ? Math.round(Math.sin(this.walkAnimTime) * 1.2) : 0;
+    const anim = computeAnimationFrame4Dir(
+      facing,
+      isMoving,
+      this.elapsedTimeSec,
+      reducedMotion
+    );
     const spriteX = footX - 2;
-    const spriteY = footY - 16 + bob;
+    const spriteY = footY - 16 + anim.bobOffsetPx;
 
     ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
     ctx.fillRect(footX, footY + 2, PLAYER_FOOT_WIDTH, 5);
