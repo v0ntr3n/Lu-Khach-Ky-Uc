@@ -1,6 +1,6 @@
 # Agent workflow — Lữ Khách Ký Ức
 
-Repository work is local-first TypeScript/Vite/Canvas 2D. Read \`docs/plans/RPG_EXPLORATION.md\`, \`docs/plans/WORLD_MAP.md\` and \`docs/plans/SPRITE_ATLAS.md\` before gameplay, map or art changes.
+Repository work is local-first TypeScript/Vite/Canvas 2D. Read \`docs/plans/WORKADVENTURE_TOPDOWN.md\` first for active map direction, then \`docs/plans/RPG_EXPLORATION.md\`, \`docs/plans/WORLD_MAP.md\` (archived 1D design) and \`docs/plans/SPRITE_ATLAS.md\` before gameplay, map or art changes.
 
 Project skills:
 - \`.claude/skills/rpg-map-design/SKILL.md\` for world graphs and map authoring.
@@ -9,7 +9,7 @@ Project skills:
 - \`.claude/skills/pixelfx/SKILL.md\` for VFX (vendored upstream, MIT).
 
 Rules:
-1. No direct player milestone unlocking from travel, map clicks or ordinary teleport. Presenter mode only with explicit isolation.
+1. The target map is top-down XY movement with Tiled-authored connected scenes; WorkAdventure is reference only, not an online runtime dependency. No direct player milestone unlocking from travel, map clicks or ordinary teleport. Presenter mode only with explicit isolation.
 2. Keep historical facts cited and distinguish fiction/2045 aspirations.
 3. UI overlays must block world inputs; stale async timers cannot change current scene.
 4. Quest/evidence logic is separate from sprite rendering; do not treat generated sprite appearance as collision.
