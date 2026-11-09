@@ -19,3 +19,7 @@ Tài liệu này ghi nhận kiến trúc runtime thực tế được triển kh
   - `QuestSystem.ts`, `DialogueSystem.ts`, `InteractionSystem.ts`, `InventorySystem.ts`, `EvidenceSystem.ts`, `StealthSystem.ts`.
 - `src/ui/`:
   - Giao diện DOM toàn màn hình theo hệ màu 12 Sắc Độ Sơn Mài & Giấy Dó (`DESIGN.md`), hoàn toàn chỉ đọc trạng thái và gửi hành động qua `GameStore`, không tự ý mở khóa tiến trình.
+  - `WorldMapPanel.ts`: Sơ đồ liên thông 8 khu vực Chương I (`[M]`), hiển thị trạng thái Đang đứng / Đã khám phá / Khu vực ẩn và điều khiển Dịch chuyển nhanh giữa các Đèn Báo An Toàn (`checkpoint`) đã mở khóa.
+- `tools/validate_maps.ts`:
+  - Công cụ dòng lệnh (`npm run validate:maps`) chạy trực tiếp trên Node 24 (`--experimental-strip-types`), kiểm định toàn bộ file `.tmj` trong `public/maps/ch1/` cùng đồ thị `CHAPTER1_WORLD_GRAPH` (kiểm tra va chạm spawn, khoảng cách an toàn với portal, và BFS `16×16` tới mọi lối ra/mục tiêu).
+

@@ -49,6 +49,7 @@ export interface RenderState {
   mapData?: NormalizedMapData;
   nearbyPrompt?: string | null;
   nearbyTargetPos?: Vec2 | null;
+  debugOverlay?: boolean;
 }
 
 export class PixelRenderer {
@@ -132,6 +133,10 @@ export class PixelRenderer {
 
     // 10. Thời tiết & Hạt bụi điểm ảnh Sơn Mài (Rain / Autumn / Embers / Digital Stars)
     this.drawWeatherParticles(chapter, timeSec);
+  }
+
+  public renderTopDownWorld(state: RenderState): void {
+    this.renderTopDown(state);
   }
 
   public renderTopDown(state: RenderState): void {
@@ -298,6 +303,21 @@ export class PixelRenderer {
             ctx.fillRect(ix - 6, iy - 2, 12, 3);
           },
         });
+      } else if (inter.kind === 'checkpoint') {
+        depthQueue.push({
+          footY: inter.y + 4,
+          draw: () => {
+            // Trụ đèn báo an toàn (Safety Lantern Checkpoint)
+            ctx.fillStyle = PALETTE_12.LACQUER_VOID;
+            ctx.fillRect(ix - 3, iy - 2, 6, 4);
+            ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+            ctx.fillRect(ix - 1, iy - 12, 2, 10);
+            ctx.fillStyle = PALETTE_12.CRIMSON_VERMILION;
+            ctx.fillRect(ix - 3, iy - 16, 6, 5);
+            ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+            ctx.fillRect(ix - 2, iy - 15, 4, 3);
+          },
+        });
       }
     }
 
@@ -376,6 +396,11 @@ export class PixelRenderer {
       this.drawWeatherParticles(chapter, timeSec);
     }
 
+    // 8.5. Lớp phủ kiểm định bản đồ (Debug Overlay [F3])
+    if (state.debugOverlay) {
+      this.drawDebugOverlay(mapData, state, cameraX, cameraY);
+    }
+
     // 9. Nhãn tương tác [E] ngữ cảnh
     const promptLabel =
       state.nearbyPrompt ??
@@ -394,6 +419,126 @@ export class PixelRenderer {
         : screenPlayerY - 22;
       this.drawPromptBadge(targetX, targetY, promptLabel);
     }
+  }
+
+  private drawDebugOverlay(
+    map: NormalizedMapData,
+    state: RenderState,
+    camX: number,
+    camY: number
+  ): void {
+    const { ctx } = this;
+    const playerY = state.playerY ?? GROUND_Y;
+
+    ctx.save();
+    ctx.lineWidth = 1;
+    ctx.font = '6px monospace';
+    ctx.textAlign = 'left';
+
+    // 1. Obstacles (Collision walls/props)
+    ctx.fillStyle = 'rgba(196, 58, 43, 0.32)';
+    ctx.strokeStyle = '#E05A47';
+    for (const obs of map.obstacles) {
+      const rx = Math.round(obs.x - camX);
+      const ry = Math.round(obs.y - camY);
+      ctx.fillRect(rx, ry, obs.width, obs.height);
+      ctx.strokeRect(rx + 0.5, ry + 0.5, Math.max(1, obs.width - 1), Math.max(1, obs.height - 1));
+    }
+
+    // 2. Shelters
+    ctx.fillStyle = 'rgba(58, 125, 92, 0.28)';
+    ctx.strokeStyle = '#3A7D5C';
+    for (const sh of map.shelters) {
+      if (!sh.bounds) continue;
+      const rx = Math.round(sh.bounds.x - camX);
+      const ry = Math.round(sh.bounds.y - camY);
+      ctx.fillRect(rx, ry, sh.bounds.width, sh.bounds.height);
+      ctx.strokeRect(
+        rx + 0.5,
+        ry + 0.5,
+        Math.max(1, sh.bounds.width - 1),
+        Math.max(1, sh.bounds.height - 1)
+      );
+    }
+
+    // 3. Occluders
+    ctx.strokeStyle = '#6B9BD2';
+    for (const occ of map.occluders) {
+      const rx = Math.round(occ.x - camX);
+      const ry = Math.round(occ.y - camY);
+      ctx.strokeRect(rx + 0.5, ry + 0.5, Math.max(1, occ.width - 1), Math.max(1, occ.height - 1));
+    }
+
+    // 4. Portals
+    ctx.strokeStyle = '#4ADE80';
+    ctx.fillStyle = '#4ADE80';
+    for (const p of map.portals) {
+      const rx = Math.round(p.x - camX);
+      const ry = Math.round(p.y - camY);
+      ctx.strokeRect(rx + 0.5, ry + 0.5, Math.max(1, p.width - 1), Math.max(1, p.height - 1));
+      ctx.fillText(p.destinationMap, rx + 2, ry - 2);
+    }
+
+    // 5. Spawns & Checkpoints
+    ctx.strokeStyle = '#38BDF8';
+    ctx.fillStyle = '#38BDF8';
+    for (const sp of [...map.spawns, ...map.checkpoints]) {
+      const sx = Math.round(sp.x - camX);
+      const sy = Math.round(sp.y - camY);
+      ctx.beginPath();
+      ctx.moveTo(sx - 4, sy);
+      ctx.lineTo(sx + 4, sy);
+      ctx.moveTo(sx, sy - 4);
+      ctx.lineTo(sx, sy + 4);
+      ctx.stroke();
+      ctx.fillText(sp.id, sx + 5, sy - 2);
+    }
+
+    // 6. NPC approach radius & routes + Interactable radius
+    ctx.strokeStyle = 'rgba(212, 168, 79, 0.45)';
+    for (const npc of map.npcs) {
+      const nx = Math.round(npc.x - camX);
+      const ny = Math.round(npc.y - camY);
+      ctx.beginPath();
+      ctx.arc(nx, ny, npc.approachRadius || 28, 0, Math.PI * 2);
+      ctx.stroke();
+
+      if (npc.route && npc.route.length > 1) {
+        ctx.beginPath();
+        npc.route.forEach((pt, idx) => {
+          const px = Math.round(pt.x - camX);
+          const py = Math.round(pt.y - camY);
+          if (idx === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        });
+        ctx.stroke();
+      }
+    }
+
+    for (const inter of map.interactables) {
+      const ix = Math.round(inter.x - camX);
+      const iy = Math.round(inter.y - camY);
+      ctx.beginPath();
+      ctx.arc(ix, iy, inter.radius ?? 26, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // 7. Player collision footbox
+    const px = Math.round(state.playerX - camX);
+    const py = Math.round(playerY - camY);
+    ctx.strokeStyle = '#F4E7C3';
+    ctx.strokeRect(px - 6 + 0.5, py - 6 + 0.5, 11, 7);
+
+    // 8. Top-left debug badge
+    const badgeText = `DEBUG OVERLAY [F3]: ON | MAP: ${map.id} | POS: (${Math.round(
+      state.playerX
+    )}, ${Math.round(playerY)})`;
+    ctx.fillStyle = 'rgba(17, 14, 11, 0.85)';
+    ctx.fillRect(4, 4, 240, 11);
+    ctx.fillStyle = '#F4EFE4';
+    ctx.fillText(badgeText, 7, 12);
+
+    ctx.restore();
   }
 
   private resolveNpcRole(npc: NpcMapPlacement): CharacterAtlasRole {

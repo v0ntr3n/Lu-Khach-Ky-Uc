@@ -14,13 +14,25 @@ import type {
   RomanMilestoneId,
 } from '../types/game';
 
+import { WorldMapPanel } from './WorldMapPanel';
+
 export type { GameMode, HudCallbacks };
 
 export class HudController {
   private callbacks: HudCallbacks;
+  public readonly worldMapPanel: WorldMapPanel;
 
   constructor(callbacks: HudCallbacks) {
     this.callbacks = callbacks;
+    this.worldMapPanel = new WorldMapPanel({
+      onFastTravel: (zoneId, spawnId) => {
+        this.callbacks.onOverlayStateChange?.(false, 'map');
+        this.callbacks.onFastTravelToZone?.(zoneId, spawnId);
+      },
+      onClose: () => {
+        this.callbacks.onOverlayStateChange?.(false, 'map');
+      },
+    });
     this.bindStaticEvents();
   }
 
@@ -48,13 +60,22 @@ export class HudController {
       }
     });
 
-    // Nút mở Bàn Cố Vấn Sử Học (Phím Q) & Nút đóng Climax
+    // Nút mở Bàn Cố Vấn Sử Học (Phím Q), Bản Đồ (Phím M), Debug (Phím F3) & Nút đóng Climax
     const lookupBtn = document.getElementById('btn-open-lookup');
     const closeLookupBtn = document.getElementById('btn-close-lookup');
     const closeClimaxBtn = document.getElementById('btn-close-climax');
+    const openMapBtn = document.getElementById('btn-open-map');
+    const debugBtn = document.getElementById('btn-debug-overlay');
+
     lookupBtn?.addEventListener('click', () => this.toggleLookupDrawer(true));
     closeLookupBtn?.addEventListener('click', () => this.toggleLookupDrawer(false));
     closeClimaxBtn?.addEventListener('click', () => this.closeClimaxModal());
+    openMapBtn?.addEventListener('click', () => this.toggleWorldMapModal());
+    debugBtn?.addEventListener('click', () => {
+      const active = this.callbacks.onToggleDebugOverlay?.() ?? false;
+      debugBtn.classList.toggle('is-active', active);
+      debugBtn.setAttribute('aria-pressed', String(active));
+    });
 
     // Xử lý tìm kiếm trong Bàn Cố Vấn Sử Học
     const lookupInput = document.getElementById('lookup-search-input') as HTMLInputElement | null;
@@ -300,10 +321,30 @@ export class HudController {
     }
   }
 
+  public toggleWorldMapModal(force?: boolean): void {
+    const isOpen = this.worldMapPanel.toggle(force);
+    this.callbacks.onOverlayStateChange?.(isOpen, 'map');
+  }
+
+  public updateWorldMapState(
+    currentMapId: string,
+    discoveredMaps: ReadonlySet<string>,
+    unlockedCheckpoints: ReadonlySet<string>,
+    isPresenterMode = false
+  ): void {
+    this.worldMapPanel.updateState(
+      currentMapId,
+      discoveredMaps,
+      unlockedCheckpoints,
+      isPresenterMode
+    );
+  }
+
   public isOverlayOpen(): boolean {
     const climaxOpen = document.getElementById('climax-modal')?.classList.contains('is-open') ?? false;
     const lookupOpen = document.getElementById('lookup-drawer')?.classList.contains('is-open') ?? false;
-    return climaxOpen || lookupOpen;
+    const mapOpen = this.worldMapPanel.isOpen();
+    return climaxOpen || lookupOpen || mapOpen;
   }
 
   private renderLookupResults(query: string): void {

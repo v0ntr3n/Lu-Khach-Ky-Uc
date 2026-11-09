@@ -41,3 +41,37 @@ Tài liệu này cập nhật liên tục kết quả kiểm thử tự động 
 - **Build & Typecheck (`npm run build`)**: Pass (`dist/index.html` 24.56 kB, `dist/assets/index-*.js` 113.00 kB / gzip 34.46 kB).
 - **Unit & Map Validation Tests (`npm run test:unit`)**: **20/20 passed** (`m0_stabilization.test.ts`: 12, `m1_runtime.test.ts`: 4, `m1_maps.test.ts`: 4).
 - **Browser E2E Tests (`npm run test:e2e`)**: **9/9 passed** trên Chromium (`m0_stabilization.spec.ts`: 5, `m1_topdown.spec.ts`: 4).
+
+---
+
+## Milestone M2 — World Exploration (Hoàn tất)
+
+### 1. Hạng mục đã kiểm chứng
+
+1. **Đồ thị thế giới 8 khu vực liên thông (`src/world/WorldGraph.ts` & `public/maps/ch1/*.tmj`)**:
+   - Đầy đủ 8 bản đồ Chương I (Hương Cảng 1930): `harbor_square` (`64×48`), `warehouse_interior` (`36×28`), `old_street` (`48×40`), `small_pier` (`40×30`), `safehouse_interior` (`32×24`), `shadow_alley` (`44×32`), `archive_courtyard` (`44×34`), `secret_archive` (`32×24`).
+   - Hỗ trợ cả tuyến đường chính (`harbor_square -> old_street -> shadow_alley -> archive_courtyard -> secret_archive`) và tuyến bến thuyền phụ (`harbor_square -> small_pier -> shadow_alley -> archive_courtyard -> secret_archive`).
+2. **Công cụ CLI kiểm định bản đồ (`tools/validate_maps.ts` / `npm run validate:maps`)**:
+   - Kiểm tra 8/8 file `.tmj` và `getAllBuiltInMaps()`, xác nhận 100% điểm spawn nằm ngoài vật cản, cách cổng dịch chuyển tối thiểu `20px`, và BFS lưới `16×16` tiếp cận được mọi cổng/mục tiêu.
+3. **Bản đồ Thế giới trong game (`src/ui/WorldMapPanel.ts`, phím `[M]`) & Fast Travel có kiểm soát**:
+   - Mở sơ đồ liên thông khóa hoàn toàn điều khiển thế giới (`mode === 'map'`).
+   - Khu vực chưa tới hiển thị `KHU VỰC ẨN — Chưa khám phá` (không lộ nội dung cốt truyện).
+   - Chỉ cho phép dịch chuyển nhanh giữa các khu vực đã khám phá VÀ đã kích hoạt Đèn Báo An Toàn (`checkpoint`), tuyệt đối không tự mở khóa cột mốc hay bằng chứng khi dịch chuyển.
+4. **Lộ trình NPC (`stepNpcAlongRoute`) & Lớp phủ Gỡ lỗi (`[F3]` / `drawDebugOverlay`)**:
+   - NPC tuần tra mượt qua các điểm `route` (`NpcRoutePoint[]`), tự cập nhật 4 hướng nhìn và dừng nghỉ `waitSec`.
+   - Phím `F3` / nút `📐 Debug [F3]` hiển thị trực quan hộp va chạm đỏ, vùng ẩn nấp xanh ngọc, cổng xanh lá, tọa độ spawn/checkpoint xanh lam, bán kính tương tác vàng kim và đường đi NPC.
+
+### 2. Lỗi phát hiện qua Hồi quy E2E & Đã sửa trong M2
+
+| ID | Mức độ | Phát hiện qua | Mô tả lỗi | Giải pháp đã sửa |
+| :--- | :--- | :--- | :--- | :--- |
+| **M2-R01** | **P1** | Chạy hồi quy `m1_topdown.spec.ts` Test 2 | Cổng `portal_to_warehouse` mới thêm tại `x: 480, y: 400` chồng lên điểm kiểm thử va chạm tường phía nam nhà kho `(485, 412)` khiến nhân vật bị chuyển cảnh thay vì đứng lại trước tường. | Dời `portal_to_warehouse` về đúng ô cửa `x: 512, y: 400` trong `MapLoader.ts` và `harbor_square.tmj`, giữ nguyên đoạn tường đặc `x: 464..512`. |
+| **M2-R02** | **P2** | Chạy hồi quy `m1_topdown.spec.ts` Test 3 | Đổi `title` của `warehouse_interior` thành `'Kho Hàng Số 4 — Cửu Long (1930)'` làm lệch kiểm tra nhãn `'Kho Hàng Bến Cảng (Nội Thất)'` của M1. | Chuẩn hóa tiêu đề thành `'Kho Hàng Số 4 — Kho Hàng Bến Cảng (Nội Thất)'` trong `MapLoader.ts`, `WorldGraph.ts` và `warehouse_interior.tmj`. |
+
+### 3. Kết quả thực thi kiểm thử M2
+
+- **Map & WorldGraph Validator (`npm run validate:maps`)**: **8/8 zones PASS** (0 lỗi).
+- **Build & Typecheck (`npm run build`)**: Pass (`dist/index.html` 29.91 kB, `dist/assets/index-*.js` 162.67 kB / gzip 44.44 kB).
+- **Unit & Map Validation Tests (`npm run test:unit`)**: **24/24 passed** (`m0_stabilization.test.ts`: 12, `m1_runtime.test.ts`: 4, `m1_maps.test.ts`: 4, `m2_world_graph.test.ts`: 4).
+- **Browser E2E Tests (`npm run test:e2e`)**: **12/12 passed** trên Chromium (`m0_stabilization.spec.ts`: 5, `m1_topdown.spec.ts`: 4, `m2_exploration.spec.ts`: 3).
+

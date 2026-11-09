@@ -1,6 +1,6 @@
 /**
  * @file src/systems/InteractionSystem.ts
- * @description Hệ thống dò tìm đối tượng tương tác gần nhất (Portal, NPC, Di vật/Tư liệu, Cổng Thời Gian)
+ * @description Hệ thống dò tìm đối tượng tương tác gần nhất (Portal, NPC, Di vật/Tư liệu, Điểm Lưu Checkpoint, Cổng Thời Gian)
  * trong không gian 2D Top-Down cho "Lữ Khách Ký Ức (1930 – 2045)".
  */
 
@@ -112,6 +112,8 @@ export class InteractionSystem {
           promptText = `[E] Vào: ${item.label}`;
         } else if (item.kind === 'npc') {
           promptText = `[E] Trò chuyện: ${item.label}`;
+        } else if (item.kind === 'checkpoint') {
+          promptText = `Nhấn [E] — Kích hoạt Điểm Lưu / Đèn Báo An Toàn: ${item.label}`;
         } else if (item.kind === 'climax_gate') {
           promptText = '[E] Cổng Thời Gian';
         }
@@ -130,29 +132,31 @@ export class InteractionSystem {
       }
     }
 
-    // 4. Kiểm tra các Cột mốc La Mã của chương hiện tại (nếu chưa được đại diện bởi interactable/NPC gần hơn)
-    if (mapData.id === 'harbor_square') {
-      for (const m of chapter.milestones) {
-        if (m.mapId && m.mapId !== mapData.id) continue;
-        const mx = m.worldX;
-        const my =
-          m.worldY ?? (Math.abs(playerPos.y - 148) <= 12 ? playerPos.y : 384);
-        const dist = Math.hypot(playerPos.x - mx, playerPos.y - my);
-        if (dist <= 32) {
-          candidates.push({
-            id: `milestone_${m.roman}`,
-            kind: 'evidence',
-            label: `Mốc ${m.roman} · ${m.title}`,
-            promptText: `[E] Khôi phục: Mốc ${m.roman}`,
-            x: mx,
-            y: my,
-            distance: dist,
-            milestone: m,
-          });
-        }
-      }
+    // 4. Kiểm tra các Cột mốc La Mã của chương hiện tại trên bản đồ tương ứng
+    for (const m of chapter.milestones) {
+      const targetMapId = m.mapId ?? 'harbor_square';
+      if (mapData.id !== targetMapId) continue;
 
-      // 5. Kiểm tra Cổng Thời Gian Cuối Chương (Climax Gate)
+      const mx = m.worldX;
+      const my =
+        m.worldY ?? (Math.abs(playerPos.y - 148) <= 12 ? playerPos.y : 384);
+      const dist = Math.hypot(playerPos.x - mx, playerPos.y - my);
+      if (dist <= 32) {
+        candidates.push({
+          id: `milestone_${m.roman}`,
+          kind: 'evidence',
+          label: `Mốc ${m.roman} · ${m.title}`,
+          promptText: `[E] Khôi phục: Mốc ${m.roman}`,
+          x: mx,
+          y: my,
+          distance: dist,
+          milestone: m,
+        });
+      }
+    }
+
+    // 5. Kiểm tra Cổng Thời Gian Cuối Chương (Climax Gate)
+    if (mapData.id === 'harbor_square' || mapData.id === 'archive_courtyard') {
       const gx = chapter.climax.gateWorldX;
       const gy =
         chapter.climax.gateWorldY ??
