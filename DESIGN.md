@@ -1,5 +1,9 @@
 # DESIGN.md — Hệ Thống Thiết Kế "Sơn Mài & Giấy Dó" HD-2D (*Lữ Khách Ký Ức: 1930 – 2045*)
 
+> **Ghi chú chuyển giao kiến trúc (10/11/2026 — đang lập kế hoạch, chưa triển khai):** Runtime hiện tại vẫn là **Canvas 2D side-scroller**, người chơi đi trái/phải, viewport logic `320×180` và HUD kiểu `1/5 + 4/5`. **Mục tiêu mới** là RPG Exploration **top-down 2D góc nhìn 3/4**, di chuyển XY 8 hướng, xây map bằng **Tiled**, có NPC, tương tác theo vùng, va chạm và ra/vào nhà; **WorkAdventure chỉ là tham khảo thiết kế bản đồ**, không phải runtime hay dịch vụ multiplayer. M1 sẽ là **thử nghiệm Phaser 3 + Tiled cô lập**, chỉ thay runtime sau khi build và playtest đạt tiêu chí.
+>
+> **Phạm vi tài liệu:** Các mô tả side-scrolling, `1/5 + 4/5`, parallax đi ngang, phím `A/D` và quy trình Climax trong các mục bên dưới là **đặc tả/baseline cũ**, không phải UI/gameplay mục tiêu. **Giữ lại** hệ màu Sơn Mài & Giấy Dó, hiệu ứng OpeningFracture, định hướng kể chuyện và nguyên tắc nguồn sử liệu; **UI đích** là game world toàn màn hình với HUD theo ngữ cảnh, nhật ký/bản đồ mở riêng. Quy ước thư mục đích **chỉ có một nguồn chuẩn** tại [WORKADVENTURE_TOPDOWN.md — Canonical target directory layout](docs/plans/WORKADVENTURE_TOPDOWN.md#canonical-target-directory-layout), nhất quán với [RPG_EXPLORATION.md](docs/plans/RPG_EXPLORATION.md).
+
 Tựa game **Lữ Khách Ký Ức (1930 – 2045)** kế thừa trực tiếp vũ trụ thị giác của [`v0ntr3n/SPST`](https://github.com/v0ntr3n/SPST) và tiêu chuẩn biên tập từ [`pbakaus/impeccable`](https://github.com/pbakaus/impeccable), chuyển hóa thành kiến trúc **Game Đi Cảnh Giải Đố & Điện Ảnh Pixel HD-2D (320×180 Integer-Scaled)** với bảng màu **12 Sắc Độ Sơn Mài & Giấy Dó**.
 
 ---
