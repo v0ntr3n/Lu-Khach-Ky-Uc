@@ -1,9 +1,10 @@
 /**
  * @file src/core/GameStore.ts
  * @description Kho trạng thái trung tâm có thẩm quyền duy nhất (Authoritative Serializable State)
- * cho "Lữ Khách Ký Ức (1930 – 2045)". Quản lý máy trạng thái GameMode, tiến trình Cột mốc La Mã,
+ * cho "Lữ Khách Ký Ức (1930 – 2045)". Quản lý máy trạng thái GameMode, tọa độ 2D Top-Down,
+ * bản đồ hiện tại (currentMapId / currentSpawnId), tiến trình Cột mốc La Mã,
  * sự cô lập hoàn toàn của Chế độ Giảng viên (Presenter Mode), điều kiện mở Cổng Thời Gian Climax,
- * kiểm tra vùng ẩn nấp (Shelter) và bộ đếm Transition Token chống timer cũ.
+ * kiểm tra vùng ẩn nấp (Shelter 1D/2D) và bộ đếm Transition Token chống timer cũ.
  */
 
 import type {
@@ -14,6 +15,7 @@ import type {
   RomanMilestoneId,
   SaveDataV2,
   ShelterZone,
+  Vec2,
 } from '../types/game';
 import {
   DEFAULT_SAFE_MAP_ID,
@@ -44,6 +46,16 @@ export class GameStore {
   public readonly presenterCollectedMilestones = new Set<RomanMilestoneId>();
   public transitionToken = 0;
 
+  // Trạng thái 2D Top-Down (M1+)
+  public currentMapId: string = DEFAULT_SAFE_MAP_ID;
+  public currentSpawnId: string = DEFAULT_SAFE_SPAWN_ID;
+  public playerPos: Vec2 = { x: 160, y: 384 };
+  public playerFacing: Facing4 = 'right';
+  public readonly questFlags = new Set<string>();
+  public readonly collectedEvidence = new Set<string>();
+  public readonly discoveredMaps = new Set<string>([DEFAULT_SAFE_MAP_ID]);
+  public portalCooldownSec = 0;
+
   public setMode(mode: GameMode): void {
     this.mode = mode;
   }
@@ -54,6 +66,20 @@ export class GameStore {
 
   public isWorldInputAllowed(): boolean {
     return this.mode === 'exploring';
+  }
+
+  public setMapState(
+    mapId: string,
+    spawnId: string,
+    pos: Vec2,
+    facing: Facing4 = 'down'
+  ): void {
+    this.currentMapId = mapId;
+    this.currentSpawnId = spawnId;
+    this.playerPos = { x: pos.x, y: pos.y };
+    this.playerFacing = facing;
+    this.discoveredMaps.add(mapId);
+    this.bumpTransitionToken();
   }
 
   public togglePresenterMode(): boolean {
@@ -102,9 +128,19 @@ export class GameStore {
   public isPlayerInShelter(
     playerX: number,
     shelters: ShelterZone[],
-    _isCrouching = false
+    _isCrouching = false,
+    playerY?: number
   ): boolean {
-    return shelters.some((s) => playerX >= s.xStart && playerX <= s.xEnd);
+    return shelters.some((s) => {
+      if (s.bounds && playerY !== undefined) {
+        const inX = playerX >= s.bounds.x && playerX <= s.bounds.x + s.bounds.width;
+        const inY = playerY >= s.bounds.y && playerY <= s.bounds.y + s.bounds.height;
+        if (inX && inY) {
+          return true;
+        }
+      }
+      return playerX >= s.xStart && playerX <= s.xEnd;
+    });
   }
 
   public bumpTransitionToken(): number {
@@ -116,23 +152,37 @@ export class GameStore {
     return this.transitionToken;
   }
 
-  public toSaveDataV2(eraId: EraId, playerX: number, facing: Facing4 = 'right'): SaveDataV2 {
+  public toSaveDataV2(
+    eraId: EraId,
+    playerX: number,
+    facing: Facing4 = 'right',
+    playerY?: number
+  ): SaveDataV2 {
+    const safeX =
+      Number.isFinite(playerX) && playerX >= 24
+        ? Math.round(playerX)
+        : DEFAULT_SAFE_PLAYER_POS.x;
+    const safeY =
+      playerY !== undefined && Number.isFinite(playerY) && playerY >= 16
+        ? Math.round(playerY)
+        : DEFAULT_SAFE_PLAYER_POS.y;
+
     return {
       version: 2,
       timestamp: Date.now(),
       eraId,
-      currentMapId: DEFAULT_SAFE_MAP_ID,
-      spawnId: DEFAULT_SAFE_SPAWN_ID,
+      currentMapId: this.currentMapId || DEFAULT_SAFE_MAP_ID,
+      spawnId: this.currentSpawnId || DEFAULT_SAFE_SPAWN_ID,
       playerPos: {
-        x: Number.isFinite(playerX) && playerX >= 24 ? Math.round(playerX) : DEFAULT_SAFE_PLAYER_POS.x,
-        y: DEFAULT_SAFE_PLAYER_POS.y,
+        x: safeX,
+        y: safeY,
       },
       playerFacing: facing,
       collectedMilestones: Array.from(this.collectedMilestones),
-      collectedEvidence: [],
-      questFlags: [],
-      discoveredMaps: [DEFAULT_SAFE_MAP_ID],
-      unlockedCheckpoints: [DEFAULT_SAFE_SPAWN_ID],
+      collectedEvidence: Array.from(this.collectedEvidence),
+      questFlags: Array.from(this.questFlags),
+      discoveredMaps: Array.from(this.discoveredMaps),
+      unlockedCheckpoints: [this.currentSpawnId || DEFAULT_SAFE_SPAWN_ID],
       completedChapters: [],
     };
   }
@@ -142,6 +192,31 @@ export class GameStore {
     for (const roman of save.collectedMilestones) {
       this.collectedMilestones.add(roman);
     }
+
+    this.collectedEvidence.clear();
+    for (const ev of save.collectedEvidence ?? []) {
+      this.collectedEvidence.add(ev);
+    }
+
+    this.questFlags.clear();
+    for (const flag of save.questFlags ?? []) {
+      this.questFlags.add(flag);
+    }
+
+    this.discoveredMaps.clear();
+    this.discoveredMaps.add(DEFAULT_SAFE_MAP_ID);
+    for (const m of save.discoveredMaps ?? []) {
+      this.discoveredMaps.add(m);
+    }
+
+    this.currentMapId = save.currentMapId || DEFAULT_SAFE_MAP_ID;
+    this.currentSpawnId = save.spawnId || DEFAULT_SAFE_SPAWN_ID;
+    this.playerPos = {
+      x: save.playerPos?.x ?? DEFAULT_SAFE_PLAYER_POS.x,
+      y: save.playerPos?.y ?? 384,
+    };
+    this.playerFacing = save.playerFacing ?? 'right';
+
     const chapterIdx = chapters.findIndex((c) => c.id === save.eraId);
     if (chapterIdx !== -1) {
       this.currentChapterIndex = chapterIdx;

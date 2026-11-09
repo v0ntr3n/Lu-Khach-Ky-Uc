@@ -146,6 +146,22 @@ export class HudController {
     }
   }
 
+  public updateMapLocationBadge(
+    mapTitle: string,
+    coordinates?: string,
+    promptText?: string | null
+  ): void {
+    const locEl = document.getElementById('stage-location-badge');
+    if (locEl) {
+      locEl.textContent = coordinates ? `📍 ${mapTitle} · ${coordinates}` : `📍 ${mapTitle}`;
+    }
+
+    const interactBtn = document.getElementById('ctrl-interact');
+    if (interactBtn && promptText !== undefined) {
+      interactBtn.textContent = promptText ? `✨ ${promptText}` : '✨ Khôi Phục / Mở Cổng (E)';
+    }
+  }
+
   public showArtifactDialogue(milestone: MilestoneArtifact): void {
     const card = document.getElementById('dialogue-parchment-card');
     const speakerEl = document.getElementById('dialogue-speaker');

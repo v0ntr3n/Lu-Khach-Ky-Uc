@@ -172,6 +172,20 @@ export interface SpawnPointDefinition {
   facing?: Facing4;
 }
 
+export interface NpcMapPlacement {
+  id: string;
+  npcId: string;
+  name: string;
+  role: string;
+  x: number;
+  y: number;
+  facing: Facing4;
+  dialogueId: string;
+  fictionTag: ProvenanceType;
+  approachRadius: number;
+  milestoneRoman?: RomanMilestoneId;
+}
+
 export interface InteractableDefinition {
   id: string;
   x: number;
@@ -187,6 +201,8 @@ export interface InteractableDefinition {
   milestoneId?: RomanMilestoneId;
   dialogueId?: string;
   evidenceId?: string;
+  destinationMap?: string;
+  destinationSpawn?: string;
 }
 
 export interface PatrolWaypoint {
@@ -203,6 +219,80 @@ export interface PatrolDefinition {
   coneAngleRad: number;
   label: string;
   warningToast: string;
+}
+
+export interface TiledProperty {
+  name: string;
+  type: 'string' | 'int' | 'float' | 'bool';
+  value: string | number | boolean;
+}
+
+export interface TiledObject {
+  id: number | string;
+  name: string;
+  type: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  properties?: TiledProperty[] | Record<string, string | number | boolean>;
+  polyline?: Vec2[];
+}
+
+export interface TiledLayer {
+  id: number;
+  name: string;
+  type: 'tilelayer' | 'objectgroup';
+  width?: number;
+  height?: number;
+  data?: number[];
+  objects?: TiledObject[];
+  visible?: boolean;
+  opacity?: number;
+}
+
+export interface TiledTilesetRef {
+  firstgid: number;
+  name: string;
+  image: string;
+  tilewidth: number;
+  tileheight: number;
+  tilecount: number;
+  columns: number;
+}
+
+export interface TiledMapJson {
+  width: number;
+  height: number;
+  tilewidth: number;
+  tileheight: number;
+  orientation: 'orthogonal';
+  renderorder?: 'right-down';
+  properties?: TiledProperty[] | Record<string, string | number | boolean>;
+  tilesets: TiledTilesetRef[];
+  layers: TiledLayer[];
+}
+
+export interface NormalizedMapData {
+  id: string;
+  title: string;
+  eraId: EraId;
+  widthInTiles: number;
+  heightInTiles: number;
+  widthPx: number;
+  heightPx: number;
+  tileSize: number;
+  defaultSpawnId: string;
+  tileLayers: Record<string, number[]>;
+  obstacles: Rect2D[];
+  shelters: ShelterZone[];
+  occluders: Rect2D[];
+  spawns: SpawnPointDefinition[];
+  portals: PortalDefinition[];
+  npcs: NpcMapPlacement[];
+  interactables: InteractableDefinition[];
+  patrols: PatrolDefinition[];
+  checkpoints: SpawnPointDefinition[];
 }
 
 export interface SaveDataV1 {
