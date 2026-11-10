@@ -24,7 +24,7 @@ export const EVIDENCE_CATALOG: readonly EvidenceItem[] = [
       'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.2, tr. 44–56',
     provenance: {
       type: 'historical_fact',
-      label: 'Tư liệu Lịch sử (Giáo trình 2021, tr. 44–56)',
+      label: 'Tư liệu Lịch sử',
       citation:
         'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.2, tr. 44–56',
     },
@@ -47,7 +47,7 @@ export const EVIDENCE_CATALOG: readonly EvidenceItem[] = [
       'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.2.c, tr. 50–56',
     provenance: {
       type: 'historical_fact',
-      label: 'Tư liệu Lịch sử (Giáo trình 2021, tr. 50–56)',
+      label: 'Tư liệu Lịch sử',
       citation:
         'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.2.c, tr. 50–56',
     },
@@ -69,7 +69,7 @@ export const EVIDENCE_CATALOG: readonly EvidenceItem[] = [
       'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.3.a, tr. 57–61',
     provenance: {
       type: 'historical_fact',
-      label: 'Tư liệu Lịch sử (Giáo trình 2021, tr. 57–61)',
+      label: 'Tư liệu Lịch sử',
       citation:
         'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.3.a, tr. 57–61',
     },
@@ -114,7 +114,7 @@ export const EVIDENCE_CATALOG: readonly EvidenceItem[] = [
       'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.3.b & II.1, tr. 61–76',
     provenance: {
       type: 'historical_fact',
-      label: 'Văn kiện Lịch sử Gốc (Giáo trình 2021, tr. 61–76)',
+      label: 'Văn kiện Lịch sử Gốc',
       citation:
         'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.3.b & II.1, tr. 61–76',
     },
@@ -137,7 +137,7 @@ export const EVIDENCE_CATALOG: readonly EvidenceItem[] = [
       'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục II.3.b, tr. 108–118',
     provenance: {
       type: 'historical_fact',
-      label: 'Văn kiện Lịch sử Gốc (Giáo trình 2021, tr. 108–118)',
+      label: 'Văn kiện Lịch sử Gốc',
       citation:
         'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục II.3.b, tr. 108–118',
     },
@@ -160,7 +160,7 @@ export const EVIDENCE_CATALOG: readonly EvidenceItem[] = [
       'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương II, tr. 176–235',
     provenance: {
       type: 'historical_fact',
-      label: 'Tư liệu Lịch sử (Giáo trình 2021, tr. 176–235)',
+      label: 'Tư liệu Lịch sử',
       citation:
         'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương II, tr. 176–235',
     },
@@ -183,11 +183,11 @@ export const EVIDENCE_CATALOG: readonly EvidenceItem[] = [
       'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương III, tr. 261–393',
     provenance: {
       type: 'historical_fact',
-      label: 'Văn kiện Lịch sử & Tầm nhìn 2045 (Giáo trình 2021, tr. 261–393)',
+      label: 'Văn kiện Lịch sử & Tầm nhìn 2045',
       citation:
         'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương III, tr. 261–393',
       historicalNote:
-        'Mục tiêu 2045 dựa trên Nghị quyết Đại hội XIII (2021, tr. 385–393); bối cảnh Trung tâm Lưu trữ Số 2045 là khung dẫn truyện giả tưởng (speculative_2045).',
+        'Mục tiêu 2045 dựa trên Nghị quyết Đại hội XIII (2021); bối cảnh Trung tâm Lưu trữ Số 2045 là khung dẫn truyện giả tưởng (speculative_2045).',
     },
     relatedMilestone: 'XI',
     grantsFlag: 'ch4_resolution_collected',
