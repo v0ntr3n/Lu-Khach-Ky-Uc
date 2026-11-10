@@ -15,7 +15,7 @@ export const CH1_DOSSIER_PUZZLE: DossierPuzzleDefinition = {
   subtitle:
     'Xác thực 3 luận điểm cốt lõi trong Chánh cương vắn tắt & Sách lược vắn tắt do Nguyễn Ái Quốc soạn thảo',
   instruction:
-    'Hãy chọn đúng nhận định lịch sử xác thực cho từng mục dưới đây dựa theo Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021, tr. 61–65):',
+    'Hãy chọn đúng nhận định lịch sử xác thực cho từng mục dưới đây dựa vào các tư liệu đã thu thập:',
   slots: [
     {
       id: 'slot_strategic_goal',
@@ -29,7 +29,7 @@ export const CH1_DOSSIER_PUZZLE: DossierPuzzleDefinition = {
           text: 'Làm tư sản dân quyền cách mạng và thổ địa cách mạng để đi tới xã hội cộng sản.',
           isAuthentic: true,
           explanation:
-            'Chính xác (Giáo trình 2021, tr. 61): Đường lối giương cao ngọn cờ độc lập dân tộc gắn liền với chủ nghĩa xã hội.',
+            'Chính xác: Đường lối giương cao ngọn cờ độc lập dân tộc gắn liền với chủ nghĩa xã hội.',
         },
         {
           id: 'opt_goal_wrong_1',
@@ -61,7 +61,7 @@ export const CH1_DOSSIER_PUZZLE: DossierPuzzleDefinition = {
           text: 'Đánh đổ đế quốc chủ nghĩa Pháp và bọn phong kiến, làm cho nước Nam được hoàn toàn độc lập.',
           isAuthentic: true,
           explanation:
-            'Chính xác (Giáo trình 2021, tr. 62): Chống đế quốc giành độc lập dân tộc được đặt ở vị trí ưu tiên hàng đầu.',
+            'Chính xác: Chống đế quốc giành độc lập dân tộc được đặt ở vị trí ưu tiên hàng đầu.',
         },
         {
           id: 'opt_task_wrong_1',
@@ -93,7 +93,7 @@ export const CH1_DOSSIER_PUZZLE: DossierPuzzleDefinition = {
           text: 'Đảng là đội tiên phong của vô sản giai cấp, phải thu phục đại bộ phận dân cày và đoàn kết các lực lượng yêu nước.',
           isAuthentic: true,
           explanation:
-            'Chính xác (Giáo trình 2021, tr. 62–64): Công nông là gốc cách mệnh, đồng thời liên lạc với tiểu tư sản, trí thức, trung nông.',
+            'Chính xác: Công nông là gốc cách mệnh, đồng thời liên lạc với tiểu tư sản, trí thức, trung nông.',
         },
         {
           id: 'opt_force_wrong_1',
@@ -115,7 +115,7 @@ export const CH1_DOSSIER_PUZZLE: DossierPuzzleDefinition = {
     },
   ],
   progressiveHint:
-    'Gợi ý Sử Học (Giáo trình 2021, tr. 61–65): Cương lĩnh chính trị đầu tiên xác định rõ đường lối "tư sản dân quyền cách mạng và thổ địa cách mạng để đi tới xã hội cộng sản", đặt nhiệm vụ chống đế quốc giành độc lập dân tộc lên hàng đầu, và khẳng định Đảng là đội tiên phong của giai cấp vô sản gắn bó mật thiết với công nông.',
+    'Gợi ý: Cương lĩnh chính trị đầu tiên xác định rõ đường lối "tư sản dân quyền cách mạng và thổ địa cách mạng để đi tới xã hội cộng sản", đặt nhiệm vụ chống đế quốc giành độc lập dân tộc lên hàng đầu, và khẳng định Đảng là đội tiên phong của giai cấp vô sản gắn bó mật thiết với công nông.',
   textbookCitation:
     'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.3.b, tr. 61–65',
   provenance: CH1_PROVENANCE_MANIFEST.milestone_III_first_platform,
