@@ -533,14 +533,14 @@ test.describe('M6 Chapters II–IV, Distinct Era Mechanics, Provenance & Perform
 
     await page.keyboard.press('KeyE');
 
-    // Kiểm tra nhãn phân định nguồn gốc Viễn cảnh 2045 (speculative_2045)
+    // Provenance metadata is still available to the game, but isn't presented as a citation badge.
     const provenanceBadge = page.locator('#dialogue-provenance-badge');
-    await expect(provenanceBadge).toBeVisible();
+    await expect(provenanceBadge).toBeHidden();
     await expect(provenanceBadge).toHaveAttribute(
       'data-provenance-type',
       'speculative_2045'
     );
-    await expect(provenanceBadge).toContainText('Viễn cảnh Nghệ thuật 2045');
+    await expect(page.locator('#dialogue-citation')).toBeHidden();
 
     await page.waitForTimeout(150);
     await page.screenshot({
