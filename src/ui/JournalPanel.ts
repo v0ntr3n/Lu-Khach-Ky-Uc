@@ -244,7 +244,6 @@ export class JournalPanel {
             <span class="codex-dots" aria-hidden="true"></span>
             <span class="codex-item-body">
               <strong class="codex-title">${m.year} · ${m.title}</strong>
-              <span class="codex-cite">${m.textbookCitation}</span>
             </span>
           `;
         } else {
@@ -327,7 +326,6 @@ export class JournalPanel {
 
       const categoryLabel =
         quest.category === 'main' ? '◆ NHIỆM VỤ CHÍNH' : '▸ NHIỆM VỤ PHỤ';
-      const provBadge = quest.provenance.label || '◆ Sử liệu Giáo trình 2021';
 
       let objectivesHtml = '';
       for (const item of objectives) {
@@ -376,15 +374,11 @@ export class JournalPanel {
             <h4 class="journal-quest-title">${quest.title}</h4>
             <p class="journal-quest-sub">${quest.subtitle}</p>
           </div>
-          <span class="provenance-badge is-${quest.provenance.type}">${provBadge}</span>
+          
         </div>
         <p class="journal-quest-summary">${quest.summary}</p>
         <ul class="journal-objective-list">${objectivesHtml}</ul>
-        ${
-          quest.provenance.citation
-            ? `<div class="journal-quest-cite">◆ Nguồn đối chiếu: ${quest.provenance.citation}</div>`
-            : ''
-        }
+
       `;
 
       card
