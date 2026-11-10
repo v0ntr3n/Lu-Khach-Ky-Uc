@@ -44,6 +44,16 @@ export interface JournalPanelCallbacks {
   onClose?: () => void;
 }
 
+/** Escape text interpolated into Journal's small static HTML templates. */
+function escapeJournalHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export class JournalPanel {
   private callbacks: JournalPanelCallbacks;
   private activeTab: JournalTabId = 'quests';
@@ -57,6 +67,8 @@ export class JournalPanel {
 
   private inspectedQuestId: string | null = null;
   private inspectedObjectiveId: string | null = null;
+  private lastInspectorObjectiveId: string | null = null;
+  private loreExpanded = false;
 
   private codexActiveChapter: ChapterData | null = CHAPTERS[0] ?? null;
   private codexCollected: Set<RomanMilestoneId> = new Set();
@@ -246,8 +258,8 @@ export class JournalPanel {
     }
 
     if (summaryEl) {
-      summaryEl.textContent = `${completedObjectives}/${totalObjectives} bước mục tiêu · ${completedQuests}/${this.quests.length} nhiệm vụ hoàn tất${
-        this.isPresenterMode ? ' · [GIẢNG VIÊN]' : ''
+      summaryEl.textContent = `${completedObjectives}/${totalObjectives} mục tiêu · ${completedQuests}/${this.quests.length} nhiệm vụ${
+        this.isPresenterMode ? ' · Giảng viên' : ''
       }`;
     }
 
@@ -349,18 +361,20 @@ export class JournalPanel {
       }${isQuestSelected ? ' is-selected' : ''}`;
       card.dataset.questId = quest.id;
 
-      const catLabel = quest.category === 'main' ? 'CHÍNH' : 'PHỤ';
-
       const header = document.createElement('div');
       header.className = 'journal-quest-header';
+      header.tabIndex = 0;
+      header.setAttribute('role', 'button');
+      header.setAttribute('aria-label', `Chọn nhiệm vụ ${quest.title}`);
+      header.title = quest.title;
       header.innerHTML = `
         <div class="journal-quest-title-wrap">
-          <span class="journal-category-badge is-${quest.category}">${catLabel}</span>
-          <h4 class="journal-quest-title">${quest.title}</h4>
+          <span class="journal-category-glyph" aria-hidden="true">${quest.category === 'main' ? '◆' : '◇'}</span>
+          <h4 class="journal-quest-title">${escapeJournalHtml(quest.hudTitle || quest.title)}</h4>
         </div>
         <span class="journal-step-count">${doneSteps}/${objectives.length}</span>
       `;
-      header.addEventListener('click', () => {
+      const selectQuest = () => {
         this.inspectedQuestId = quest.id;
         const firstActive = objectives.find(
           (o) => (this.isPresenterMode ? 'completed' : o.status) === 'active'
@@ -368,6 +382,13 @@ export class JournalPanel {
         this.inspectedObjectiveId =
           firstActive?.objective.id ?? objectives[0]?.objective.id ?? null;
         this.render();
+      };
+      header.addEventListener('click', selectQuest);
+      header.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault();
+          selectQuest();
+        }
       });
       card.appendChild(header);
 
@@ -398,39 +419,13 @@ export class JournalPanel {
                 ? '◆'
                 : '○';
 
-        const trackPillHtml =
-          effStatus === 'active'
-            ? `<span class="journal-track-pill ${isTracked ? 'is-tracked' : ''}">${
-                isTracked ? 'Đang dẫn' : 'Dẫn đường'
-              }</span>`
-            : '';
-
         li.innerHTML = `
           <div class="journal-obj-top">
-            <span class="journal-status-badge is-${effStatus}${
-              isTracked ? ' is-tracked' : ''
-            }" aria-hidden="true">${statusGlyph}</span>
-            <strong class="journal-obj-title">${item.objective.title}</strong>
-            ${trackPillHtml}
+            <span class="journal-status-badge is-${effStatus}${isTracked ? ' is-tracked' : ''}" aria-hidden="true">${statusGlyph}</span>
+            <strong class="journal-obj-title">${escapeJournalHtml(item.objective.hudText || item.objective.title)}</strong>
           </div>
         `;
-
-        li.addEventListener('mouseenter', () => {
-          if (this.inspectedObjectiveId !== item.objective.id) {
-            this.inspectedQuestId = quest.id;
-            this.inspectedObjectiveId = item.objective.id;
-            this.renderQuestInspector(
-              bannerEl,
-              entry,
-              item,
-              effectiveTrackedId
-            );
-            listEl
-              .querySelectorAll('.journal-objective-row.is-selected')
-              .forEach((el) => el.classList.remove('is-selected'));
-            li.classList.add('is-selected');
-          }
-        });
+        li.title = item.objective.title;
 
         if (effStatus === 'active') {
           li.tabIndex = 0;
@@ -482,9 +477,8 @@ export class JournalPanel {
     if (!entry && !this.activeObjective) {
       bannerEl.innerHTML = `
         <div class="journal-inspector-empty">
-          <div class="journal-banner-label">✓ HOÀN TẤT TOÀN BỘ MỤC TIÊU</div>
-          <div class="journal-banner-title">Sẵn sàng kích hoạt Cổng Thời Gian cuối chương</div>
-          <div class="journal-banner-desc">Tiến tới Điểm Hội Tụ Lịch Sử để khép lại chương hiện tại.</div>
+          <div class="journal-banner-label">✓ Đã hoàn thành</div>
+          <div class="journal-banner-title">Đến Cổng Thời Gian</div>
         </div>
       `;
       return;
@@ -495,88 +489,78 @@ export class JournalPanel {
     const effStatus: QuestObjectiveStatus = this.isPresenterMode
       ? 'completed'
       : (objItem?.status ?? 'active');
-
     const isTracked = Boolean(
       objective && effStatus === 'active' && objective.id === effectiveTrackedId
     );
 
+    if (this.lastInspectorObjectiveId !== (objective?.id ?? null)) {
+      this.lastInspectorObjectiveId = objective?.id ?? null;
+      this.loreExpanded = false;
+    }
+
     const stepIndex =
       quest && objective
-        ? Math.max(
-            1,
-            quest.objectives.findIndex((o) => o.id === objective.id) + 1
-          )
+        ? Math.max(1, quest.objectives.findIndex((o) => o.id === objective.id) + 1)
         : 1;
     const totalSteps = quest ? Math.max(1, quest.objectives.length) : 1;
-
-    const categoryText =
-      quest?.category === 'side' ? 'NHIỆM VỤ PHỤ' : 'NHIỆM VỤ CHÍNH';
-
-    const kickerLabel = isTracked
-      ? '▼ MỤC TIÊU ĐANG DẪN ĐƯỜNG'
-      : effStatus === 'completed'
-        ? '✓ MỤC TIÊU ĐÃ HOÀN TẤT'
+    const statusText =
+      effStatus === 'completed'
+        ? '✓ Hoàn thành'
         : effStatus === 'locked'
-          ? '○ BƯỚC TIẾP THEO (CHƯA MỞ)'
-          : '◆ CHI TIẾT MỤC TIÊU';
-
-    const objTitle = objective?.title ?? 'Đã hoàn thành các bước nhiệm vụ';
-    const objDesc =
+          ? '○ Chưa mở'
+          : isTracked
+            ? '◆ Đang dẫn đường'
+            : '◆ Có thể thực hiện';
+    const shortObjective = escapeJournalHtml(
+      objective?.hudText || objective?.title || 'Đã hoàn thành mục tiêu'
+    );
+    const shortQuest = escapeJournalHtml(quest?.hudTitle || quest?.title || '');
+    const unlockMessage =
       effStatus === 'locked'
-        ? objItem?.prerequisiteText ||
-          'Hãy hoàn thành bước mục tiêu hiện tại để mở khóa diễn biến tiếp theo.'
-        : (objective?.description ?? 'Mọi mục tiêu của nhiệm vụ này đã hoàn tất.');
-
-    const rawHint =
-      objective?.hintText ||
-      (isTracked ? this.hintText : '');
-    const hintHtml =
-      this.showHints && rawHint && effStatus !== 'completed'
-        ? `<div class="journal-banner-hint">▸ Gợi ý: ${rawHint}</div>`
+        ? '<p class="journal-compact-hint">Hoàn thành mục tiêu trước để mở khóa.</p>'
         : '';
 
     const trackActionHtml =
       objective && effStatus === 'active'
-        ? `<button type="button" class="ctrl-btn ${
-            isTracked ? 'is-primary' : ''
-          } journal-inspector-track-btn" data-inspect-track-id="${objective.id}">
-            ${
-              isTracked
-                ? '▼ Đang dẫn đường trên Minimap'
-                : '▸ Dẫn đường mục tiêu này'
-            }
-          </button>`
+        ? `<button type="button" class="ctrl-btn journal-inspector-track-btn${isTracked ? ' is-primary' : ''}" data-inspect-track-id="${escapeJournalHtml(objective.id)}">${isTracked ? '✓ Đang dẫn đường' : '⌖ Dẫn đường'}</button>`
         : '';
 
-    const sourceCite =
+    // The full historical text, specific requirements and citations are preserved
+    // in a deliberate disclosure, rather than competing with gameplay actions.
+    const citation =
       quest?.provenance?.citation ||
       quest?.provenance?.historicalNote ||
-      quest?.provenance?.label ||
-      '';
-    const sourceCiteHtml = sourceCite
-      ? `<div class="journal-quest-cite">◆ Tư liệu: ${sourceCite}</div>`
-      : '';
+      quest?.provenance?.label || '';
+    const hint = objective?.hintText || (isTracked ? this.hintText : '');
+    const loreHtml = `
+      <details class="journal-quest-lore" ${this.loreExpanded ? 'open' : ''}>
+        <summary>Xem chi tiết &amp; tư liệu</summary>
+        <div class="journal-quest-lore-content">
+          ${quest?.title ? `<h5>${escapeJournalHtml(quest.title)}</h5>` : ''}
+          ${quest?.summary ? `<p>${escapeJournalHtml(quest.summary)}</p>` : ''}
+          ${objective?.title ? `<p><strong>Mục tiêu:</strong> ${escapeJournalHtml(objective.title)}</p>` : ''}
+          ${objective?.description ? `<p>${escapeJournalHtml(objective.description)}</p>` : ''}
+          ${objItem?.prerequisiteText ? `<p><strong>Điều kiện:</strong> ${escapeJournalHtml(objItem.prerequisiteText)}</p>` : ''}
+          ${this.showHints && hint && effStatus !== 'completed' ? `<p><strong>Gợi ý:</strong> ${escapeJournalHtml(hint)}</p>` : ''}
+          ${citation ? `<p class="journal-quest-cite"><strong>Nguồn:</strong> ${escapeJournalHtml(citation)}</p>` : ''}
+        </div>
+      </details>
+    `;
 
     bannerEl.innerHTML = `
       <div class="journal-inspector-top">
-        <span class="journal-banner-label">${kickerLabel}</span>
-        <span class="journal-inspector-step-pill">${categoryText} · Bước ${stepIndex}/${totalSteps}</span>
+        <span class="journal-banner-label">${statusText}</span>
+        <span class="journal-inspector-step-pill">${stepIndex}/${totalSteps}</span>
       </div>
       <div class="journal-inspector-quest-head">
-        <h4 class="journal-inspector-quest-title">${quest?.title ?? ''}</h4>
-        ${
-          quest?.summary
-            ? `<p class="journal-quest-summary">${quest.summary}</p>`
-            : ''
-        }
+        <span class="journal-inspector-quest-title">${shortQuest}</span>
       </div>
       <div class="journal-inspector-objective-box is-${effStatus}">
-        <div class="journal-banner-title"><strong>${objTitle}</strong></div>
-        <div class="journal-banner-desc">${objDesc}</div>
-        ${hintHtml}
+        <div class="journal-banner-title"><strong>${shortObjective}</strong></div>
+        ${unlockMessage}
         ${trackActionHtml}
       </div>
-      ${sourceCiteHtml}
+      ${loreHtml}
     `;
 
     const trackBtn = bannerEl.querySelector<HTMLButtonElement>(
@@ -584,9 +568,11 @@ export class JournalPanel {
     );
     trackBtn?.addEventListener('click', () => {
       const objId = trackBtn.dataset.inspectTrackId;
-      if (objId) {
-        this.callbacks.onSelectObjective?.(objId);
-      }
+      if (objId) this.callbacks.onSelectObjective?.(objId);
+    });
+    const lore = bannerEl.querySelector<HTMLDetailsElement>('.journal-quest-lore');
+    lore?.addEventListener('toggle', () => {
+      this.loreExpanded = lore.open;
     });
   }
 

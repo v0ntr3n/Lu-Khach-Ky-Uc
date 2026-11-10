@@ -229,7 +229,10 @@ test.describe('M13: Eastward Quest Journal Redesign & Unified Light/Dark Theme S
     await assertWcagContrast(page, '.journal-quest-title', 4.5);
     await assertWcagContrast(page, '.journal-obj-title', 4.5);
     await assertWcagContrast(page, '.journal-banner-title', 4.5);
-    await assertWcagContrast(page, '.journal-banner-desc', 4.5);
+    await assertWcagContrast(page, '.journal-banner-label', 4.5);
+    await assertWcagContrast(page, '.journal-quest-lore summary', 4.5);
+    await page.locator('.journal-quest-lore summary').click();
+    await assertWcagContrast(page, '.journal-quest-lore-content p', 4.5);
 
     await page.screenshot({
       path: path.join(ARTIFACT_DIR, 'm13_journal_quests_light.png'),
@@ -273,7 +276,10 @@ test.describe('M13: Eastward Quest Journal Redesign & Unified Light/Dark Theme S
     await assertWcagContrast(page, '.journal-quest-title', 4.5);
     await assertWcagContrast(page, '.journal-obj-title', 4.5);
     await assertWcagContrast(page, '.journal-banner-title', 4.5);
-    await assertWcagContrast(page, '.journal-banner-desc', 4.5);
+    await assertWcagContrast(page, '.journal-banner-label', 4.5);
+    await assertWcagContrast(page, '.journal-quest-lore summary', 4.5);
+    await page.locator('.journal-quest-lore summary').click();
+    await assertWcagContrast(page, '.journal-quest-lore-content p', 4.5);
 
     await page.screenshot({
       path: path.join(ARTIFACT_DIR, 'm13_journal_quests_dark.png'),
