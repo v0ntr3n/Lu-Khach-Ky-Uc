@@ -27,7 +27,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
     rewardFlag: 'ch1_main_quest_complete',
     provenance: {
       type: 'historical_fact',
-      label: 'Nhiệm vụ Lịch sử Chính (Giáo trình 2021, Chương I, tr. 35–80)',
+      label: 'Nhiệm vụ Lịch sử Chính',
       citation:
         'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, tr. 35–80',
     },
@@ -181,7 +181,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
     rewardFlag: 'ch2_main_quest_complete',
     provenance: {
       type: 'historical_fact',
-      label: 'Nhiệm vụ Lịch sử Chính (Giáo trình 2021, Chương I, tr. 81–126)',
+      label: 'Nhiệm vụ Lịch sử Chính',
       citation:
         'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục II.2–II.3, tr. 81–126',
     },
@@ -261,7 +261,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
     rewardFlag: 'ch3_main_quest_complete',
     provenance: {
       type: 'historical_fact',
-      label: 'Nhiệm vụ Lịch sử Chính (Giáo trình 2021, Chương II, tr. 127–238)',
+      label: 'Nhiệm vụ Lịch sử Chính',
       citation:
         'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương II, tr. 127–238',
     },
@@ -341,7 +341,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
     rewardFlag: 'ch4_main_quest_complete',
     provenance: {
       type: 'historical_fact',
-      label: 'Nhiệm vụ Lịch sử Chính & Tầm nhìn 2045 (Giáo trình 2021, Chương III, tr. 258–395)',
+      label: 'Nhiệm vụ Lịch sử Chính & Tầm nhìn 2045',
       citation:
         'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương III, tr. 258–395',
     },
