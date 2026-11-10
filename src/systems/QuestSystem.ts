@@ -20,6 +20,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
     id: 'q_ch1_main_unification',
     eraId: '1930',
     title: 'Hội Nghị Hợp Nhất Cửu Long (Xuân 1930)',
+    hudTitle: 'Hội nghị Cửu Long · 1930',
     subtitle: 'Chương I · Hương Cảng 1930',
     category: 'main',
     summary:
@@ -35,6 +36,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
       {
         id: 'obj_ch1_meet_liaison',
         title: 'Bắt liên lạc tại Quảng Trường Bến Cảng',
+        hudText: 'Gặp Giao Liên · Bến Cảng',
         description:
           'Gặp Giao Liên tại Quảng Trường Bến Cảng Hương Cảng để nhận mật hiệu và khôi phục Cột mốc I.',
         zoneId: 'harbor_square',
@@ -55,6 +57,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
       {
         id: 'obj_ch1_inspect_warehouse_ledger',
         title: 'Kiểm tra Sổ Vận Đơn & Báo Thanh Niên tại Kho Hàng Số 4',
+        hudText: 'Kiểm tra sổ vận đơn · Kho 4',
         description:
           'Tiến vào Kho Hàng Bến Cảng để kiểm tra sổ vận đơn chuyển báo Thanh Niên và Đường Kách Mệnh.',
         zoneId: 'warehouse_interior',
@@ -75,6 +78,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
       {
         id: 'obj_ch1_decipher_safehouse',
         title: 'Giải mã Mật Tín tại Nhà An Toàn Giao Liên',
+        hudText: 'Thu thập mật tín · Nhà An Toàn',
         description:
           'Đến Nhà An Toàn tại Phố Cổ Cửu Long để khôi phục Mật tín triệu tập Hội nghị hợp nhất (Cột mốc II).',
         zoneId: 'safehouse_interior',
@@ -95,6 +99,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
       {
         id: 'obj_ch1_reach_secret_archive',
         title: 'Hoàn tất Văn Kiện Hợp Nhất tại Phòng Lưu Trữ Bí Mật',
+        hudText: 'Kiểm định hồ sơ · Phòng Lưu Trữ',
         description:
           'Thu thập Chánh cương vắn tắt, Sách lược vắn tắt và Luận cương chính trị (Cột mốc III) để mở Cổng Thời Gian.',
         zoneId: 'secret_archive',
@@ -118,6 +123,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
     id: 'q_ch1_side_dock_watch',
     eraId: '1930',
     title: 'Đêm Gác Bến Thuyền Nhỏ (Nhiệm Vụ Phụ)',
+    hudTitle: 'Đêm gác bến thuyền',
     subtitle: 'Chương I · Lối Đi Vòng An Toàn',
     category: 'side',
     summary:
@@ -133,6 +139,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
       {
         id: 'obj_ch1_talk_pier_boatman',
         title: 'Hỏi thăm Lão Chèo Đò tại Bến Thuyền Nhỏ',
+        hudText: 'Gặp Lão Chèo Đò · Bến Thuyền',
         description:
           'Trò chuyện với Lão Chèo Đò ở Bến Thuyền Nhỏ phía nam Quảng Trường.',
         zoneId: 'small_pier',
@@ -152,6 +159,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
       {
         id: 'obj_ch1_check_patrol_schedule',
         title: 'Thu thập Lịch Đổi Ca Tuần Tra trên cầu tàu',
+        hudText: 'Lấy lịch tuần tra · Cầu Tàu',
         description:
           'Lấy tờ Lịch Đổi Ca Tuần Tra trên bàn gỗ cuối cầu tàu Bến Thuyền Nhỏ.',
         zoneId: 'small_pier',
@@ -174,6 +182,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
     id: 'q_ch2_main_august_revolution',
     eraId: '1945',
     title: 'Chuyển Hướng Chiến Lược & Tổng Khởi Nghĩa (1939 – 1945)',
+    hudTitle: 'Tổng khởi nghĩa · 1945',
     subtitle: 'Chương II · Tân Trào – Quảng Trường Ba Đình',
     category: 'main',
     summary:
@@ -189,6 +198,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
       {
         id: 'obj_ch2_pac_bo',
         title: 'Bắt liên lạc tại Cây Đa Tân Trào & Khôi phục Nghị quyết Trung ương 8 (05/1941)',
+        hudText: 'Gặp Giao Liên · Tân Trào',
         description:
           'Gặp Giao Liên Việt Minh tại Tân Trào để khôi phục Cột mốc IV: Đặt nhiệm vụ giải phóng dân tộc lên hàng đầu.',
         zoneId: 'tan_trao_banyan',
@@ -209,6 +219,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
       {
         id: 'obj_ch2_tan_trao',
         title: 'Điều phối Mạng Lưới Giao Liên & Quân Lệnh Số 1 tại Lán Nà Nưa (08/1945)',
+        hudText: 'Điều phối mạng lưới · Tân Trào',
         description:
           'Giải bài toán Điều phối Mạng lưới Giao liên Tổng khởi nghĩa tại Tân Trào để khôi phục Cột mốc V.',
         zoneId: 'tan_trao_banyan',
@@ -230,6 +241,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
       {
         id: 'obj_ch2_ba_dinh',
         title: 'Tiến về Quảng Trường Ba Đình & Khôi phục Tuyên ngôn Độc lập (02/09/1945)',
+        hudText: 'Gặp nhân chứng · Ba Đình',
         description:
           'Đi qua cổng tiến về Quảng trường Ba Đình, gặp Nhân chứng Lịch sử khôi phục Cột mốc VI và mở Cổng Thời Gian Chương II.',
         zoneId: 'ba_dinh_square',
@@ -254,6 +266,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
     id: 'q_ch3_main_reunification',
     eraId: '1954_1975',
     title: 'Hai Chiến Lược Cách Mạng & Thống Nhất Đất Nước (1945 – 1975)',
+    hudTitle: 'Điện Biên – Thống nhất',
     subtitle: 'Chương III · Đèo Pha Đin – Hành Lang Mùa Xuân 1975',
     category: 'main',
     summary:
@@ -269,6 +282,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
       {
         id: 'obj_ch3_resistance_1946',
         title: 'Gặp Đội Trưởng Dân Công tại Đèo Pha Đin & Khôi phục Cột mốc VII',
+        hudText: 'Gặp đội trưởng · Pha Đin',
         description:
           'Khôi phục Lời kêu gọi Toàn quốc kháng chiến (19/12/1946) và đường lối kháng chiến toàn dân, toàn diện.',
         zoneId: 'pha_din_pass',
@@ -289,6 +303,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
       {
         id: 'obj_ch3_dien_bien_1954',
         title: 'Giải Sa Bàn Tiếp Vận Pha Đin — Chiến thắng Điện Biên Phủ (07/05/1954)',
+        hudText: 'Giải sa bàn tiếp vận · Pha Đin',
         description:
           'Điều phối phương châm "Đánh chắc, tiến chắc" và tuyến xe thồ Điện Biên trên Sa bàn Hậu cần để khôi phục Cột mốc VIII.',
         zoneId: 'pha_din_pass',
@@ -310,6 +325,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
       {
         id: 'obj_ch3_spring_1975',
         title: 'Tiến vào Hành Lang Mùa Xuân 1975 & Chiến dịch Hồ Chí Minh (30/04/1975)',
+        hudText: 'Tiến về chiến dịch Mùa Xuân 1975',
         description:
           'Chuyển cảnh sang Hành Lang Mùa Xuân 1975, khôi phục Cột mốc IX và mở Cổng Thời Gian Chương III.',
         zoneId: 'spring_1975_corridor',
@@ -334,6 +350,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
     id: 'q_ch4_main_doi_moi',
     eraId: '1986_2045',
     title: 'Đổi Mới Toàn Diện & Khát Vọng Việt Nam 2045 (1986 – 2045)',
+    hudTitle: 'Đổi Mới · 1986–2045',
     subtitle: 'Chương IV · Đại Lộ Đổi Mới 1986 – Quảng Trường Kỷ Nguyên Số 2045',
     category: 'main',
     summary:
@@ -349,6 +366,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
       {
         id: 'obj_ch4_doi_moi_1986',
         title: 'Gặp Chuyên Gia Kinh Tế tại Đại Lộ Đổi Mới & Khôi phục Đại hội VI (12/1986)',
+        hudText: 'Gặp chuyên gia · Đại Lộ Đổi Mới',
         description:
           'Khôi phục Cột mốc X: Đổi mới tư duy kinh tế, xóa bỏ cơ chế tập trung quan liêu bao cấp.',
         zoneId: 'doi_moi_avenue',
@@ -369,6 +387,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
       {
         id: 'obj_ch4_platform_2011',
         title: 'Giải Ma Trận Nhân Quả Quyết Sách — Cương lĩnh 1991 & 2011',
+        hudText: 'Giải ma trận quyết sách',
         description:
           'Liên kết chuỗi nhân quả quyết sách Đổi mới và mô hình kinh tế thị trường định hướng XHCN để khôi phục Cột mốc XI.',
         zoneId: 'doi_moi_avenue',
@@ -390,6 +409,7 @@ export const QUEST_CATALOG: readonly QuestDefinition[] = [
       {
         id: 'obj_ch4_vision_2045',
         title: 'Tiến tới Quảng Trường Kỷ Nguyên Số 2045 & Khôi phục Tầm nhìn Đại hội XIII',
+        hudText: 'Đến Quảng Trường Kỷ Nguyên Số',
         description:
           'Bước sang Quảng Trường Kỷ Nguyên Số 2045, khôi phục Cột mốc XII và hoàn thành Biên niên sử 1930 – 2045.',
         zoneId: 'nexus_2045_plaza',
