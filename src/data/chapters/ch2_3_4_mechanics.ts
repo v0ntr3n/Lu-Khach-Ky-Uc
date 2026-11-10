@@ -123,7 +123,7 @@ export const CH2_DISPATCH_NETWORK_PUZZLE: DossierPuzzleDefinition = {
     'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục II.3, tr. 95–124',
   provenance: {
     type: 'historical_fact',
-    label: 'Sự kiện Lịch sử (Giáo trình 2021, Chương I, tr. 95–124)',
+    label: 'Sự kiện Lịch sử',
     citation:
       'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục II.3, tr. 95–124',
   },
@@ -245,7 +245,7 @@ export const CH3_SUPPLY_LOGISTICS_PUZZLE: DossierPuzzleDefinition = {
     'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương II, tr. 127–238',
   provenance: {
     type: 'historical_fact',
-    label: 'Sự kiện Lịch sử (Giáo trình 2021, Chương II, tr. 127–238)',
+    label: 'Sự kiện Lịch sử',
     citation:
       'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương II, tr. 127–238',
   },
@@ -367,7 +367,7 @@ export const CH4_CAUSAL_POLICY_PUZZLE: DossierPuzzleDefinition = {
     'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương III, tr. 241–398',
   provenance: {
     type: 'historical_fact',
-    label: 'Văn kiện Đại hội VI – XIII & Tầm nhìn 2045 (Giáo trình 2021, tr. 241–398)',
+    label: 'Văn kiện Đại hội VI – XIII & Tầm nhìn 2045',
     citation:
       'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương III, tr. 241–398',
     historicalNote:
