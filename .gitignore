@@ -8,3 +8,4 @@ playwright/.cache/
 coverage/
 *.log
 .DS_Store
+artifacts/

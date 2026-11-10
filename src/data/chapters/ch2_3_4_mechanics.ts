@@ -18,7 +18,7 @@ export const CH2_DISPATCH_NETWORK_PUZZLE: DossierPuzzleDefinition = {
   subtitle:
     'Xác lập cửa sổ thời cơ, trình tự nổi dậy giành chính quyền và đích đến pháp lý tại Quảng trường Ba Đình',
   instruction:
-    'Hãy điều phối mạng lưới liên lạc từ Tân Trào tới các địa phương theo đúng tiến trình lịch sử Cách mạng Tháng Tám 1945 (Giáo trình 2021, tr. 95–124):',
+    'Hãy điều phối mạng lưới liên lạc từ Tân Trào tới các địa phương theo đúng tiến trình lịch sử Cách mạng Tháng Tám 1945:',
   slots: [
     {
       id: 'slot_ch2_time_window',
@@ -32,7 +32,7 @@ export const CH2_DISPATCH_NETWORK_PUZZLE: DossierPuzzleDefinition = {
           text: 'Chớp đúng thời cơ phát xít Nhật đầu hàng Đồng minh (8/1945), phát động toàn dân nổi dậy trước khi quân Đồng minh vào Đông Dương.',
           isAuthentic: true,
           explanation:
-            'Chính xác (Giáo trình 2021, tr. 108–112): Đảng kịp thời phát động toàn dân tổng khởi nghĩa giành chính quyền trong khoảng trống quyền lực sau khi Nhật đầu hàng.',
+            'Chính xác: Đảng kịp thời phát động toàn dân tổng khởi nghĩa giành chính quyền trong khoảng trống quyền lực sau khi Nhật đầu hàng.',
         },
         {
           id: 'opt_ch2_time_wrong_1',
@@ -64,7 +64,7 @@ export const CH2_DISPATCH_NETWORK_PUZZLE: DossierPuzzleDefinition = {
           text: 'Phối hợp khởi nghĩa từng phần tiến lên Tổng khởi nghĩa thắng lợi dây chuyền: Hà Nội (19/8) -> Huế (23/8) -> Sài Gòn (25/8).',
           isAuthentic: true,
           explanation:
-            'Chính xác (Giáo trình 2021, tr. 113–116): Thắng lợi ở Hà Nội ngày 19/8 có ý nghĩa quyết định, cổ vũ Huế (23/8) và Sài Gòn (25/8) giành chính quyền.',
+            'Chính xác: Thắng lợi ở Hà Nội ngày 19/8 có ý nghĩa quyết định, cổ vũ Huế (23/8) và Sài Gòn (25/8) giành chính quyền.',
         },
         {
           id: 'opt_ch2_route_wrong_1',
@@ -96,7 +96,7 @@ export const CH2_DISPATCH_NETWORK_PUZZLE: DossierPuzzleDefinition = {
           text: 'Tuyên ngôn Độc lập ngày 02/09/1945 khai sinh nước Việt Nam Dân chủ Cộng hòa — Nhà nước công nông đầu tiên ở Đông Nam Á.',
           isAuthentic: true,
           explanation:
-            'Chính xác (Giáo trình 2021, tr. 117–124): Chủ tịch Hồ Chí Minh đọc Tuyên ngôn Độc lập, mở ra kỷ nguyên độc lập, tự do cho dân tộc Việt Nam.',
+            'Chính xác: Chủ tịch Hồ Chí Minh đọc Tuyên ngôn Độc lập, mở ra kỷ nguyên độc lập, tự do cho dân tộc Việt Nam.',
         },
         {
           id: 'opt_ch2_state_wrong_1',
@@ -118,12 +118,12 @@ export const CH2_DISPATCH_NETWORK_PUZZLE: DossierPuzzleDefinition = {
     },
   ],
   progressiveHint:
-    'Gợi ý Sử Học (Giáo trình 2021, tr. 108–124): Hãy chọn phương án chớp thời cơ Nhật đầu hàng Đồng minh (8/1945), trình tự giành chính quyền Hà Nội (19/8) -> Huế (23/8) -> Sài Gòn (25/8), và Tuyên ngôn Độc lập ngày 02/09/1945.',
+    'Hãy chọn phương án chớp thời cơ Nhật đầu hàng Đồng minh (8/1945), trình tự giành chính quyền Hà Nội (19/8) -> Huế (23/8) -> Sài Gòn (25/8), và Tuyên ngôn Độc lập ngày 02/09/1945.',
   textbookCitation:
     'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục II.3, tr. 95–124',
   provenance: {
     type: 'historical_fact',
-    label: 'Sự kiện Lịch sử (Giáo trình 2021, Chương I, tr. 95–124)',
+    label: 'Sự kiện Lịch sử',
     citation:
       'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục II.3, tr. 95–124',
   },
@@ -140,7 +140,7 @@ export const CH3_SUPPLY_LOGISTICS_PUZZLE: DossierPuzzleDefinition = {
   subtitle:
     'Phân bổ hậu cần chiến dịch Điện Biên Phủ (1954) và điều phối thế trận hai miền Nam – Bắc tiến tới Đại thắng mùa Xuân 1975',
   instruction:
-    'Hãy xác lập phương án điều phối chiến dịch và hậu cần chính xác trên sa bàn lịch sử (Giáo trình 2021, Chương II, tr. 127–238):',
+    'Hãy xác lập phương án điều phối chiến dịch và hậu cần chính xác trên sa bàn lịch sử:',
   slots: [
     {
       id: 'slot_ch3_dien_bien_doctrine',
@@ -154,7 +154,7 @@ export const CH3_SUPPLY_LOGISTICS_PUZZLE: DossierPuzzleDefinition = {
           text: 'Chuyển từ "Đánh nhanh, giải quyết nhanh" sang "Đánh chắc, tiến chắc", huy động sức mạnh toàn dân và đoàn xe thồ vượt đèo Pha Đin.',
           isAuthentic: true,
           explanation:
-            'Chính xác (Giáo trình 2021, tr. 176–182): Quyết định chuyển phương châm tác chiến cùng mạng lưới hậu cần nhân dân đã làm nên chiến thắng Điện Biên Phủ 07/05/1954.',
+            'Chính xác: Quyết định chuyển phương châm tác chiến cùng mạng lưới hậu cần nhân dân đã làm nên chiến thắng Điện Biên Phủ 07/05/1954.',
         },
         {
           id: 'opt_ch3_dbp_wrong_1',
@@ -186,7 +186,7 @@ export const CH3_SUPPLY_LOGISTICS_PUZZLE: DossierPuzzleDefinition = {
           text: 'Miền Bắc xây dựng chủ nghĩa xã hội làm hậu phương lớn; miền Nam đẩy mạnh cách mạng dân tộc dân chủ nhân dân làm tiền tuyến lớn.',
           isAuthentic: true,
           explanation:
-            'Chính xác (Giáo trình 2021, tr. 197–204): Hai chiến lược có mối quan hệ mật thiết, cùng hướng tới mục tiêu giải phóng miền Nam, thống nhất Tổ quốc.',
+            'Chính xác: Hai chiến lược có mối quan hệ mật thiết, cùng hướng tới mục tiêu giải phóng miền Nam, thống nhất Tổ quốc.',
         },
         {
           id: 'opt_ch3_two_strat_wrong_1',
@@ -218,7 +218,7 @@ export const CH3_SUPPLY_LOGISTICS_PUZZLE: DossierPuzzleDefinition = {
           text: 'Phương châm "Thần tốc, táo bạo, bất ngờ, chắc thắng" trong Chiến dịch Hồ Chí Minh lịch sử kết thúc thắng lợi ngày 30/04/1975.',
           isAuthentic: true,
           explanation:
-            'Chính xác (Giáo trình 2021, tr. 228–235): Cuộc Tổng tiến công và nổi dậy Xuân 1975 toàn thắng ngày 30/04/1975, thu non sông về một mối.',
+            'Chính xác: Cuộc Tổng tiến công và nổi dậy Xuân 1975 toàn thắng ngày 30/04/1975, thu non sông về một mối.',
         },
         {
           id: 'opt_ch3_1975_wrong_1',
@@ -240,12 +240,12 @@ export const CH3_SUPPLY_LOGISTICS_PUZZLE: DossierPuzzleDefinition = {
     },
   ],
   progressiveHint:
-    'Gợi ý Sử Học (Giáo trình 2021, tr. 176–235): Hãy chọn phương châm "Đánh chắc, tiến chắc" tại Điện Biên Phủ (1954), đường lối hậu phương lớn miền Bắc – tiền tuyến lớn miền Nam (Đại hội III, 1960), và mệnh lệnh "Thần tốc, táo bạo, bất ngờ, chắc thắng" (Xuân 1975).',
+    'Hãy chọn phương châm "Đánh chắc, tiến chắc" tại Điện Biên Phủ (1954), đường lối hậu phương lớn miền Bắc – tiền tuyến lớn miền Nam (Đại hội III, 1960), và mệnh lệnh "Thần tốc, táo bạo, bất ngờ, chắc thắng" (Xuân 1975).',
   textbookCitation:
     'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương II, tr. 127–238',
   provenance: {
     type: 'historical_fact',
-    label: 'Sự kiện Lịch sử (Giáo trình 2021, Chương II, tr. 127–238)',
+    label: 'Sự kiện Lịch sử',
     citation:
       'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương II, tr. 127–238',
   },
@@ -262,7 +262,7 @@ export const CH4_CAUSAL_POLICY_PUZZLE: DossierPuzzleDefinition = {
   subtitle:
     'Liên kết nguyên nhân – quyết sách – thành tựu từ Đại hội VI (1986), Cương lĩnh 2011 đến mục tiêu phát triển Đại hội XIII (2030–2045)',
   instruction:
-    'Hãy ghép nối đúng chuỗi nhân quả quyết sách Đổi mới và phân biệt rõ văn kiện lịch sử với viễn cảnh nghệ thuật 2045 (Giáo trình 2021, Chương III, tr. 241–398):',
+    'Hãy ghép nối đúng chuỗi nhân quả quyết sách Đổi mới và phân biệt rõ văn kiện lịch sử với viễn cảnh nghệ thuật 2045:',
   slots: [
     {
       id: 'slot_ch4_doi_moi_1986',
@@ -276,7 +276,7 @@ export const CH4_CAUSAL_POLICY_PUZZLE: DossierPuzzleDefinition = {
           text: 'Xóa bỏ cơ chế tập trung quan liêu, bao cấp; phát triển kinh tế nhiều thành phần vận hành theo cơ chế thị trường có sự quản lý của Nhà nước.',
           isAuthentic: true,
           explanation:
-            'Chính xác (Giáo trình 2021, tr. 261–268): Đại hội VI khởi xướng đường lối Đổi mới toàn diện, trọng tâm là đổi mới tư duy kinh tế.',
+            'Chính xác: Đại hội VI khởi xướng đường lối Đổi mới toàn diện, trọng tâm là đổi mới tư duy kinh tế.',
         },
         {
           id: 'opt_ch4_1986_wrong_1',
@@ -308,7 +308,7 @@ export const CH4_CAUSAL_POLICY_PUZZLE: DossierPuzzleDefinition = {
           text: 'Phát triển nền kinh tế thị trường định hướng xã hội chủ nghĩa gắn với tiến bộ, công bằng xã hội và hội nhập quốc tế sâu rộng.',
           isAuthentic: true,
           explanation:
-            'Chính xác (Giáo trình 2021, tr. 332–345): Đẩy mạnh công nghiệp hóa, hiện đại hóa gắn với kinh tế tri thức và hội nhập quốc tế.',
+            'Chính xác: Đẩy mạnh công nghiệp hóa, hiện đại hóa gắn với kinh tế tri thức và hội nhập quốc tế.',
         },
         {
           id: 'opt_ch4_2011_wrong_1',
@@ -340,7 +340,7 @@ export const CH4_CAUSAL_POLICY_PUZZLE: DossierPuzzleDefinition = {
           text: 'Phấn đấu đến năm 2045 (kỷ niệm 100 năm thành lập nước) trở thành nước phát triển, thu nhập cao — bối cảnh 2045 trong game là viễn cảnh nghệ thuật dựa trên mục tiêu văn kiện.',
           isAuthentic: true,
           explanation:
-            'Chính xác (Giáo trình 2021, tr. 385–393): Mục tiêu 2030 và 2045 là quyết sách lịch sử tại Đại hội XIII; còn hình ảnh đô thị 2045 trong game được gắn nhãn speculative_2045 rõ ràng.',
+            'Chính xác: Mục tiêu 2030 và 2045 là quyết sách lịch sử tại Đại hội XIII; còn hình ảnh đô thị 2045 trong game được gắn nhãn speculative_2045 rõ ràng.',
         },
         {
           id: 'opt_ch4_2045_wrong_1',
@@ -362,12 +362,12 @@ export const CH4_CAUSAL_POLICY_PUZZLE: DossierPuzzleDefinition = {
     },
   ],
   progressiveHint:
-    'Gợi ý Sử Học (Giáo trình 2021, tr. 261–393): Hãy liên kết Đại hội VI (1986) xóa bỏ cơ chế quan liêu bao cấp -> Cương lĩnh 2011 phát triển kinh tế thị trường định hướng XHCN & hội nhập quốc tế -> Đại hội XIII (2021) đặt mục tiêu đến năm 2045 trở thành nước phát triển, thu nhập cao.',
+    'Hãy liên kết Đại hội VI (1986) xóa bỏ cơ chế quan liêu bao cấp -> Cương lĩnh 2011 phát triển kinh tế thị trường định hướng XHCN & hội nhập quốc tế -> Đại hội XIII (2021) đặt mục tiêu đến năm 2045 trở thành nước phát triển, thu nhập cao.',
   textbookCitation:
     'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương III, tr. 241–398',
   provenance: {
     type: 'historical_fact',
-    label: 'Văn kiện Đại hội VI – XIII & Tầm nhìn 2045 (Giáo trình 2021, tr. 241–398)',
+    label: 'Văn kiện Đại hội VI – XIII & Tầm nhìn 2045',
     citation:
       'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương III, tr. 241–398',
     historicalNote:

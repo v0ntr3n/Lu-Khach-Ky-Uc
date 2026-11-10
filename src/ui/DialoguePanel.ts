@@ -24,7 +24,7 @@ export interface DialoguePanelCallbacks {
 }
 
 const DEFAULT_PROVENANCE_LABELS = {
-  historical_fact: '◆ Sử liệu xác thực (Giáo trình 2021)',
+  historical_fact: '◆ Tư liệu lịch sử',
   fictional_npc: '▸ Nhân vật lưu trữ hư cấu',
   speculative_2045: '✦ Viễn tưởng kỷ nguyên số 2045',
 } as const;
@@ -358,7 +358,7 @@ export class DialoguePanel {
         `MỐC LA MÃ ${milestone.roman} (${milestone.year}) · ${milestone.title}`
       );
       setOptionalBlockText(sigEl, `Ý nghĩa lịch sử: ${milestone.historicalSignificance}`);
-      setOptionalBlockText(citeEl, `◆ Nguồn đối chiếu: ${milestone.textbookCitation}`);
+      setOptionalBlockText(citeEl, '');
     } else {
       setOptionalBlockText(titleEl, '');
       setOptionalBlockText(sigEl, '');
@@ -388,18 +388,14 @@ export class DialoguePanel {
     this.setSpeechPages(node.text);
     this.renderPortraitFrame();
 
-    if (node.provenance.historicalNote) {
-      setOptionalBlockText(sigEl, `Ghi chú sử học: ${node.provenance.historicalNote}`);
-    } else if (!sigEl?.textContent) {
-      setOptionalBlockText(
-        sigEl,
-        `Phân loại tư liệu: ${node.provenance.label || DEFAULT_PROVENANCE_LABELS[node.provenance.type]}`
-      );
-    }
-
-    if (node.provenance.citation) {
-      setOptionalBlockText(citeEl, `◆ Nguồn đối chiếu: ${node.provenance.citation}`);
-    }
+    // Only retain narrative context in the optional drawer; never show source badges or citations.
+    setOptionalBlockText(
+      sigEl,
+      node.provenance.historicalNote
+        ? `Ghi chú: ${node.provenance.historicalNote}`
+        : ''
+    );
+    setOptionalBlockText(citeEl, '');
 
     this.renderProvenanceBadge(node.provenance);
     this.renderChoices(choices);
@@ -443,10 +439,7 @@ export class DialoguePanel {
           ? `Ghi chú sử học: ${node.provenance.historicalNote}`
           : `Ý nghĩa lịch sử: ${milestone.historicalSignificance}`
       );
-      setOptionalBlockText(
-        citeEl,
-        `◆ Nguồn đối chiếu: ${node?.provenance.citation ?? milestone.textbookCitation}`
-      );
+      setOptionalBlockText(citeEl, '');
     }
 
     const prov: ProvenanceMetadata = node?.provenance ??
@@ -465,12 +458,11 @@ export class DialoguePanel {
     const badgeEl = document.getElementById('dialogue-provenance-badge');
     if (!badgeEl) return;
 
-    badgeEl.hidden = false;
-    badgeEl.removeAttribute('hidden');
+    // Provenance remains in structured game data, but isn't visual clutter.
     badgeEl.dataset.provenanceType = provenance.type;
-    badgeEl.className = `provenance-badge is-${provenance.type}`;
-    badgeEl.textContent =
-      provenance.label || DEFAULT_PROVENANCE_LABELS[provenance.type];
+    badgeEl.textContent = '';
+    badgeEl.hidden = true;
+    badgeEl.setAttribute('hidden', '');
   }
 
   private renderChoices(choices: DialogueChoice[]): void {

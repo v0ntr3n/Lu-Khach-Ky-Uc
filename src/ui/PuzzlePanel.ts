@@ -70,16 +70,16 @@ export class PuzzlePanel {
     modal.removeAttribute('hidden');
 
     if (titleEl) titleEl.textContent = puzzle.title;
-    if (subtitleEl) subtitleEl.textContent = `${puzzle.subtitle} · 📖 ${puzzle.textbookCitation}`;
+    if (subtitleEl) subtitleEl.textContent = puzzle.subtitle;
     if (provEl) {
-      provEl.className = `provenance-badge is-${puzzle.provenance.type}`;
-      provEl.textContent = puzzle.provenance.label;
+      provEl.textContent = '';
+      provEl.hidden = true;
     }
     if (instructionEl) instructionEl.textContent = puzzle.instruction;
 
     if (hintEl) {
       const showHint = attemptCount >= 2;
-      hintEl.textContent = `💡 Gợi ý học thuật: ${puzzle.progressiveHint} (${puzzle.textbookCitation})`;
+      hintEl.textContent = `💡 Gợi ý: ${puzzle.progressiveHint}`;
       hintEl.hidden = !showHint;
       if (showHint) {
         hintEl.removeAttribute('hidden');
@@ -172,7 +172,7 @@ export class PuzzlePanel {
     if (hintEl && res.showProgressiveHint) {
       hintEl.hidden = false;
       hintEl.removeAttribute('hidden');
-      hintEl.textContent = `💡 Gợi ý học thuật: ${this.activePuzzle.progressiveHint} (${this.activePuzzle.textbookCitation})`;
+      hintEl.textContent = `💡 Gợi ý: ${this.activePuzzle.progressiveHint}`;
     }
 
     if (res.solved && modal) {

@@ -117,21 +117,21 @@ export const CHAPTERS: ChapterData[] = [
           text: 'Đặt nhiệm vụ chống đế quốc, giành độc lập dân tộc lên hàng đầu ("Làm tư sản dân quyền cách mạng và thổ địa cách mạng để đi tới xã hội cộng sản").',
           isCorrect: true,
           feedback:
-            'Chính xác! Cương lĩnh chính trị đầu tiên (2/1930) giải quyết đúng đắn mối quan hệ giữa vấn đề dân tộc và vấn đề giai cấp, đặt nhiệm vụ giải phóng dân tộc lên hàng đầu (tr. 38–42).',
+            'Chính xác! Cương lĩnh chính trị đầu tiên (2/1930) giải quyết đúng đắn mối quan hệ giữa vấn đề dân tộc và vấn đề giai cấp, đặt nhiệm vụ giải phóng dân tộc lên hàng đầu.',
         },
         {
           id: 'opt_1930_2',
           text: 'Chỉ tập trung đấu tranh nghị trường hợp pháp và cải cách thuế khóa.',
           isCorrect: false,
           feedback:
-            'Tư liệu chưa khớp! Hãy đối chiếu Giáo trình tr. 39: Cương lĩnh xác định con đường bạo lực cách mạng của quần chúng để đánh đổ đế quốc và phong kiến.',
+            'Chưa chính xác. Cương lĩnh xác định con đường bạo lực cách mạng của quần chúng để đánh đổ đế quốc và phong kiến.',
         },
         {
           id: 'opt_1930_3',
           text: 'Chờ cách mạng vô sản ở chính quốc thắng lợi hoàn toàn mới tiến hành vận động trong nước.',
           isCorrect: false,
           feedback:
-            'Tư liệu chưa khớp! Nguyễn Ái Quốc khẳng định cách mạng thuộc địa có tính chủ động, có thể giành thắng lợi trước cách mạng ở chính quốc (tr. 37–42).',
+            'Tư liệu chưa khớp! Nguyễn Ái Quốc khẳng định cách mạng thuộc địa có tính chủ động, có thể giành thắng lợi trước cách mạng ở chính quốc.',
         },
       ],
       stepBTitle: 'BƯỚC B · ĐẠI CẢNH BÙNG NỔ: THẮP ĐUỐC CƯƠNG LĨNH 1930',
@@ -237,21 +237,21 @@ export const CHAPTERS: ChapterData[] = [
           text: 'Từ khi phát xít Nhật đầu hàng Đồng minh đến trước khi quân Đồng minh (Anh, Tưởng) kéo vào Đông Dương giải giáp quân Nhật.',
           isCorrect: true,
           feedback:
-            'Chính xác! Đây là nghệ thuật chớp thời cơ kiệt xuất của Đảng: giành chính quyền với tư cách người chủ đất nước đón quân Đồng minh (tr. 109–115).',
+            'Chính xác! Đây là nghệ thuật chớp thời cơ kiệt xuất của Đảng: giành chính quyền với tư cách người chủ đất nước đón quân Đồng minh.',
         },
         {
           id: 'opt_1945_2',
           text: 'Đợi quân đội Đồng minh tiến vào giải giáp xong quân Nhật rồi mới tổ chức đàm phán trao trả độc lập.',
           isCorrect: false,
           feedback:
-            'Tư liệu chưa khớp! Nếu chờ quân Đồng minh và quân Pháp quay lại, cách mạng sẽ đối mặt nguy cơ bị áp đặt chế độ thống trị mới (tr. 110–111).',
+            'Tư liệu chưa khớp! Nếu chờ quân Đồng minh và quân Pháp quay lại, cách mạng sẽ đối mặt nguy cơ bị áp đặt chế độ thống trị mới.',
         },
         {
           id: 'opt_1945_3',
           text: 'Khởi nghĩa ngay từ đầu năm 1944 khi quân Nhật và quân Pháp vẫn còn liên kết chặt chẽ ở Đông Dương.',
           isCorrect: false,
           feedback:
-            'Tư liệu chưa khớp! Tháng 5/1944 Hồ Chí Minh đã hoãn cuộc khởi nghĩa Cao - Bắc - Lạng vì điều kiện toàn quốc chưa chín muồi (tr. 99).',
+            'Tư liệu chưa khớp! Tháng 5/1944 Hồ Chí Minh đã hoãn cuộc khởi nghĩa Cao - Bắc - Lạng vì điều kiện toàn quốc chưa chín muồi.',
         },
       ],
       stepBTitle: 'BƯỚC B · ĐẠI CẢNH BÙNG NỔ: KÉO QUỐC KỲ BA ĐÌNH (02/09/1945)',
@@ -357,21 +357,21 @@ export const CHAPTERS: ChapterData[] = [
           text: 'Chuyển từ phương châm "Đánh nhanh, giải quyết nhanh" sang phương châm "Đánh chắc, tiến chắc" (26/01/1954).',
           isCorrect: true,
           feedback:
-            'Chính xác! Đại tướng Võ Nguyên Giáp và Đảng ủy mặt trận đã thực hiện lời căn dặn của Chủ tịch Hồ Chí Minh: "Chắc thắng mới đánh, không chắc thắng không đánh" (tr. 173–175).',
+            'Chính xác! Đại tướng Võ Nguyên Giáp và Đảng ủy mặt trận đã thực hiện lời căn dặn của Chủ tịch Hồ Chí Minh: "Chắc thắng mới đánh, không chắc thắng không đánh".',
         },
         {
           id: 'opt_1954_2',
           text: 'Dồn toàn lực đánh tổng lực ngay trong đêm 25/01/1954 bất chấp hệ thống pháo binh địch đã tăng cường.',
           isCorrect: false,
           feedback:
-            'Tư liệu chưa khớp! Tập đoàn cứ điểm Điện Biên Phủ đã được địch củng cố vững chắc, đánh nhanh sẽ gây tổn thất lớn (tr. 174).',
+            'Tư liệu chưa khớp! Tập đoàn cứ điểm Điện Biên Phủ đã được địch củng cố vững chắc, đánh nhanh sẽ gây tổn thất lớn.',
         },
         {
           id: 'opt_1954_3',
           text: 'Rút toàn bộ quân chủ lực về đồng bằng và hủy bỏ chiến dịch Đông - Xuân 1953–1954.',
           isCorrect: false,
           feedback:
-            'Tư liệu chưa khớp! Đảng quyết tâm tiêu diệt tập đoàn cứ điểm mạnh nhất Đông Dương bằng chiến thuật vây lấn, bóc vỏ từng cụm cứ điểm (tr. 174–175).',
+            'Tư liệu chưa khớp! Đảng quyết tâm tiêu diệt tập đoàn cứ điểm mạnh nhất Đông Dương bằng chiến thuật vây lấn, bóc vỏ từng cụm cứ điểm.',
         },
       ],
       stepBTitle: 'BƯỚC B · ĐẠI CẢNH BÙNG NỔ: THỐNG NHẤT NON SÔNG (30/04/1975)',
@@ -477,21 +477,21 @@ export const CHAPTERS: ChapterData[] = [
           text: 'Trở thành nước phát triển, thu nhập cao theo định hướng xã hội chủ nghĩa (vào năm 2030 là nước đang phát triển có công nghiệp hiện đại, thu nhập trung bình cao).',
           isCorrect: true,
           feedback:
-            'Chính xác! Đây là 2 cột mốc chiến lược 100 năm (2030 & 2045) được Đại hội XIII của Đảng xác lập rõ trong Giáo trình tr. 368–375.',
+            'Chính xác! Đây là 2 cột mốc chiến lược 100 năm (2030 & 2045) được Đại hội XIII của Đảng xác lập rõ.',
         },
         {
           id: 'opt_2045_2',
           text: 'Quay trở lại cơ chế kế hoạch hóa tập trung bao cấp và đóng cửa thị trường nội địa.',
           isCorrect: false,
           feedback:
-            'Tư liệu chưa khớp! Đảng kiên định phát triển nền kinh tế thị trường định hướng XHCN và hội nhập quốc tế chủ động, tích cực (tr. 370–380).',
+            'Tư liệu chưa khớp! Đảng kiên định phát triển nền kinh tế thị trường định hướng XHCN và hội nhập quốc tế chủ động, tích cực.',
         },
         {
           id: 'opt_2045_3',
           text: 'Chỉ phát triển kinh tế đơn thuần mà bỏ qua xây dựng văn hóa, quốc phòng và chỉnh đốn Đảng.',
           isCorrect: false,
           feedback:
-            'Tư liệu chưa khớp! Phát triển kinh tế - xã hội là trung tâm; xây dựng Đảng là then chốt; phát triển văn hóa là nền tảng tinh thần; bảo đảm quốc phòng - an ninh là trọng yếu, thường xuyên (tr. 372).',
+            'Tư liệu chưa khớp! Phát triển kinh tế - xã hội là trung tâm; xây dựng Đảng là then chốt; phát triển văn hóa là nền tảng tinh thần; bảo đảm quốc phòng - an ninh là trọng yếu, thường xuyên.',
         },
       ],
       stepBTitle: 'BƯỚC B · ĐẠI CẢNH BÙNG NỔ: BÌNH MINH KỶ NGUYÊN SỐ 2045',

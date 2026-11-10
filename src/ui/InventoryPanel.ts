@@ -17,12 +17,6 @@ const CATEGORY_LABELS: Record<EvidenceItem['category'], string> = {
   dispatch: '✉️ CHỈ THỊ',
 };
 
-const PROVENANCE_LABELS = {
-  historical_fact: 'TƯ LIỆU LỊCH SỬ XÁC THỰC',
-  fictional_npc: 'NHÂN VẬT / TÌNH TIẾT HƯ CẤU',
-  speculative_2045: 'DỮ LIỆU VIỄN TƯỞNG 2045',
-} as const;
-
 export class InventoryPanel {
   private callbacks: InventoryPanelCallbacks;
   private allEvidence: EvidenceItem[] = [];
@@ -158,21 +152,19 @@ export class InventoryPanel {
         detailEl.innerHTML = `
           <div class="inv-detail-empty">
             <h4>Chưa chọn tư liệu</h4>
-            <p>Hãy thu thập các văn kiện, mật đàm và di vật lịch sử trên bản đồ rồi bấm vào thẻ tư liệu bên trái để đối chiếu toàn văn Giáo trình 2021.</p>
+            <p>Hãy thu thập các văn kiện, mật đàm và di vật lịch sử trên bản đồ rồi bấm vào thẻ tư liệu bên trái để khám phá câu chuyện và bối cảnh.</p>
           </div>
         `;
       } else {
-        const provLabel =
-          selectedItem.provenance.label || PROVENANCE_LABELS[selectedItem.provenance.type];
         detailEl.innerHTML = `
           <div class="inv-detail-header">
             <span class="inv-card-cat">${CATEGORY_LABELS[selectedItem.category]}</span>
-            <span class="provenance-badge is-${selectedItem.provenance.type}">${provLabel}</span>
+            
           </div>
           <h4 class="inv-detail-title">${selectedItem.title}</h4>
           <blockquote class="inv-detail-quote">"${selectedItem.historicalQuote}"</blockquote>
           <p class="inv-detail-sig"><strong>Ý nghĩa lịch sử:</strong> ${selectedItem.historicalSignificance}</p>
-          <div class="inv-detail-cite">📖 ${selectedItem.textbookCitation}</div>
+          
         `;
       }
     }

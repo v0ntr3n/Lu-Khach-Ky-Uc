@@ -149,6 +149,10 @@ describe('M12 Eastward-Inspired Pixel RPG Dialogue UI — Unit Suite', () => {
     expect(panel.getCurrentArchetype()).toBe('liaison');
     expect(panel.getPageCount()).toBe(2);
     expect(panel.getCurrentPageIndex()).toBe(0);
+    // Keep source provenance in game data, never as an on-screen badge or reference line.
+    expect(document.getElementById('dialogue-provenance-badge')?.hidden).toBe(true);
+    expect(document.getElementById('dialogue-citation')?.hidden).toBe(true);
+    expect(document.getElementById('dialogue-citation')?.textContent).toBe('');
 
     // Chuyển sang trang 2
     panel.nextPage();
