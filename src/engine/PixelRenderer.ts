@@ -28,6 +28,7 @@ import {
   drawNpcSprite,
   drawTopDownTile,
   drawTravelerSprite,
+  drawZoneLandmarks,
 } from './SpriteAtlas';
 
 export const INTERNAL_WIDTH = 320;
@@ -261,7 +262,10 @@ export class PixelRenderer {
               tileId,
               Math.round(c * tileSize - cameraX),
               Math.round(r * tileSize - cameraY),
-              isInterior
+              isInterior,
+              mapData.eraId,
+              timeSec,
+              reducedMotion
             );
           }
         }
@@ -302,7 +306,7 @@ export class PixelRenderer {
       ctx.fillRect(px + 2, py + ph - 4, pw - 4, 2);
     }
 
-    // 3. Y-Depth Sorting: Structures, Interactables, Milestones, NPCs, và Traveler
+    // 3. Y-Depth Sorting: Structures, Landmarks, Interactables, Milestones, NPCs, và Traveler
     const depthQueue: Array<{ footY: number; draw: () => void }> = [];
 
     const structuresLayer = mapData.tileLayers['Structures'];
@@ -316,12 +320,29 @@ export class PixelRenderer {
             const sy = Math.round(r * tileSize - cameraY);
             depthQueue.push({
               footY,
-              draw: () => drawTopDownTile(ctx, tileId, sx, sy, isInterior),
+              draw: () =>
+                drawTopDownTile(
+                  ctx,
+                  tileId,
+                  sx,
+                  sy,
+                  isInterior,
+                  mapData.eraId,
+                  timeSec,
+                  reducedMotion
+                ),
             });
           }
         }
       }
     }
+
+    // Công trình biểu tượng (Focal Landmarks) của khu vực
+    depthQueue.push({
+      footY: 162,
+      draw: () =>
+        drawZoneLandmarks(ctx, mapData, cameraX, cameraY, timeSec, reducedMotion),
+    });
 
     // Interactables (Doors, Evidence, Climax Gate)
     for (const inter of mapData.interactables) {
