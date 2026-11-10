@@ -363,8 +363,9 @@ test.describe('M4 Chapter I Complete Vertical Slice — Browser E2E Suite', () =
     await page.locator('#btn-submit-dossier').click();
     await expect(page.locator('#dossier-progressive-hint')).toBeVisible();
     await expect(page.locator('#dossier-progressive-hint')).toContainText(
-      'Giáo trình 2021, tr. 61–65'
+      'Cương lĩnh chính trị đầu tiên'
     );
+    await expect(page.locator('#dossier-progressive-hint')).not.toContainText('Giáo trình');
 
     // Chọn 3 nhận định xác thực của Cương lĩnh 02/1930 và bấm Xác Thực
     await page.locator('[data-option-id="opt_goal_authentic"]').click();
