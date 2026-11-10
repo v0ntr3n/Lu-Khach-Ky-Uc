@@ -99,6 +99,12 @@ export class HudController {
     });
 
     this.journalPanel = new JournalPanel({
+      onSelectObjective: (objectiveId) => {
+        this.journalPanel.toggle(false);
+        this.restoreFocusAfterClose();
+        this.callbacks.onOverlayStateChange?.(false, 'journal');
+        this.callbacks.onTrackObjective?.(objectiveId);
+      },
       onClose: () => {
         this.restoreFocusAfterClose();
         this.callbacks.onOverlayStateChange?.(false, 'journal');
@@ -308,6 +314,12 @@ export class HudController {
     });
     openPauseBtn?.addEventListener('click', () => this.togglePauseModal());
     closePresenterBtn?.addEventListener('click', () => this.togglePresenterDrawer(false));
+
+    const objectiveTrackerEl = document.getElementById('hud-objective-tracker');
+    objectiveTrackerEl?.addEventListener('click', () => {
+      if (this.pausePanel.isOpen()) this.pausePanel.toggle(false);
+      this.toggleJournalModal(true, 'quests');
+    });
 
     debugBtn?.addEventListener('click', () => {
       const active = this.callbacks.onToggleDebugOverlay?.() ?? false;
@@ -800,6 +812,7 @@ export class HudController {
       }>;
     }>;
     activeObjective: { quest: QuestDefinition; objective: QuestObjective } | null;
+    trackedObjectiveId?: string | null;
     hintText: string;
     nextActionText?: string;
     allEvidence: EvidenceItem[];
@@ -820,7 +833,8 @@ export class HudController {
       data.quests,
       data.activeObjective,
       data.hintText,
-      data.isPresenterMode
+      data.isPresenterMode,
+      data.trackedObjectiveId ?? null
     );
     this.inventoryPanel.updateState(
       data.allEvidence,

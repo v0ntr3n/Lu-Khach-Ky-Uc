@@ -367,6 +367,8 @@ export interface ObjectiveTargetResolution {
   objectiveId?: string;
   targetZoneId?: string;
   currentMapId: string;
+  isCrossZone?: boolean;
+  nextPortalZoneId?: string;
   targetEntityId?: string;
   targetKind?: 'npc' | 'interactable' | 'portal' | 'milestone';
   position: {
@@ -517,6 +519,7 @@ export interface GameSettings {
   effectsQuality?: EffectsQuality; // 'full' | 'subtle' (default 'full')
   presenterModeUnlocked?: boolean; // explicitly enables developer/presenter controls
   tutorialCompleted?: boolean; // tracks first-play onboarding completion
+  showMinimap?: boolean; // controls real-time top-right minimap visibility
 }
 
 export interface SaveSummary {
@@ -565,6 +568,7 @@ export interface SaveDataV2 {
   activeQuestIds?: string[];
   completedQuestIds?: string[];
   completedObjectiveIds?: string[];
+  trackedObjectiveId?: string | null;
   dialogueHistory?: string[];
   settings?: GameSettings;
 }
@@ -587,6 +591,8 @@ export interface HudCallbacks {
   onToggleFullscreen?: () => Promise<boolean> | boolean;
   onUpdateSettings?: (partial: Partial<GameSettings>) => void;
   onReplayTutorial?: () => void;
+  onTrackObjective?: (objectiveId: string | null) => void;
+  onToggleMinimap?: () => void;
   onSubmitDossierPuzzle?: (puzzleId: string, selectedOptionIds: Record<string, string>) => {
     solved: boolean;
     attemptCount: number;

@@ -84,6 +84,7 @@ export class GameStore {
   public readonly completedObjectives = new Set<string>();
   public readonly completedQuests = new Set<string>();
   public readonly dialogueHistory = new Set<string>();
+  public trackedObjectiveId: string | null = null;
   public settings: GameSettings = {
     muted: DEFAULT_GAME_SETTINGS.muted,
     reducedMotion: DEFAULT_GAME_SETTINGS.reducedMotion,
@@ -296,6 +297,7 @@ export class GameStore {
     this.completedObjectives.clear();
     this.completedQuests.clear();
     this.dialogueHistory.clear();
+    this.trackedObjectiveId = null;
     this.currentMapId = DEFAULT_SAFE_MAP_ID;
     this.currentSpawnId = DEFAULT_SAFE_SPAWN_ID;
     this.playerPos = { x: 85, y: 384 };
@@ -338,6 +340,9 @@ export class GameStore {
       activeQuestIds: [],
       completedQuestIds: Array.from(this.completedQuests),
       completedObjectiveIds: Array.from(this.completedObjectives),
+      ...(this.trackedObjectiveId
+        ? { trackedObjectiveId: this.trackedObjectiveId }
+        : {}),
       dialogueHistory: Array.from(this.dialogueHistory),
       settings: { ...this.settings },
     };
@@ -387,6 +392,11 @@ export class GameStore {
     for (const dId of save.dialogueHistory ?? []) {
       this.dialogueHistory.add(dId);
     }
+
+    this.trackedObjectiveId =
+      typeof save.trackedObjectiveId === 'string'
+        ? save.trackedObjectiveId
+        : null;
 
     if (save.settings) {
       this.settings = normalizeEmbeddedSaveSettings(save.settings);

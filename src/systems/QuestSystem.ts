@@ -594,7 +594,21 @@ export class QuestSystem {
   ): { quest: QuestDefinition; objective: QuestObjective } | null {
     const quests = this.getQuestsForEra(eraId);
 
-    // Ưu tiên nhiệm vụ chính trước, nhiệm vụ phụ sau
+    // 1. Nếu người chơi đã chọn theo dõi cụ thể một mục tiêu đang 'active' thuộc chương hiện tại, ưu tiên mục tiêu đó
+    if (store.trackedObjectiveId) {
+      for (const quest of quests) {
+        for (const obj of quest.objectives) {
+          if (
+            obj.id === store.trackedObjectiveId &&
+            this.getObjectiveStatus(obj, store) === 'active'
+          ) {
+            return { quest, objective: obj };
+          }
+        }
+      }
+    }
+
+    // 2. Ưu tiên nhiệm vụ chính trước, nhiệm vụ phụ sau
     const sorted = [...quests].sort((a, b) =>
       a.category === b.category ? 0 : a.category === 'main' ? -1 : 1
     );
