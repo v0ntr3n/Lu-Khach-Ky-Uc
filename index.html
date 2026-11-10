@@ -610,7 +610,7 @@
 
       #hud-left-stack {
         position: absolute;
-        top: 40px;
+        top: 2px;
         left: 0;
         display: flex;
         flex-direction: column;
@@ -622,6 +622,41 @@
 
       #hud-left-stack > * {
         pointer-events: auto;
+      }
+
+      #stage-shelter-status {
+        display: inline-flex;
+        align-items: center;
+        width: 100%;
+        padding: 5px 9px;
+        font-family: var(--font-ui);
+        font-size: 0.88rem;
+        font-weight: 600;
+        background: var(--surface-primary);
+        border: 1px solid var(--border-default);
+        color: var(--text-primary);
+      }
+
+      #stage-shelter-status[hidden] {
+        display: none !important;
+      }
+
+      #stage-shelter-status.is-sheltered {
+        background: var(--surface-elevated);
+        border-color: var(--border-strong);
+        color: var(--text-accent);
+      }
+
+      #stage-shelter-status.is-suspicious {
+        background: var(--surface-hover);
+        border-color: var(--border-strong);
+        color: var(--text-primary);
+      }
+
+      #stage-shelter-status.is-alert {
+        background: var(--accent-primary);
+        border-color: var(--border-strong);
+        color: var(--text-on-accent);
       }
 
       #minimap-panel {
@@ -3054,7 +3089,7 @@
           grid-template-columns: 1fr;
         }
         .hud-location-plaque {
-          max-width: min(38vw, 300px);
+          max-width: min(36vw, 280px);
         }
         #stage-location-badge {
           font-size: 0.95rem;
@@ -3080,13 +3115,18 @@
         }
         .hud-location-plaque {
           padding: 0;
-          max-width: min(38vw, 320px);
+          max-width: min(36vw, 280px);
         }
         #stage-location-badge {
           font-size: 0.92rem;
         }
         #hud-left-stack {
-          top: 36px;
+          top: 0;
+          width: min(196px, calc(100vw - 20px));
+        }
+        #minimap-panel,
+        #hud-objective-tracker {
+          width: min(196px, calc(100vw - 20px));
         }
         #hud-objective-tracker {
           padding: 5px 8px;
@@ -3205,6 +3245,8 @@
                 ▸ Gợi ý: Tiến tới đèn lồng cảng và nhấn [E]
               </div>
             </div>
+
+            <span id="stage-shelter-status" hidden>◆ Ẩn mình trong bóng tối</span>
           </div>
 
           <span id="stage-chapter-title" hidden></span>

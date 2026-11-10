@@ -96,7 +96,10 @@ test.describe('M14 (Issue #26): 1-Line Quest HUD, Top-Center Location Label & St
         centerOffsetPx: Math.abs(badgeCenterX - viewportCenterX),
         topPx: badgeRect.top,
         overlapsMinimap:
-          badgeRect.right > minimapRect.left && badgeRect.bottom > minimapRect.top,
+          badgeRect.left < minimapRect.right &&
+          badgeRect.right > minimapRect.left &&
+          badgeRect.top < minimapRect.bottom &&
+          badgeRect.bottom > minimapRect.top,
       };
     });
 
@@ -165,7 +168,7 @@ test.describe('M14 (Issue #26): 1-Line Quest HUD, Top-Center Location Label & St
     await expect(objHint).toBeHidden();
     await expect(worldPrompt).toBeHidden();
 
-    // Kiểm tra #hud-objective-tracker gọn đúng 1 dòng (white-space: nowrap) và nằm ngay dưới #minimap-panel
+    // Kiểm tra #hud-left-stack nằm sát góc trên bên trái, #hud-objective-tracker gọn đúng 1 dòng (white-space: nowrap), đồng bộ chiều rộng với #minimap-panel và nằm ngay dưới #minimap-panel
     const trackerMetrics = await page.evaluate(() => {
       const tracker = document.getElementById('hud-objective-tracker')!;
       const textEl = document.getElementById('hud-active-objective-text')!;
@@ -177,11 +180,17 @@ test.describe('M14 (Issue #26): 1-Line Quest HUD, Top-Center Location Label & St
         whiteSpace: textStyle.whiteSpace,
         trackerHeight: Math.round(trackerRect.height),
         isBelowMinimap: trackerRect.top >= minimapRect.bottom - 2,
+        isTopLeft: minimapRect.left <= 24 && minimapRect.top <= 24,
+        sameLeftAndWidth:
+          Math.abs(trackerRect.left - minimapRect.left) <= 1 &&
+          Math.abs(trackerRect.width - minimapRect.width) <= 1,
       };
     });
     expect(trackerMetrics.whiteSpace).toBe('nowrap');
     expect(trackerMetrics.trackerHeight).toBeLessThanOrEqual(44);
     expect(trackerMetrics.isBelowMinimap).toBe(true);
+    expect(trackerMetrics.isTopLeft).toBe(true);
+    expect(trackerMetrics.sameLeftAndWidth).toBe(true);
 
     // Chụp ảnh HUD ở Dark Mode (ngoài vùng tương tác)
     await page.screenshot({
@@ -191,6 +200,7 @@ test.describe('M14 (Issue #26): 1-Line Quest HUD, Top-Center Location Label & St
 
     // 2. Di chuyển nhân vật vào đúng tầm tương tác với Giao Liên Lâm Văn Bính (256, 368):
     // - Hậu tố ' [E]' xuất hiện ngay lập tức trên dòng HUD nhiệm vụ, đồng bộ với #world-interaction-prompt
+    // - Trên bản đồ thường không có lính tuần tra (harbor_square), #stage-shelter-status luôn ẩn để không rối mắt
     await page.evaluate(() => {
       const game = (window as unknown as { __LU_KHACH_GAME__?: any }).__LU_KHACH_GAME__;
       game.playerX = 256;
@@ -200,6 +210,7 @@ test.describe('M14 (Issue #26): 1-Line Quest HUD, Top-Center Location Label & St
 
     await expect(worldPrompt).toBeVisible();
     await expect(objText).toHaveText('Gặp Giao Liên · Bến Cảng [E]');
+    await expect(page.locator('#stage-shelter-status')).toBeHidden();
 
     // Chuyển sang Light Mode và chụp ảnh minh chứng HUD có [E] + tên vị trí top-center ở Light Mode
     await page.evaluate(() => {
@@ -213,11 +224,22 @@ test.describe('M14 (Issue #26): 1-Line Quest HUD, Top-Center Location Label & St
       fullPage: false,
     });
 
-    // 3. Nhấn [E] mở hội thoại -> Mục tiêu chuyển sang bước kế tiếp, đồng thời khi modal mở tương tác thế giới bị khóa nên '[E]' trên HUD tự ẩn đi
+    // 3. Nhấn [E] mở hội thoại -> Kiểm tra bảng tên NPC rút gọn ("Anh Bính" / "Giao liên"), mục tiêu chuyển sang bước kế tiếp và '[E]' trên HUD tự ẩn đi
     await page.keyboard.press('KeyE');
     await expect(page.locator('#dialogue-modal')).toBeVisible();
+    await expect(page.locator('#dialogue-speaker')).toHaveText('Anh Bính');
+    await expect(page.locator('#dialogue-speaker')).toHaveAttribute(
+      'title',
+      'Giao Liên Lâm Văn Bính'
+    );
+    await expect(page.locator('#dialogue-role')).toHaveText('Giao liên');
     await expect(worldPrompt).toBeHidden();
     await expect(objText).toHaveText('Kiểm tra sổ vận đơn · Kho 4');
+
+    await page.screenshot({
+      path: `${ARTIFACT_DIR}/m14_dialogue_short_name_light.png`,
+      fullPage: false,
+    });
 
     // Đóng hội thoại -> Nhân vật vẫn đứng cạnh NPC nên '[E]' hiện lại
     await page.locator('#btn-close-dialogue').click();

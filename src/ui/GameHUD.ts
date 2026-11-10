@@ -85,8 +85,8 @@ export class GameHUD {
 
   public updateStageHeader(
     chapter: ChapterData,
-    _isSheltered: boolean,
-    _stealthAlertState?: StealthAlertState
+    isSheltered: boolean,
+    stealthAlertState?: StealthAlertState
   ): void {
     if (typeof document === 'undefined') return;
 
@@ -94,6 +94,7 @@ export class GameHUD {
     const titleEl = document.getElementById('stage-chapter-title');
     const locEl = document.getElementById('stage-location-badge');
     const hintEl = document.getElementById('stage-mechanic-hint');
+    const shelterBadge = document.getElementById('stage-shelter-status');
 
     if (numEl) numEl.textContent = `${chapter.chapterNum} · ${chapter.years}`;
     if (titleEl) titleEl.textContent = chapter.title;
@@ -102,6 +103,30 @@ export class GameHUD {
     }
     if (hintEl) hintEl.textContent = chapter.mechanicHint;
 
+    if (shelterBadge) {
+      shelterBadge.classList.remove('is-sheltered', 'is-suspicious', 'is-alert');
+
+      if (stealthAlertState === 'alert') {
+        shelterBadge.hidden = false;
+        shelterBadge.removeAttribute('hidden');
+        shelterBadge.classList.add('is-alert');
+        shelterBadge.textContent = '◆ Báo động tuần tra';
+      } else if (stealthAlertState === 'suspicious') {
+        shelterBadge.hidden = false;
+        shelterBadge.removeAttribute('hidden');
+        shelterBadge.classList.add('is-suspicious');
+        shelterBadge.textContent = '◆ Tuần tra đang nghi vấn';
+      } else if (isSheltered) {
+        shelterBadge.hidden = false;
+        shelterBadge.removeAttribute('hidden');
+        shelterBadge.classList.add('is-sheltered');
+        shelterBadge.textContent = '◆ Ẩn mình trong bóng tối';
+      } else {
+        shelterBadge.hidden = true;
+        shelterBadge.setAttribute('hidden', '');
+        shelterBadge.textContent = '';
+      }
+    }
   }
 
   public updateMapLocationBadge(

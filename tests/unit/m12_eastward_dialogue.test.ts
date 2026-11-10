@@ -149,6 +149,15 @@ describe('M12 Eastward-Inspired Pixel RPG Dialogue UI — Unit Suite', () => {
     expect(panel.getCurrentArchetype()).toBe('liaison');
     expect(panel.getPageCount()).toBe(2);
     expect(panel.getCurrentPageIndex()).toBe(0);
+
+    // Bảng tên hội thoại rút gọn theo phong cách RPG ("Anh Bính" / "Giao liên"), giữ nguyên tên đầy đủ trong tooltip
+    const speakerEl = document.getElementById('dialogue-speaker')!;
+    const roleEl = document.getElementById('dialogue-role')!;
+    expect(speakerEl.textContent).toBe('Anh Bính');
+    expect(speakerEl.title).toBe('Giao Liên Lâm Văn Bính');
+    expect(roleEl.textContent).toBe('Giao liên');
+    expect(roleEl.hidden).toBe(false);
+
     // Keep source provenance in game data, never as an on-screen badge or reference line.
     expect(document.getElementById('dialogue-provenance-badge')?.hidden).toBe(true);
     expect(document.getElementById('dialogue-citation')?.hidden).toBe(true);
