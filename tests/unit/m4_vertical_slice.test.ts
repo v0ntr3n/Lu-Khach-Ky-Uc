@@ -166,7 +166,7 @@ describe('M4 Chapter I Vertical Slice — StealthSystem, Dossier Puzzle & Proven
       expect(CH1_DOSSIER_PUZZLE.zoneId).toBe('secret_archive');
       expect(CH1_DOSSIER_PUZZLE.rewardMilestone).toBe('III');
       expect(CH1_DOSSIER_PUZZLE.rewardEvidenceId).toBe('ev_ch1_unification_appeal');
-      expect(CH1_DOSSIER_PUZZLE.progressiveHint).toContain('Giáo trình 2021');
+      expect(CH1_DOSSIER_PUZZLE.progressiveHint).not.toContain('Giáo trình');
       expect(CH1_DOSSIER_PUZZLE.textbookCitation).toContain(
         'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021)'
       );
