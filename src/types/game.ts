@@ -398,6 +398,7 @@ export type TutorialStepId =
 export interface QuestObjective {
   id: string;
   title: string;
+  hudText?: string;
   description: string;
   zoneId: string;
   targetRef?: QuestTargetRef;
@@ -416,6 +417,7 @@ export interface QuestDefinition {
   id: string;
   eraId: EraId;
   title: string;
+  hudTitle?: string;
   subtitle: string;
   category: 'main' | 'side';
   summary: string;

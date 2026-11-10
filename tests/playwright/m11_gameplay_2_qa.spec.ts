@@ -35,12 +35,14 @@ test.describe('M11 — Gameplay 2.0 Quality Gate: Navigation, Accessibility, Per
       { timeout: 6000 }
     );
 
-    // 2. Kiểm tra Thanh hướng dẫn tân thủ (#tutorial-coach-bar), HUD 2 dòng & Minimap
+    // 2. Kiểm tra Thanh hướng dẫn tân thủ (#tutorial-coach-bar), HUD 1 dòng & Minimap
     const coachBar = page.locator('#tutorial-coach-bar');
     await expect(coachBar).toBeVisible();
     await expect(page.locator('#tutorial-step-badge')).toContainText('1/5');
 
-    await expect(page.locator('#hud-active-objective-action')).toContainText('→');
+    await expect(page.locator('#hud-active-objective-text')).toContainText(
+      'Gặp Giao Liên · Bến Cảng'
+    );
     await expect(page.locator('#minimap-panel')).toBeVisible();
     await expect(page.locator('#minimap-canvas')).toBeVisible();
 
@@ -58,7 +60,7 @@ test.describe('M11 — Gameplay 2.0 Quality Gate: Navigation, Accessibility, Per
     await expect(page.locator('#journal-modal')).toBeHidden();
     await expect(page.locator('#minimap-route-banner')).toContainText('Bến Thuyền Nhỏ');
 
-    // 4. Kiểm tra Biển hiệu chào mừng khu vực (#region-entry-banner) và nạp đủ 14 bản đồ qua 4 Chương
+    // 4. Kiểm tra Stage Intro (#region-entry-banner), tên vị trí top-center (#stage-location-badge) và nạp đủ 14 bản đồ qua 4 Chương
     const eraZoneSummary = await page.evaluate(() => {
       const game = (window as unknown as { __LU_KHACH_GAME__?: any }).__LU_KHACH_GAME__;
       const eras = ['1930', '1945', '1954_1975', '1986_2045'] as const;
@@ -85,10 +87,11 @@ test.describe('M11 — Gameplay 2.0 Quality Gate: Navigation, Accessibility, Per
     expect(eraZoneSummary.visitedTitles).toHaveLength(4);
     expect(eraZoneSummary.currentMapId).toBe('old_street');
 
-    // Biển hiệu chào mừng khu vực (#region-entry-banner) hiển thị tên khu vực mới
+    // Intro Ải (#region-entry-banner) hiển thị ẢI 1 : Hương Cảng 1930 và tên vị trí top-center (#stage-location-badge) cập nhật sang Phố Cổ Cửu Long
     const regionBanner = page.locator('#region-entry-banner');
     await expect(regionBanner).toBeVisible();
-    await expect(page.locator('#region-entry-title')).toContainText('Phố Cổ Cửu Long');
+    await expect(page.locator('#region-entry-title')).toHaveText('ẢI 1 : Hương Cảng 1930');
+    await expect(page.locator('#stage-location-badge')).toContainText('Phố Cổ Cửu Long');
 
     expect(consoleErrors).toEqual([]);
   });

@@ -55,7 +55,7 @@ test.describe('M3 RPG Systems & UI — Browser E2E Suite', () => {
       'Hội Nghị Hợp Nhất Cửu Long'
     );
     await expect(page.locator('#hud-active-objective-text')).toContainText(
-      'Bắt liên lạc tại Quảng Trường Bến Cảng'
+      'Gặp Giao Liên · Bến Cảng'
     );
 
     // Mở #journal-modal -> #tab-journal-codex để xác minh #codex-progress-count hiển thị rõ ràng, sau đó đóng lại
@@ -110,7 +110,7 @@ test.describe('M3 RPG Systems & UI — Browser E2E Suite', () => {
 
     await expect(provenanceBadge).toHaveAttribute('data-provenance-type', 'fictional_npc');
     await expect(page.locator('#hud-active-objective-text')).toContainText(
-      'Kiểm tra Sổ Vận Đơn & Báo Thanh Niên tại Kho Hàng Số 4'
+      'Kiểm tra sổ vận đơn · Kho 4'
     );
 
     const questState = await page.evaluate(() => {
