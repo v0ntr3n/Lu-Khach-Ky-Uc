@@ -20,11 +20,26 @@ export type RomanMilestoneId =
   | 'XI'
   | 'XII';
 
+export type AppLifecycleState =
+  | 'BOOT'
+  | 'MAIN_MENU'
+  | 'LOADING'
+  | 'OPENING'
+  | 'PLAYING'
+  | 'PAUSED';
+
+export type CameraZoomPreset = 'wide' | 'normal' | 'close';
+
+export type EffectsQuality = 'full' | 'subtle';
+
 /**
  * Trạng thái điều khiển độc quyền của game.
- * Chỉ khi mode === 'exploring' người chơi mới có thể di chuyển và tương tác thế giới.
+ * Chỉ khi lifecycle === 'PLAYING' và mode === 'exploring' người chơi mới có thể di chuyển và tương tác thế giới.
  */
 export type GameMode =
+  | 'boot'
+  | 'main_menu'
+  | 'loading'
   | 'opening'
   | 'exploring'
   | 'dialogue'
@@ -35,6 +50,10 @@ export type GameMode =
   | 'inventory'
   | 'puzzle'
   | 'paused'
+  | 'settings'
+  | 'instructions'
+  | 'multiplayer_preview'
+  | 'presenter'
   | 'cutscene'
   | 'transition';
 
@@ -450,9 +469,35 @@ export interface DossierPuzzleDefinition {
 
 export interface GameSettings {
   muted: boolean;
+  masterVolume?: number; // 0..1 (default 0.85)
   reducedMotion: boolean;
   textScale: 'normal' | 'large';
   showHints: boolean;
+  cameraZoom?: CameraZoomPreset; // 'wide' | 'normal' | 'close' (default 'normal')
+  effectsQuality?: EffectsQuality; // 'full' | 'subtle' (default 'full')
+  presenterModeUnlocked?: boolean; // explicitly enables developer/presenter controls
+}
+
+export interface SaveSummary {
+  exists: boolean;
+  timestamp: number;
+  eraId: EraId;
+  chapterLabel: string;
+  mapId: string;
+  mapTitle: string;
+  milestoneCount: number;
+  evidenceCount: number;
+}
+
+export interface ViewportMetrics {
+  cssWidth: number;
+  cssHeight: number;
+  pixelScale: number;
+  logicalWidth: number;
+  logicalHeight: number;
+  zoomPreset: CameraZoomPreset;
+  isTouchDevice: boolean;
+  isMobileLandscape: boolean;
 }
 
 export interface SaveDataV1 {
@@ -496,6 +541,9 @@ export interface HudCallbacks {
   onSelectDialogueChoice?: (choiceId: string) => void;
   onManualSave?: () => void;
   onResetSave?: () => void;
+  onReturnToMainMenu?: () => void;
+  onOpenSettings?: () => void;
+  onToggleFullscreen?: () => Promise<boolean> | boolean;
   onUpdateSettings?: (partial: Partial<GameSettings>) => void;
   onSubmitDossierPuzzle?: (puzzleId: string, selectedOptionIds: Record<string, string>) => {
     solved: boolean;
