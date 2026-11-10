@@ -10,7 +10,7 @@ import type { ProvenanceMetadata } from '../../types/game';
 export const CH1_PROVENANCE_MANIFEST: Record<string, ProvenanceMetadata> = {
   milestone_I_thanh_nien: {
     type: 'historical_fact',
-    label: 'Sự kiện Lịch sử (Giáo trình 2021, Chương I, mục I.2, tr. 44–56)',
+    label: 'Sự kiện Lịch sử',
     citation:
       'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.2, tr. 44–56',
     historicalNote:
@@ -18,7 +18,7 @@ export const CH1_PROVENANCE_MANIFEST: Record<string, ProvenanceMetadata> = {
   },
   milestone_II_unification_conference: {
     type: 'historical_fact',
-    label: 'Sự kiện Lịch sử (Giáo trình 2021, Chương I, mục I.3.a, tr. 57–61)',
+    label: 'Sự kiện Lịch sử',
     citation:
       'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.3.a, tr. 57–61',
     historicalNote:
@@ -26,7 +26,7 @@ export const CH1_PROVENANCE_MANIFEST: Record<string, ProvenanceMetadata> = {
   },
   milestone_III_first_platform: {
     type: 'historical_fact',
-    label: 'Văn kiện Lịch sử Gốc (Giáo trình 2021, Chương I, mục I.3.b & II.1, tr. 61–76)',
+    label: 'Văn kiện Lịch sử Gốc',
     citation:
       'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.3.b & II.1, tr. 61–76',
     historicalNote:
