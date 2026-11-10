@@ -1,12 +1,14 @@
 /**
  * @file src/ui/GameHUD.ts
  * @description Quản lý lớp HUD ngữ cảnh tối giản trên khung nhìn toàn màn hình (#hud-layer):
- * Thẻ chương/địa điểm góc trái, trạng thái ẩn nấp theo ngữ cảnh, thẻ nhiệm vụ hiện hành góc phải,
+ * Nhãn khu vực top-center không khung, intro ải (ẢI N : <Tên ải>), trạng thái ẩn nấp góc trái,
+ * thanh nhiệm vụ 1 dòng góc phải (chỉ hiện [E] khi vào tầm tương tác thật),
  * nhãn tương tác nổi trong không gian màn hình (#world-interaction-prompt), thanh gỡ lỗi F3 và Toast.
  */
 
 import type {
   ChapterData,
+  EraId,
   QuestDefinition,
   QuestObjective,
   StealthAlertState,
@@ -21,6 +23,17 @@ export interface DebugReadoutInfo {
   fps?: number;
 }
 
+export const STAGE_INTRO_LABELS: Record<EraId, string> = {
+  '1930': 'ẢI 1 : Hương Cảng 1930',
+  '1945': 'ẢI 2 : Tân Trào – Ba Đình 1945',
+  '1954_1975': 'ẢI 3 : Điện Biên – Mùa Xuân 1975',
+  '1986_2045': 'ẢI 4 : Đổi Mới – Kỷ Nguyên Số 2045',
+};
+
+export function formatStageIntroLabel(eraId: EraId | string): string {
+  return STAGE_INTRO_LABELS[eraId as EraId] ?? `ẢI 1 : ${String(eraId)}`;
+}
+
 function cleanPromptLabel(raw: string): string {
   return raw
     .replace(/^\s*\[?\s*E\s*\]?\s*[·:–\-]?\s*/i, '')
@@ -29,8 +42,25 @@ function cleanPromptLabel(raw: string): string {
     .trim();
 }
 
+export function stripStaticInteractKey(raw: string): string {
+  return raw
+    .replace(/^\s*[→◆▸✓]\s*/u, '')
+    .replace(/\s*(?:và\s+nhấn\s+)?\[\s*(?:phím\s*)?E\s*\]\.?\s*$/i, '')
+    .replace(/\s*\[\s*E\s*\]/gi, '')
+    .trim();
+}
+
 export class GameHUD {
   private hasExplicitPromptCoords = false;
+  private canInteractNow = false;
+  private lastActiveObjective: {
+    quest: QuestDefinition;
+    objective: QuestObjective;
+  } | null = null;
+  private lastNextActionText: string | undefined = undefined;
+  private lastHintText = '';
+  private lastShowHints = true;
+  private lastStageIntroEraId: string | null = null;
 
   public setVisible(visible: boolean): void {
     if (typeof document === 'undefined') return;
@@ -134,7 +164,15 @@ export class GameHUD {
     this.renderInteractionPromptInternal(promptText, screenX, screenY, shellW, shellH);
   }
 
+  private setCanInteractNow(nextCanInteract: boolean): void {
+    if (this.canInteractNow !== nextCanInteract) {
+      this.canInteractNow = nextCanInteract;
+      this.renderObjectiveSingleLine();
+    }
+  }
+
   private hideInteractionPromptEl(): void {
+    this.setCanInteractNow(false);
     if (typeof document === 'undefined') return;
     const promptEl = document.getElementById('world-interaction-prompt');
     if (!promptEl) return;
@@ -150,14 +188,15 @@ export class GameHUD {
     shellW?: number,
     shellH?: number
   ): void {
-    if (typeof document === 'undefined') return;
-    const promptEl = document.getElementById('world-interaction-prompt');
-    if (!promptEl) return;
-
     if (!promptText || !promptText.trim()) {
       this.hideInteractionPromptEl();
       return;
     }
+
+    this.setCanInteractNow(true);
+    if (typeof document === 'undefined') return;
+    const promptEl = document.getElementById('world-interaction-prompt');
+    if (!promptEl) return;
 
     const labelEl = document.getElementById('world-interaction-label');
     const cleaned = cleanPromptLabel(promptText) || promptText.trim();
@@ -197,57 +236,70 @@ export class GameHUD {
     activeObjective: { quest: QuestDefinition; objective: QuestObjective } | null,
     hintText: string,
     showHints: boolean,
-    nextActionText?: string
+    nextActionText?: string,
+    canInteract?: boolean
   ): void {
+    this.lastActiveObjective = activeObjective;
+    this.lastNextActionText = nextActionText;
+    this.lastHintText = hintText;
+    this.lastShowHints = showHints;
+    if (typeof canInteract === 'boolean') {
+      this.canInteractNow = canInteract;
+    }
+    this.renderObjectiveSingleLine();
+  }
+
+  private renderObjectiveSingleLine(): void {
     if (typeof document === 'undefined') return;
 
+    const trackerEl = document.getElementById('hud-objective-tracker');
     const questTitleEl = document.getElementById('hud-active-quest-title');
     const objTextEl = document.getElementById('hud-active-objective-text');
     const objActionEl = document.getElementById('hud-active-objective-action');
     const objHintEl = document.getElementById('hud-active-objective-hint');
 
-    if (activeObjective) {
-      if (questTitleEl) {
-        questTitleEl.textContent = `◆ ${activeObjective.quest.title}`;
-      }
-      if (objTextEl) {
-        objTextEl.textContent = activeObjective.objective.title;
-      }
-      if (objActionEl) {
-        const actionLine =
-          nextActionText ??
-          activeObjective.objective.nextActionText ??
-          activeObjective.objective.hintText ??
-          activeObjective.objective.title;
-        objActionEl.hidden = false;
-        objActionEl.removeAttribute('hidden');
-        objActionEl.textContent = `→ ${actionLine}`;
-      }
+    let baseLine = '';
+    if (this.lastActiveObjective) {
+      const raw =
+        this.lastActiveObjective.objective.hudText ||
+        this.lastActiveObjective.objective.title;
+      baseLine = stripStaticInteractKey(raw);
     } else {
-      if (questTitleEl) {
-        questTitleEl.textContent = '✓ HOÀN THÀNH MỤC TIÊU CHƯƠNG';
-      }
-      if (objTextEl) {
-        objTextEl.textContent =
-          nextActionText || 'Tiến tới không gian hội tụ để kích hoạt Cổng Thời Gian.';
-      }
-      if (objActionEl) {
-        objActionEl.hidden = false;
-        objActionEl.removeAttribute('hidden');
-        objActionEl.textContent =
-          '→ Tiến tới Cổng Thời Gian cuối chương và nhấn [E]';
-      }
+      const rawFallback =
+        this.lastNextActionText &&
+        !/Cổng Thời Gian cuối chương/i.test(this.lastNextActionText)
+          ? this.lastNextActionText
+          : 'Đến Cổng Thời Gian';
+      baseLine = stripStaticInteractKey(rawFallback) || 'Đến Cổng Thời Gian';
+    }
+
+    if (objTextEl) {
+      objTextEl.textContent = this.canInteractNow ? `${baseLine} [E]` : baseLine;
+    }
+
+    if (trackerEl) {
+      trackerEl.classList.toggle('is-interact-ready', this.canInteractNow);
+    }
+
+    if (questTitleEl) {
+      questTitleEl.textContent = this.lastActiveObjective
+        ? `◆ ${this.lastActiveObjective.quest.title}`
+        : '◆ Đã hoàn tất nhiệm vụ chương';
+      questTitleEl.hidden = true;
+      questTitleEl.setAttribute('hidden', '');
+    }
+
+    if (objActionEl) {
+      objActionEl.textContent = baseLine;
+      objActionEl.hidden = true;
+      objActionEl.setAttribute('hidden', '');
     }
 
     if (objHintEl) {
-      const displayHint = showHints && Boolean(hintText);
-      objHintEl.hidden = !displayHint;
-      if (displayHint) {
-        objHintEl.removeAttribute('hidden');
-        objHintEl.textContent = `▸ Gợi ý: ${hintText}`;
-      } else {
-        objHintEl.setAttribute('hidden', '');
-      }
+      const displayHint = this.lastShowHints && Boolean(this.lastHintText);
+      objHintEl.textContent = displayHint ? `▸ Gợi ý: ${this.lastHintText}` : '';
+      objHintEl.hidden = true;
+      objHintEl.setAttribute('hidden', '');
     }
   }
 
@@ -288,27 +340,80 @@ export class GameHUD {
     }
   }
 
-  public showRegionEntryBanner(zoneTitle: string, eraLabel: string): void {
+  public resetStageIntroTracker(): void {
+    this.lastStageIntroEraId = null;
+  }
+
+  public showStageIntro(eraId: EraId | string, force = false): boolean {
+    const key = String(eraId);
+    if (!force && this.lastStageIntroEraId === key) {
+      return false;
+    }
+    this.lastStageIntroEraId = key;
+    const introLabel = formatStageIntroLabel(eraId);
+    this.showRegionEntryBanner(introLabel, '');
+    return true;
+  }
+
+  public showRegionEntryBanner(zoneTitle: string, eraLabel = ''): void {
     if (typeof document === 'undefined') return;
     const banner = document.getElementById('region-entry-banner');
     const eraEl = document.getElementById('region-entry-era');
     const titleEl = document.getElementById('region-entry-title');
+    const hudLayer = document.getElementById('hud-layer');
     if (!banner) return;
 
-    if (eraEl) eraEl.textContent = eraLabel;
-    if (titleEl) titleEl.textContent = zoneTitle;
+    if (eraEl) {
+      eraEl.textContent = eraLabel;
+      const hasEra = Boolean(eraLabel && eraLabel.trim());
+      eraEl.hidden = !hasEra;
+      if (hasEra) {
+        eraEl.removeAttribute('hidden');
+      } else {
+        eraEl.setAttribute('hidden', '');
+      }
+    }
+    if (titleEl) {
+      titleEl.textContent = zoneTitle;
+    }
 
     banner.hidden = false;
     banner.removeAttribute('hidden');
+    banner.classList.remove('is-fading-out');
     banner.classList.add('is-visible');
+    hudLayer?.classList.add('is-stage-intro-active');
 
     if (typeof window !== 'undefined') {
-      window.clearTimeout((banner as unknown as { _timer?: number })._timer);
-      (banner as unknown as { _timer?: number })._timer = window.setTimeout(() => {
+      const bannerTimers = banner as unknown as {
+        _timer?: number;
+        _fadeTimer?: number;
+      };
+      window.clearTimeout(bannerTimers._timer);
+      window.clearTimeout(bannerTimers._fadeTimer);
+
+      const isReducedMotion =
+        document.body.classList.contains('reduced-motion') ||
+        document.body.classList.contains('is-reduced-motion');
+      const holdMs = 1750;
+      const fadeOutMs = isReducedMotion ? 0 : 260;
+
+      bannerTimers._timer = window.setTimeout(() => {
         banner.classList.remove('is-visible');
-        banner.hidden = true;
-        banner.setAttribute('hidden', '');
-      }, 2400);
+        banner.classList.add('is-fading-out');
+        hudLayer?.classList.remove('is-stage-intro-active');
+
+        if (fadeOutMs <= 0) {
+          banner.classList.remove('is-fading-out');
+          banner.hidden = true;
+          banner.setAttribute('hidden', '');
+        } else {
+          bannerTimers._fadeTimer = window.setTimeout(() => {
+            banner.classList.remove('is-fading-out');
+            banner.hidden = true;
+            banner.setAttribute('hidden', '');
+          }, fadeOutMs);
+        }
+      }, holdMs);
     }
   }
 }

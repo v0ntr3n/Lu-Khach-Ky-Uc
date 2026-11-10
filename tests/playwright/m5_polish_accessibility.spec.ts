@@ -28,9 +28,9 @@ test.describe('M5 Art, Gameplay Polish & Accessibility — Browser E2E Suite', (
     });
     expect(['pixelated', 'crisp-edges']).toContain(imageRendering);
 
-    // 2. Nhấn phím [H] để tắt/bật dòng gợi ý nhiệm vụ (#hud-active-objective-hint)
+    // 2. Nhấn phím [H] để tắt/bật gợi ý nhiệm vụ (game.store.settings.showHints; trên HUD 1 dòng #hud-active-objective-hint luôn ẩn)
     const hintEl = page.locator('#hud-active-objective-hint');
-    await expect(hintEl).toBeVisible();
+    await expect(hintEl).toBeHidden();
 
     await page.keyboard.press('KeyH');
     await expect(hintEl).toBeHidden();
@@ -45,7 +45,7 @@ test.describe('M5 Art, Gameplay Polish & Accessibility — Browser E2E Suite', (
     expect(showHintsAfterOff).toBe(false);
 
     await page.keyboard.press('KeyH');
-    await expect(hintEl).toBeVisible();
+    await expect(hintEl).toBeHidden();
     const showHintsAfterOn = await page.evaluate(() => {
       const game = (
         window as unknown as {
@@ -80,7 +80,7 @@ test.describe('M5 Art, Gameplay Polish & Accessibility — Browser E2E Suite', (
 
     await expect(page.locator('#codex-progress-count')).toHaveText('1 / 12 CỘT MỐC');
     await expect(page.locator('#hud-active-objective-text')).toContainText(
-      'Kiểm tra Sổ Vận Đơn & Báo Thanh Niên tại Kho Hàng Số 4'
+      'Kiểm tra sổ vận đơn · Kho 4'
     );
   });
 

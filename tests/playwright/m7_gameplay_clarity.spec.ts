@@ -24,11 +24,11 @@ test.describe('M7 (#12) — Gameplay Clarity: First-Play Tutorial, Concise HUD &
     await expect(page.locator('#tutorial-coach-bar')).toBeVisible();
     await expect(page.locator('#tutorial-step-badge')).toHaveText('HƯỚNG DẪN 1/5');
 
-    // Verify concise HUD objective tracker shows exact action line
-    const actionLine = page.locator('#hud-active-objective-action');
-    await expect(actionLine).toBeVisible();
-    await expect(actionLine).toContainText(
-      '→ Trò chuyện với Giao Liên Lâm Văn Bính'
+    // Verify concise 1-line HUD objective tracker shows exact objective line
+    const objectiveLine = page.locator('#hud-active-objective-text');
+    await expect(objectiveLine).toBeVisible();
+    await expect(objectiveLine).toContainText(
+      'Gặp Giao Liên · Bến Cảng'
     );
 
     // Verify exact target resolution for initial objective points to npc_courier

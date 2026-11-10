@@ -565,6 +565,7 @@ export class LuKhachKyUcGame {
     this.loadingScreen.hide();
     this.dialogueSystem.closeDialogue();
     this.hud.closeAllOverlays();
+    this.hud.resetStageIntroTracker();
     this.hud.setHudVisible(false);
     this.hud.updateInteractionPrompt(null);
     this.tutorialController.setGameplayVisible(false);
@@ -605,6 +606,7 @@ export class LuKhachKyUcGame {
     this.dialogueSystem.closeDialogue();
     this.hud.closeAllOverlays();
     this.mainMenu.hide();
+    this.hud.resetStageIntroTracker();
     this.hud.setHudVisible(false);
     this.hud.updateInteractionPrompt(null);
     this.tutorialController.setGameplayVisible(false);
@@ -661,6 +663,7 @@ export class LuKhachKyUcGame {
         this.tutorialController.setOverlaySuppressed(false);
         this.tutorialController.startIfFirstPlay(false);
         this.syncHudWithState();
+        this.hud.showStageIntro(this.currentChapter.id);
       },
     });
 
@@ -685,6 +688,7 @@ export class LuKhachKyUcGame {
     this.dialogueSystem.closeDialogue();
     this.hud.closeAllOverlays();
     this.mainMenu.hide();
+    this.hud.resetStageIntroTracker();
     this.hud.setHudVisible(false);
     this.hud.updateInteractionPrompt(null);
     this.tutorialController.setGameplayVisible(false);
@@ -754,6 +758,7 @@ export class LuKhachKyUcGame {
           Boolean(this.store.settings.tutorialCompleted ?? true)
         );
         this.syncHudWithState();
+        this.hud.showStageIntro(this.currentChapter.id);
       },
     });
 
@@ -1153,10 +1158,6 @@ export class LuKhachKyUcGame {
     );
     this.persistProgress();
     this.syncHudWithState();
-    this.hud.showRegionEntryBanner(
-      this.currentMap.title || this.currentChapter.locationLabel,
-      `${this.currentChapter.chapterNum} · ${this.currentChapter.years}`
-    );
     this.hud.showToast(`◆ Đã chuyển tới: ${this.currentMap.title}`);
     return true;
   }
@@ -1195,10 +1196,6 @@ export class LuKhachKyUcGame {
     this.input.clearKeys();
     this.persistProgress();
     this.syncHudWithState();
-    this.hud.showRegionEntryBanner(
-      this.currentMap.title || this.currentChapter.locationLabel,
-      `${this.currentChapter.chapterNum} · ${this.currentChapter.years}`
-    );
     this.hud.showToast(`◆ Đã dịch chuyển nhanh tới: ${this.currentMap.title}`);
     return true;
   }
@@ -1261,10 +1258,7 @@ export class LuKhachKyUcGame {
       this.persistProgress();
     }
     this.syncHudWithState();
-    this.hud.showRegionEntryBanner(
-      this.currentMap.title || this.currentChapter.locationLabel,
-      `${this.currentChapter.chapterNum} · ${this.currentChapter.years}`
-    );
+    this.hud.showStageIntro(this.currentChapter.id);
     this.hud.showToast(
       `Đã bước qua vết nứt thời gian tới ${this.currentChapter.chapterNum} (${this.currentChapter.years})`
     );
@@ -1636,6 +1630,7 @@ export class LuKhachKyUcGame {
       this.hazardCooldown = 0;
       this.persistProgress();
       this.syncHudWithState();
+      this.hud.showStageIntro(this.currentChapter.id);
       this.hud.showToast(
         `Đã mở Cổng Thời Gian sang ${this.currentChapter.chapterNum}: ${this.currentChapter.title}`
       );
@@ -2095,10 +2090,6 @@ export class LuKhachKyUcGame {
             );
             this.persistProgress();
             this.syncHudWithState();
-            this.hud.showRegionEntryBanner(
-              this.currentMap.title || this.currentChapter.locationLabel,
-              `${this.currentChapter.chapterNum} · ${this.currentChapter.years}`
-            );
             this.hud.showToast(`◆ Đã chuyển tới: ${this.currentMap.title}`);
             return;
           }

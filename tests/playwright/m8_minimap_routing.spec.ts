@@ -75,7 +75,7 @@ test.describe('M8 — Interactive Minimap, Click-to-Track Quests & Obstacle-Awar
 
     // HUD & Minimap cập nhật sang mục tiêu phụ liên khu vực (Bến Thuyền Nhỏ)
     await expect(page.locator('#hud-active-objective-text')).toContainText(
-      'Hỏi thăm Lão Chèo Đò tại Bến Thuyền Nhỏ'
+      'Gặp Lão Chèo Đò · Bến Thuyền'
     );
     await expect(page.locator('#minimap-route-banner')).toContainText('Bến Thuyền Nhỏ');
 

@@ -320,6 +320,14 @@ export class HudController {
       if (this.pausePanel.isOpen()) this.pausePanel.toggle(false);
       this.toggleJournalModal(true, 'quests');
     });
+    objectiveTrackerEl?.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (this.pausePanel.isOpen()) this.pausePanel.toggle(false);
+        this.toggleJournalModal(true, 'quests');
+      }
+    });
 
     debugBtn?.addEventListener('click', () => {
       const active = this.callbacks.onToggleDebugOverlay?.() ?? false;
@@ -496,7 +504,15 @@ export class HudController {
     this.gameHud.showToast(message);
   }
 
-  public showRegionEntryBanner(zoneTitle: string, eraLabel: string): void {
+  public resetStageIntroTracker(): void {
+    this.gameHud.resetStageIntroTracker();
+  }
+
+  public showStageIntro(eraId: EraId | string, force = false): boolean {
+    return this.gameHud.showStageIntro(eraId, force);
+  }
+
+  public showRegionEntryBanner(zoneTitle: string, eraLabel = ''): void {
     this.gameHud.showRegionEntryBanner(zoneTitle, eraLabel);
   }
 
