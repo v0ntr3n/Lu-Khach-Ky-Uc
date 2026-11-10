@@ -2821,3 +2821,324 @@ export function drawCuratedProp(
   drawTopDownTile(ctx, slotIdx + 1, Math.round(x), Math.round(y), false);
   ctx.restore();
 }
+
+export type DialoguePortraitArchetype =
+  | 'liaison'
+  | 'worker'
+  | 'watchman'
+  | 'keeper'
+  | 'vendor'
+  | 'boatman'
+  | 'cadre_1945'
+  | 'soldier_1954'
+  | 'commander_1975'
+  | 'reform_1986'
+  | 'archivist_2045'
+  | 'artifact_seal';
+
+/**
+ * Xác định kiểu chân dung pixel-art (40×40) dựa trên tên người nói và vai trò.
+ */
+export function resolveDialoguePortraitArchetype(
+  speaker: string,
+  role = '',
+  isArtifact = false
+): DialoguePortraitArchetype {
+  const s = `${speaker} ${role}`.toLowerCase();
+  if (s.includes('bia sử liệu') || s.includes('cổ vật')) {
+    return 'artifact_seal';
+  }
+  if (s.includes('2045') || s.includes('kỷ nguyên số') || s.includes('giám tuyển')) {
+    return 'archivist_2045';
+  }
+  if (s.includes('đổi mới') || s.includes('1986') || s.includes('kinh tế')) {
+    return 'reform_1986';
+  }
+  if (s.includes('1975') || s.includes('thông tin') || s.includes('hồ chí minh')) {
+    return 'commander_1975';
+  }
+  if (s.includes('pha đin') || s.includes('hậu cần') || s.includes('dân công') || s.includes('1954')) {
+    return 'soldier_1954';
+  }
+  if (
+    s.includes('việt minh') ||
+    s.includes('tân trào') ||
+    s.includes('ba đình') ||
+    s.includes('tự vệ') ||
+    s.includes('giải phóng')
+  ) {
+    return 'cadre_1945';
+  }
+  if (s.includes('chèo đò') || s.includes('bến thuyền')) {
+    return 'boatman';
+  }
+  if (s.includes('hàng nước') || s.includes('bà ')) {
+    return 'vendor';
+  }
+  if (s.includes('gác đèn') || s.includes('hoa tiêu')) {
+    return 'watchman';
+  }
+  if (s.includes('công nhân') || s.includes('bốc xếp')) {
+    return 'worker';
+  }
+  if (s.includes('thủ kho') || s.includes('ông từ') || s.includes('ký lục')) {
+    return 'keeper';
+  }
+  if (isArtifact) {
+    return 'artifact_seal';
+  }
+  return 'liaison';
+}
+
+/**
+ * Vẽ chân dung bán thân (Bust Portrait 40×40 logic -> 80×80 CSS px) phong cách Eastward Pixel RPG
+ * với ánh sáng chiaroscuro ấm, trang phục đặc trưng từng thời kỳ và cử động mắt/miệng tinh tế.
+ */
+export function drawDialoguePortrait(
+  ctx: CanvasRenderingContext2D,
+  archetype: DialoguePortraitArchetype,
+  timeSec = 0,
+  isSpeaking = false,
+  reducedMotion = false
+): void {
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+
+  // 1. Nền Sơn Mài sâu + Hào quang Chiaroscuro sau lưng nhân vật
+  ctx.fillStyle = PALETTE_12.LACQUER_VOID;
+  ctx.fillRect(0, 0, 40, 40);
+  ctx.fillStyle = PALETTE_12.LACQUER_DEEP;
+  ctx.fillRect(2, 2, 36, 36);
+
+  // Vầng sáng ấm phía sau đầu
+  ctx.fillStyle =
+    archetype === 'archivist_2045'
+      ? PALETTE_12.CRIMSON_SEAL
+      : PALETTE_12.BRONZE_MUTED;
+  ctx.fillRect(8, 6, 24, 24);
+  ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+  ctx.fillRect(11, 9, 18, 18);
+
+  if (archetype === 'artifact_seal') {
+    // Ấn chương Cột mốc Lịch sử
+    ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+    ctx.fillRect(9, 7, 22, 26);
+    ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+    ctx.fillRect(9, 7, 22, 2);
+    ctx.fillRect(9, 31, 22, 2);
+    ctx.fillRect(9, 7, 2, 26);
+    ctx.fillRect(29, 7, 2, 26);
+    ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+    ctx.fillRect(15, 13, 10, 14);
+    ctx.fillStyle = PALETTE_12.CRIMSON_VERMILION;
+    ctx.fillRect(17, 16, 6, 8);
+    ctx.restore();
+    return;
+  }
+
+  const breathY = reducedMotion ? 0 : Math.round(Math.sin(timeSec * 3.2) * 0.6);
+  const blink = !reducedMotion && Math.floor(timeSec * 2.4) % 9 === 0;
+  const mouthOpen =
+    isSpeaking && !reducedMotion && Math.floor(timeSec * 9) % 2 === 0;
+
+  // 2. Vai & Trang phục theo từng nguyên mẫu nhân vật (y: 26..38)
+  const shoulderY = 26 + breathY;
+  if (archetype === 'liaison') {
+    // Áo măng-tô tối + Khăn quàng đỏ son + Huy hiệu đồng
+    ctx.fillStyle = PALETTE_12.LACQUER_ELEVATED;
+    ctx.fillRect(6, shoulderY, 28, 13);
+    ctx.fillStyle = PALETTE_12.INK_SECONDARY;
+    ctx.fillRect(8, shoulderY + 1, 24, 12);
+    ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+    ctx.fillRect(14, shoulderY, 12, 6);
+    ctx.fillStyle = PALETTE_12.CRIMSON_VERMILION;
+    ctx.fillRect(16, shoulderY + 1, 8, 4);
+    ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+    ctx.fillRect(24, shoulderY + 5, 2, 2);
+  } else if (archetype === 'worker') {
+    // Áo công nhân nâu sẫm + Khăn vắt vai trắng ngà
+    ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+    ctx.fillRect(6, shoulderY, 28, 13);
+    ctx.fillStyle = PALETTE_12.PARCHMENT_WARM;
+    ctx.fillRect(9, shoulderY, 6, 11);
+    ctx.fillStyle = PALETTE_12.INK_PRIMARY;
+    ctx.fillRect(16, shoulderY + 2, 8, 10);
+  } else if (archetype === 'watchman') {
+    // Áo tơi đi mưa tối + Đèn bão đồng sáng bên vai phải
+    ctx.fillStyle = PALETTE_12.INK_PRIMARY;
+    ctx.fillRect(6, shoulderY, 28, 13);
+    ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+    ctx.fillRect(8, shoulderY + 1, 24, 3);
+    ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+    ctx.fillRect(30, shoulderY - 3, 6, 8);
+    ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+    ctx.fillRect(31, shoulderY - 1, 4, 4);
+  } else if (archetype === 'keeper' || archetype === 'reform_1986') {
+    // Áo sơ mi giấy dó + Ghi-lê tối + Cà vạt đỏ son
+    ctx.fillStyle = PALETTE_12.INK_SECONDARY;
+    ctx.fillRect(7, shoulderY, 26, 13);
+    ctx.fillStyle = PALETTE_12.PARCHMENT_WARM;
+    ctx.fillRect(15, shoulderY, 10, 9);
+    ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+    ctx.fillRect(19, shoulderY + 2, 2, 8);
+  } else if (archetype === 'vendor') {
+    // Áo bà ba nâu đồng + Khăn choàng ấm
+    ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+    ctx.fillRect(7, shoulderY, 26, 13);
+    ctx.fillStyle = PALETTE_12.PARCHMENT_WARM;
+    ctx.fillRect(15, shoulderY, 10, 5);
+  } else if (archetype === 'boatman') {
+    // Áo nâu sồng + Khăn rằn
+    ctx.fillStyle = PALETTE_12.INK_SECONDARY;
+    ctx.fillRect(6, shoulderY, 28, 13);
+    ctx.fillStyle = PALETTE_12.PARCHMENT_WARM;
+    ctx.fillRect(13, shoulderY, 14, 4);
+  } else if (archetype === 'cadre_1945') {
+    // Quân phục Việt Minh nâu vàng + Khăn đỏ sao vàng
+    ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+    ctx.fillRect(6, shoulderY, 28, 13);
+    ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+    ctx.fillRect(15, shoulderY, 10, 5);
+    ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+    ctx.fillRect(10, shoulderY + 4, 3, 3);
+  } else if (archetype === 'soldier_1954' || archetype === 'commander_1975') {
+    // Quân phục chiến dịch + Phù hiệu đỏ trên cổ áo
+    ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+    ctx.fillRect(6, shoulderY, 28, 13);
+    ctx.fillStyle = PALETTE_12.CRIMSON_VERMILION;
+    ctx.fillRect(13, shoulderY + 1, 3, 3);
+    ctx.fillRect(24, shoulderY + 1, 3, 3);
+    ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+    ctx.fillRect(9, shoulderY + 3, 22, 2);
+  } else if (archetype === 'archivist_2045') {
+    // Áo khoác cổ cao 2045 viền mạch vàng đồng sáng
+    ctx.fillStyle = PALETTE_12.LACQUER_VOID;
+    ctx.fillRect(6, shoulderY, 28, 13);
+    ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+    ctx.fillRect(8, shoulderY, 2, 13);
+    ctx.fillRect(30, shoulderY, 2, 13);
+    ctx.fillRect(14, shoulderY + 2, 12, 2);
+    ctx.fillStyle = PALETTE_12.CRIMSON_VERMILION;
+    ctx.fillRect(18, shoulderY + 5, 4, 4);
+  }
+
+  // 3. Cổ & Khuôn mặt nhân vật (y: 12..26)
+  const headY = 12 + breathY;
+  ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+  ctx.fillRect(17, headY + 12, 6, 4); // Cổ
+
+  // Khuôn mặt (sáng phía trái, bóng ấm phía phải theo phong cách chiaroscuro)
+  ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+  ctx.fillRect(13, headY, 14, 13);
+  ctx.fillStyle = PALETTE_12.PARCHMENT_WARM;
+  ctx.fillRect(21, headY + 1, 6, 12);
+  ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+  ctx.fillRect(12, headY + 3, 1, 6); // Tai trái
+  ctx.fillRect(27, headY + 3, 1, 6); // Tai phải
+
+  // 4. Đôi mắt, Lông mày, Kính & Biểu cảm miệng
+  ctx.fillStyle = PALETTE_12.INK_PRIMARY;
+  ctx.fillRect(15, headY + 3, 3, 1); // Lông mày trái
+  ctx.fillRect(22, headY + 3, 3, 1); // Lông mày phải
+
+  if (blink) {
+    ctx.fillRect(15, headY + 5, 3, 1);
+    ctx.fillRect(22, headY + 5, 3, 1);
+  } else {
+    ctx.fillRect(16, headY + 4, 2, 3);
+    ctx.fillRect(22, headY + 4, 2, 3);
+    ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+    ctx.fillRect(16, headY + 4, 1, 1);
+    ctx.fillRect(22, headY + 4, 1, 1);
+  }
+
+  // Kính tròn cho Thủ Kho / Chuyên Gia 1986 / Kính quang học 2045
+  if (archetype === 'keeper' || archetype === 'reform_1986') {
+    ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+    ctx.fillRect(14, headY + 4, 1, 3);
+    ctx.fillRect(18, headY + 4, 4, 1);
+    ctx.fillRect(25, headY + 4, 1, 3);
+  } else if (archetype === 'archivist_2045') {
+    ctx.fillStyle = PALETTE_12.CRIMSON_VERMILION;
+    ctx.fillRect(14, headY + 4, 12, 2);
+    ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+    ctx.fillRect(15, headY + 4, 3, 1);
+  }
+
+  // Miệng (cử động khi đang thoại) + Râu cho Lão Chèo Đò / Người Gác Đèn
+  if (archetype === 'watchman' || archetype === 'boatman') {
+    ctx.fillStyle = PALETTE_12.PARCHMENT_WARM;
+    ctx.fillRect(15, headY + 10, 10, 4);
+  }
+  ctx.fillStyle = mouthOpen ? PALETTE_12.CRIMSON_SEAL : PALETTE_12.INK_PRIMARY;
+  ctx.fillRect(18, headY + 9, 4, mouthOpen ? 2 : 1);
+
+  // 5. Mũ / Tóc đặc trưng từng thời kỳ (y: 5..14)
+  if (archetype === 'liaison') {
+    // Mũ phớt Fedora 1930
+    ctx.fillStyle = PALETTE_12.INK_PRIMARY;
+    ctx.fillRect(12, headY - 5, 16, 5);
+    ctx.fillRect(9, headY - 1, 22, 2);
+    ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+    ctx.fillRect(12, headY - 2, 16, 1);
+  } else if (archetype === 'worker' || archetype === 'watchman') {
+    // Mũ lưỡi trai công nhân / hoa tiêu bến cảng
+    ctx.fillStyle = PALETTE_12.INK_SECONDARY;
+    ctx.fillRect(12, headY - 4, 16, 4);
+    ctx.fillStyle = PALETTE_12.LACQUER_VOID;
+    ctx.fillRect(11, headY - 1, 19, 2);
+  } else if (archetype === 'boatman') {
+    // Nón lá truyền thống
+    ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+    ctx.fillRect(17, headY - 6, 6, 2);
+    ctx.fillRect(13, headY - 4, 14, 2);
+    ctx.fillRect(8, headY - 2, 24, 3);
+    ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+    ctx.fillRect(10, headY, 20, 1);
+  } else if (archetype === 'vendor') {
+    // Khăn vấn tóc truyền thống
+    ctx.fillStyle = PALETTE_12.INK_PRIMARY;
+    ctx.fillRect(12, headY - 4, 16, 5);
+    ctx.fillRect(11, headY, 2, 6);
+    ctx.fillRect(27, headY, 2, 6);
+    ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+    ctx.fillRect(13, headY - 2, 14, 2);
+  } else if (archetype === 'cadre_1945') {
+    // Mũ ca-lô Việt Minh gắn sao vàng
+    ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+    ctx.fillRect(12, headY - 5, 16, 5);
+    ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+    ctx.fillRect(18, headY - 4, 4, 3);
+    ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+    ctx.fillRect(19, headY - 3, 2, 2);
+  } else if (archetype === 'soldier_1954' || archetype === 'commander_1975') {
+    // Mũ cối bộ đội Cụ Hồ gắn sao vàng
+    ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+    ctx.fillRect(11, headY - 5, 18, 4);
+    ctx.fillRect(9, headY - 1, 22, 2);
+    ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+    ctx.fillRect(18, headY - 4, 4, 3);
+    ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+    ctx.fillRect(19, headY - 3, 2, 2);
+  } else {
+    // Mái tóc gọn gàng của Học giả / Chuyên gia / Giám tuyển 2045
+    ctx.fillStyle = PALETTE_12.INK_PRIMARY;
+    ctx.fillRect(12, headY - 4, 16, 5);
+    ctx.fillRect(12, headY, 2, 4);
+    ctx.fillRect(26, headY, 2, 4);
+    if (archetype === 'archivist_2045') {
+      ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+      ctx.fillRect(14, headY - 3, 6, 1);
+    }
+  }
+
+  // 6. Khung viền đồng sáng nội bộ 40×40
+  ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+  ctx.fillRect(0, 0, 40, 1);
+  ctx.fillRect(0, 39, 40, 1);
+  ctx.fillRect(0, 0, 1, 40);
+  ctx.fillRect(39, 0, 1, 40);
+
+  ctx.restore();
+}
+

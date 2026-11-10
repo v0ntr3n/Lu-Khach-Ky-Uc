@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5173';
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || '/';
 
 test.describe('M7 (#12) — Gameplay Clarity: First-Play Tutorial, Concise HUD & Exact Quest Targets', () => {
   test('starts non-blocking 5-step tutorial on new game, advances via player actions, supports skip/replay, and displays concise next action on HUD', async ({

@@ -248,6 +248,10 @@ export class LuKhachKyUcGame {
       },
       onTogglePause: () => {
         if (!this.canOpenGameplayHotkeyOverlay()) return;
+        if (this.hud.dialoguePanel.isOpen()) {
+          this.hud.dialoguePanel.toggleLoreDrawer();
+          return;
+        }
         this.tutorialController?.recordAction('hint');
         this.syncHudWithState();
         this.hud.togglePauseModal();
