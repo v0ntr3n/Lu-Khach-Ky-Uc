@@ -77,13 +77,42 @@ export class CameraController {
   }
 
   /**
+   * Cập nhật lại kích thước khung nhìn động (logical viewport) và kẹp biên / căn giữa lại camera.
+   */
+  public setViewport(viewportWidth: number, viewportHeight: number): void {
+    this.viewportWidth = Math.max(1, viewportWidth);
+    this.viewportHeight = Math.max(1, viewportHeight);
+    const clamped = this.clamp(this.x, this.y);
+    this.x = clamped.x;
+    this.y = clamped.y;
+  }
+
+  /**
    * Kẹp tọa độ góc trên-trái của camera vào biên hợp lệ của bản đồ.
+   * Nếu bản đồ nhỏ hơn khung nhìn (`worldWidth < viewportWidth` hoặc `worldHeight < viewportHeight`),
+   * tự động căn giữa bản đồ trong khung nhìn.
    */
   public clamp(camX: number, camY: number): Vec2 {
-    const maxX = Math.max(0, this.worldWidth - this.viewportWidth);
-    const maxY = Math.max(0, this.worldHeight - this.viewportHeight);
-    const x = Math.max(0, Math.min(maxX, Number.isFinite(camX) ? camX : 0));
-    const y = Math.max(0, Math.min(maxY, Number.isFinite(camY) ? camY : 0));
+    const x =
+      this.worldWidth < this.viewportWidth
+        ? Math.round((this.worldWidth - this.viewportWidth) * 0.5)
+        : Math.max(
+            0,
+            Math.min(
+              this.worldWidth - this.viewportWidth,
+              Number.isFinite(camX) ? camX : 0
+            )
+          );
+    const y =
+      this.worldHeight < this.viewportHeight
+        ? Math.round((this.worldHeight - this.viewportHeight) * 0.5)
+        : Math.max(
+            0,
+            Math.min(
+              this.worldHeight - this.viewportHeight,
+              Number.isFinite(camY) ? camY : 0
+            )
+          );
     return { x, y };
   }
 
