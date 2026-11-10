@@ -115,7 +115,7 @@ export const CH1_DOSSIER_PUZZLE: DossierPuzzleDefinition = {
     },
   ],
   progressiveHint:
-    'Gợi ý: Cương lĩnh chính trị đầu tiên xác định rõ đường lối "tư sản dân quyền cách mạng và thổ địa cách mạng để đi tới xã hội cộng sản", đặt nhiệm vụ chống đế quốc giành độc lập dân tộc lên hàng đầu, và khẳng định Đảng là đội tiên phong của giai cấp vô sản gắn bó mật thiết với công nông.',
+    'Cương lĩnh chính trị đầu tiên xác định rõ đường lối "tư sản dân quyền cách mạng và thổ địa cách mạng để đi tới xã hội cộng sản", đặt nhiệm vụ chống đế quốc giành độc lập dân tộc lên hàng đầu, và khẳng định Đảng là đội tiên phong của giai cấp vô sản gắn bó mật thiết với công nông.',
   textbookCitation:
     'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.3.b, tr. 61–65',
   provenance: CH1_PROVENANCE_MANIFEST.milestone_III_first_platform,
