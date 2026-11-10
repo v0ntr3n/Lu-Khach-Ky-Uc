@@ -1,12 +1,12 @@
 # Lữ Khách Ký Ức: Biên Niên Sử Sơn Mài (1930 – 2045)
 
-Tựa game **2D Top-Down RPG Exploration & Giải Đố Lịch Sử (3/4 Overhead Perspective, 320×180 Integer-Scaled)** lấy cảm hứng từ cấu trúc bản đồ liên thông của *WorkAdventure* và phong cách thị giác **Sơn Mài & Giấy Dó** (`pbakaus/impeccable`), bám sát toàn văn **Giáo trình Lịch sử Đảng Cộng sản Việt Nam** (Bộ GD&ĐT, NXB Chính trị quốc gia Sự thật, 2021 — 440 trang).
+Tựa game **2D Top-Down Pixel-Art RPG Toàn Màn Hình & Giải Đố Lịch Sử (`100vw × 100dvh`, Dynamic Integer-Scaled)** lấy cảm hứng từ cấu trúc bản đồ liên thông của *WorkAdventure* và phong cách thị giác **Sơn Mài & Giấy Dó** (`pbakaus/impeccable`), bám sát toàn văn **Giáo trình Lịch sử Đảng Cộng sản Việt Nam** (Bộ GD&ĐT, NXB Chính trị quốc gia Sự thật, 2021 — 440 trang).
 
 ---
 
 ## 1. Bối Cảnh & 4 Chương Lịch Sử (14 Bản Đồ Tiled `.tmj` Liên Thông)
 
-Năm **2045** (Kỷ niệm 100 năm thành lập nước), một **Lữ Khách Ký Ức** bước qua **Vết Nứt Không Gian – Thời Gian (16-Shard Tectonic Rift)** để khám phá 14 khu vực liên thông qua 4 thời kỳ lịch sử trọng đại và khôi phục **12 Cột Mốc La Mã (`I – XII`)**:
+Khởi đầu từ **Menu Chính Điện Ảnh** trong đêm mưa bến cảng Hương Cảng (1930), một **Lữ Khách Ký Ức** từ năm **2045** bước qua **Vết Nứt Không Gian – Thời Gian (16-Shard Tectonic Rift)** để khám phá 14 khu vực liên thông qua 4 thời kỳ lịch sử trọng đại và khôi phục **12 Cột Mốc La Mã (`I – XII`)**:
 
 | Chương | Thời Kỳ & Cụm Bản Đồ Tiled (`.tmj`) | Cơ Chế RPG & Giải Đố Lịch Sử | Climax Cuối Chương (Bước A + Bước B) |
 | :--- | :--- | :--- | :--- |
@@ -21,17 +21,18 @@ Năm **2045** (Kỷ niệm 100 năm thành lập nước), một **Lữ Khách K
 
 | Phím / Thao tác | Chức năng |
 | :--- | :--- |
-| `W / A / S / D` hoặc `↑ / ← / ↓ / →` | Di chuyển 8 hướng chuẩn hóa vận tốc chéo (`1 / √2`) trên mặt phẳng 2D |
+| `W / A / S / D` hoặc `↑ / ← / ↓ / →` | Di chuyển 8 hướng chuẩn hóa vận tốc chéo (`1 / √2`) trong thế giới hoặc điều hướng Menu Chính |
 | `Shift` (hoặc đứng dưới mái hiên / tán đa) | Ẩn mình trong vùng bóng tối (`ShelterZone`) tránh nón tầm nhìn tuần tra |
 | `E` hoặc `Space` (Nhấn 1 lần) | Tương tác ngữ cảnh: Trò chuyện NPC, Thu thập Tư liệu, Mở Cổng/Cửa, Kích hoạt Đèn An Toàn, Mở Bàn Kiểm Định |
-| `J` | Mở / Đóng **Nhật Ký Hành Trình & Nhiệm Vụ Lịch Sử** (`#journal-modal`) |
+| `J` | Mở / Đóng **Nhật Ký Nhiệm Vụ & Biên Niên Sử La Mã I–XII** (`#journal-modal`) |
 | `I` | Mở / Đóng **Túi Tư Liệu & Bằng Chứng Lịch Sử** (`#inventory-modal`) |
 | `M` | Mở / Đóng **Sơ Đồ Liên Thông Khu Vực & Dịch Chuyển Nhanh** (`#world-map-modal`) |
-| `Q` | Mở / Đóng **Bàn Cố Vấn Sử Học AI** kèm số trang Giáo trình 2021 (`#lookup-drawer`) |
+| `Q` | Mở / Đóng **Bàn Cố Vấn Sử Học** kèm số trang Giáo trình 2021 (`#lookup-drawer`) |
+| `F` (hoặc `F11`) | Bật / Tắt **Chế độ Toàn màn hình** (`FullscreenManager` + dự phòng tràn khung nhìn) |
 | `H` | Bật / Tắt nhanh dòng gợi ý dẫn đường trên HUD (`#hud-active-objective-hint`) |
-| `F3` | Bật / Tắt **Lớp Phủ Kiểm Định Bản Đồ (Debug Overlay)** hiển thị hộp va chạm, cổng, lộ trình tuần tra |
-| `Tab` hoặc `Esc` | Mở **Tạm Dừng & Thiết Lập Trợ Năng** (`#pause-modal`) / Đóng cửa sổ đang mở |
+| `Esc` hoặc `Tab` | Mở **Tạm Dừng** (`#pause-modal`: Tiếp tục, Cài đặt, Lưu, Về Menu Chính) / Đóng cửa sổ đang mở |
 | `1 .. 4` | Chọn nhanh nhánh hội thoại NPC hoặc phương án Quyết sách Climax |
+| `Ctrl + Shift + P` (hoặc `?presenter=1`) | Mở khóa & bật **Ngăn Điều Khiển Giảng Viên / Kiểm Định (`F3`)** độc lập, không ghi đè tiến trình lưu của người chơi |
 
 ---
 
@@ -40,19 +41,22 @@ Năm **2045** (Kỷ niệm 100 năm thành lập nước), một **Lữ Khách K
 ```bash
 npm install
 
-# 1. Chạy máy chủ phát triển Vite
+# 1. Chạy máy chủ phát triển Vite (http://127.0.0.1:5173)
 npm run dev
 
-# 2. Kiểm định toàn bộ 14 bản đồ Tiled (.tmj) và đồ thị liên thông
+# 2. Kiểm tra kiểu TypeScript nghiêm ngặt
+npm run typecheck
+
+# 3. Kiểm định toàn bộ 14 bản đồ Tiled (.tmj) và đồ thị liên thông
 npm run validate:maps
 
-# 3. Kiểm tra kiểu TypeScript & đóng gói bản dựng sản xuất (dist/)
+# 4. Đóng gói bản dựng sản xuất (dist/)
 npm run build
 
-# 4. Chạy bộ kiểm thử đơn vị Vitest (M0 -> M6)
+# 5. Chạy bộ kiểm thử đơn vị Vitest (M0 -> M7)
 npm run test:unit
 
-# 5. Chạy bộ kiểm thử End-to-End Playwright Chromium trên trình duyệt thực
+# 6. Chạy bộ kiểm thử End-to-End Playwright Chromium trên trình duyệt thực
 npm run test:e2e
 ```
 
@@ -65,4 +69,4 @@ npm run test:e2e
    - `fictional_npc` (**Nhân vật / tình tiết hư cấu dẫn chuyện**): Các nhân vật giao liên, công nhân bến cảng, học giả lưu trữ được gắn nhãn minh bạch trên hộp thoại và nhật ký.
    - `speculative_2045` (**Khung viễn tưởng Kỷ nguyên số 2045**): Bối cảnh Lữ Khách Lưu Trữ Quốc Gia năm 2045 kỷ niệm 100 năm lập nước.
 2. **Tài nguyên Pixel Art & Sprite Atlas (`src/data/provenance/sprite_atlas_manifest.ts`)**:
-   - Toàn bộ nhân vật 4 hướng (`down`, `up`, `left`, `right`) và tĩnh vật 16×16 tuân thủ nghiêm ngặt bảng 12 sắc độ **Sơn Mài & Giấy Dó** (`DESIGN.md`) và quy tắc `imageSmoothingEnabled = false` (`docs/plans/SPRITE_ATLAS.md`).
+   - Toàn bộ nhân vật 4 hướng (`16×22`, `down`, `up`, `left`, `right`) và tĩnh vật `16×16` tuân thủ nghiêm ngặt bảng 12 sắc độ **Sơn Mài & Giấy Dó** (`DESIGN.md`) và quy tắc dựng điểm ảnh nguyên (`image-rendering: pixelated`, `imageSmoothingEnabled = false`).

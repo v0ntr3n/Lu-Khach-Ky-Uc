@@ -1,13 +1,13 @@
 /**
  * @file src/core/GameApp.ts
  * @description Bộ điều phối vòng đời chính của "Lữ Khách Ký Ức (1930 – 2045)".
- * Kết nối GameStore, InputManager, SaveManager, MapLoader, CameraController,
+ * Quản lý máy trạng thái BOOT → MAIN_MENU → LOADING → OPENING → PLAYING → PAUSED → MAIN_MENU,
+ * kết nối GameShell (100vw × 100dvh integer pixel scaling), FullscreenManager, MainMenu,
+ * LoadingScreen, OpeningFracture, GameStore, InputManager, SaveManager, CameraController,
  * SceneTransition, CollisionWorld, InteractionSystem, QuestSystem, DialogueSystem,
- * EvidenceSystem, InventorySystem, StealthSystem, DossierPuzzle, OpeningFracture,
- * PixelRenderer, SoundSynth và HudController.
+ * EvidenceSystem, InventorySystem, StealthSystem, PixelRenderer, SoundSynth và HudController.
  */
 
-import { CH1_DOSSIER_PUZZLE } from '../data/chapters/ch1_1930';
 import { getEraPuzzleForMapOrId } from '../data/chapters/ch2_3_4_mechanics';
 import { CHAPTERS } from '../data/chronicles';
 import { OpeningFractureController } from '../engine/OpeningFracture';
@@ -29,6 +29,7 @@ import { InventorySystem } from '../systems/InventorySystem';
 import { QuestSystem } from '../systems/QuestSystem';
 import { StealthSystem } from '../systems/StealthSystem';
 import type {
+  AppLifecycleState,
   ChapterData,
   DossierPuzzleDefinition,
   EraId,
@@ -41,33 +42,20 @@ import type {
   PortalDefinition,
   Rect2D,
   RomanMilestoneId,
+  SaveSummary,
+  StealthAlertState,
   Vec2,
+  ViewportMetrics,
 } from '../types/game';
+import { FullscreenManager } from '../ui/FullscreenManager';
+import { GameShell } from '../ui/GameShell';
 import { HudController } from '../ui/HudController';
+import { LoadingScreen } from '../ui/LoadingScreen';
+import { MainMenu } from '../ui/MainMenu';
 import { CollisionWorld } from '../world/CollisionWorld';
 import { GameStore } from './GameStore';
 import { InputManager } from './InputManager';
 import { SaveManager } from './SaveManager';
-
-interface HudExtendedMethods {
-  toggleWorldMapModal?: (forceOpen?: boolean) => void;
-  toggleJournalModal?: (forceOpen?: boolean) => void;
-  toggleInventoryModal?: (forceOpen?: boolean) => void;
-  togglePauseModal?: (forceOpen?: boolean) => void;
-  openDossierPuzzleModal?: (
-    puzzle: DossierPuzzleDefinition,
-    attemptCount: number
-  ) => void;
-  closeDossierPuzzleModal?: () => void;
-  closeAllOverlays?: () => void;
-  updateWorldMapState?: (
-    currentMapId: string,
-    discoveredMaps: ReadonlySet<string>,
-    unlockedCheckpoints: ReadonlySet<string>,
-    isPresenterMode: boolean
-  ) => void;
-  setDebugOverlayUI?: (enabled: boolean) => void;
-}
 
 export class LuKhachKyUcGame {
   public readonly store: GameStore;
@@ -75,7 +63,12 @@ export class LuKhachKyUcGame {
   public readonly saveManager: SaveManager;
   public readonly renderer: PixelRenderer;
   public readonly sound: SoundSynth;
+  public readonly gameShell: GameShell;
+  public readonly fullscreenManager: FullscreenManager;
+  public readonly loadingScreen: LoadingScreen;
+  public readonly openingFracture: OpeningFractureController;
   public readonly hud: HudController;
+  public readonly mainMenu: MainMenu;
   public readonly interactionSystem: InteractionSystem;
   public readonly questSystem: QuestSystem;
   public readonly dialogueSystem: DialogueSystem;
@@ -102,8 +95,10 @@ export class LuKhachKyUcGame {
   public isBurstAnimating = false;
   public transitionFadeAlpha = 0;
   private activeBurstToken = 0;
+  private postBurstDelaySec = 0;
 
   private lastFrameMs = performance.now();
+  private smoothedFps = 60;
   private stepSoundCooldown = 0;
   private hazardCooldown = 0;
   private npcRouteStates = new Map<
@@ -118,13 +113,23 @@ export class LuKhachKyUcGame {
       throw new Error('Không tìm thấy phần tử #pixel-canvas.');
     }
 
+    let urlUnlockPresenter = false;
     if (typeof window !== 'undefined' && window.location?.search) {
       const params = new URLSearchParams(window.location.search);
       this.useLegacyRenderer = params.get('renderer') === 'legacy';
+      urlUnlockPresenter = params.get('presenter') === '1';
     }
 
     this.store = new GameStore();
+    this.store.setMode('boot');
+
     this.saveManager = new SaveManager();
+    const initialSettings = this.saveManager.loadSettings();
+    if (urlUnlockPresenter) {
+      initialSettings.presenterModeUnlocked = true;
+    }
+    this.store.settings = this.saveManager.normalizeSettings(initialSettings);
+
     this.interactionSystem = new InteractionSystem();
     this.questSystem = new QuestSystem();
     this.dialogueSystem = new DialogueSystem();
@@ -145,6 +150,12 @@ export class LuKhachKyUcGame {
       }
     );
     this.stealthSystem.initForMap(this.currentMap);
+
+    this.renderer = new PixelRenderer(canvas);
+    this.sound = new SoundSynth();
+    this.sound.setMuted(this.store.settings.muted);
+    this.sound.setVolume(this.store.settings.masterVolume ?? 0.85);
+
     this.cameraController = new CameraController({
       worldWidth: this.currentMap.widthPx,
       worldHeight: this.currentMap.heightPx,
@@ -153,106 +164,101 @@ export class LuKhachKyUcGame {
     });
     this.sceneTransition = new SceneTransition('harbor_square', 'default_spawn', 0.65);
 
-    const saved = this.saveManager.load();
-    if (saved) {
-      this.store.restoreFromSave(saved, CHAPTERS);
-      const savedMapId =
-        saved.currentMapId && this.allMaps[saved.currentMapId]
-          ? saved.currentMapId
-          : 'harbor_square';
-      this.currentMap = getBuiltInMap(savedMapId);
-      this.collisionWorld = new CollisionWorld(
-        this.currentMap.obstacles,
-        this.currentMap.shelters,
-        {
-          x: 0,
-          y: 0,
-          width: this.currentMap.widthPx,
-          height: this.currentMap.heightPx,
-        }
-      );
-      this.stealthSystem.initForMap(this.currentMap);
-      this.cameraController.setBounds(
-        this.currentMap.widthPx,
-        this.currentMap.heightPx,
-        INTERNAL_WIDTH,
-        INTERNAL_HEIGHT
-      );
-      this.playerX = saved.playerPos.x;
-      this.playerY =
-        saved.playerPos.y && saved.playerPos.y !== 148 ? saved.playerPos.y : 384;
-      this.playerFacing = saved.playerFacing ?? 'right';
-      this.facingRight = this.playerFacing !== 'left';
-    }
+    this.gameShell = new GameShell({
+      shellSelector: '#game-shell',
+      canvas,
+      initialZoom: this.store.settings.cameraZoom ?? 'normal',
+      onViewportChange: (metrics) => {
+        this.handleViewportChange(metrics);
+      },
+    });
+
+    const shellElement =
+      typeof document !== 'undefined'
+        ? document.getElementById('game-shell')
+        : null;
+    this.fullscreenManager = new FullscreenManager(shellElement, (fsState) => {
+      const isActive = fsState.isBrowserFullscreen || fsState.isViewportFallback;
+      this.hud?.updateSettings(this.store.settings, isActive);
+      this.gameShell?.refresh(true);
+    });
+
+    this.loadingScreen = new LoadingScreen();
+    this.openingFracture = new OpeningFractureController(
+      '#rift-opening-overlay',
+      '#rift-opening-canvas'
+    );
 
     this.store.setMapState(
       this.currentMap.id,
-      this.store.currentSpawnId || 'default_spawn',
+      'default_spawn',
       { x: this.playerX, y: this.playerY },
       this.playerFacing
     );
-    const initialCam = this.cameraController.snapTo(this.playerX, this.playerY);
-    this.cameraX = initialCam.x;
-    this.cameraY = initialCam.y;
-
-    this.renderer = new PixelRenderer(canvas);
-    this.sound = new SoundSynth();
+    this.syncCameraBoundsAndSnap();
 
     this.input = new InputManager({
       onInteract: () => {
+        if (!this.isInGameplaySession()) return;
         this.handleInteractAction();
       },
       onToggleLookup: () => {
-        if (this.store.getMode() === 'opening' || this.store.getMode() === 'climax') {
-          return;
-        }
+        if (!this.canOpenGameplayHotkeyOverlay()) return;
         this.hud.toggleLookupDrawer();
       },
       onToggleMap: () => {
-        if (this.store.getMode() === 'opening' || this.store.getMode() === 'climax') {
-          return;
-        }
+        if (!this.canOpenGameplayHotkeyOverlay()) return;
         this.syncHudWithState();
         this.hud.toggleWorldMapModal();
       },
       onToggleJournal: () => {
-        if (this.store.getMode() === 'opening' || this.store.getMode() === 'climax') {
-          return;
-        }
+        if (!this.canOpenGameplayHotkeyOverlay()) return;
         this.syncHudWithState();
         this.hud.toggleJournalModal();
       },
       onToggleInventory: () => {
-        if (this.store.getMode() === 'opening' || this.store.getMode() === 'climax') {
-          return;
-        }
+        if (!this.canOpenGameplayHotkeyOverlay()) return;
         this.syncHudWithState();
         this.hud.toggleInventoryModal();
       },
       onTogglePause: () => {
-        if (this.store.getMode() === 'opening' || this.store.getMode() === 'climax') {
-          return;
-        }
+        if (!this.canOpenGameplayHotkeyOverlay()) return;
         this.syncHudWithState();
         this.hud.togglePauseModal();
       },
       onToggleDebugOverlay: () => {
+        if (!this.isInGameplaySession()) return;
+        if (
+          !this.store.settings.presenterModeUnlocked &&
+          !this.store.isPresenterMode &&
+          !this.store.debugOverlayEnabled
+        ) {
+          return;
+        }
         this.toggleDebugOverlay();
       },
       onToggleHints: () => {
+        if (!this.isInGameplaySession()) return;
         const nextShowHints = !this.store.settings.showHints;
         this.updateSettings({ showHints: nextShowHints });
         this.hud.showToast(
           nextShowHints
-            ? '💡 Đã bật hiển thị Gợi ý Nhiệm vụ [H].'
-            : '💡 Đã tắt hiển thị Gợi ý Nhiệm vụ [H].'
+            ? '◆ Đã bật hiển thị Gợi ý Nhiệm vụ [H].'
+            : '○ Đã tắt hiển thị Gợi ý Nhiệm vụ [H].'
         );
       },
+      onToggleFullscreen: () => {
+        void this.toggleFullscreen();
+      },
+      onTogglePresenterShortcut: () => {
+        this.handlePresenterShortcut();
+      },
       onNumberKey: (num: 1 | 2 | 3 | 4) => {
+        if (!this.isInGameplaySession()) return;
         this.handleNumberKeyShortcut(num);
       },
       onEscape: () => {
-        if (this.store.getMode() === 'opening') {
+        if (!this.isInGameplaySession()) {
           return;
         }
         if (this.hud.isOverlayOpen()) {
@@ -273,13 +279,22 @@ export class LuKhachKyUcGame {
       onToggleLecturerUnlockAll: () => this.togglePresenterMode(),
       onToggleMute: () => {
         const muted = this.sound.toggleMute();
-        this.store.updateSettings({ muted });
-        this.persistProgress();
+        this.updateSettings({ muted });
         return muted;
       },
       onOverlayStateChange: (isOpen: boolean, overlayMode: GameMode) => {
+        if (
+          this.store.getLifecycle() === 'MAIN_MENU' ||
+          this.store.getLifecycle() === 'LOADING'
+        ) {
+          this.input.clearKeys();
+          return;
+        }
         this.store.setMode(isOpen ? overlayMode : 'exploring');
         this.input.clearKeys();
+        if (isOpen) {
+          this.hud.updateInteractionPrompt(null);
+        }
       },
       onFastTravelToZone: (zoneId: string, spawnId: string) => {
         this.fastTravelToZone(zoneId, spawnId);
@@ -294,6 +309,10 @@ export class LuKhachKyUcGame {
       onResetSave: () => {
         this.resetSave();
       },
+      onReturnToMainMenu: () => {
+        this.returnToMainMenu();
+      },
+      onToggleFullscreen: () => this.toggleFullscreen(),
       onUpdateSettings: (partial: Partial<GameSettings>) => {
         this.updateSettings(partial);
       },
@@ -303,22 +322,360 @@ export class LuKhachKyUcGame {
       ) => this.submitDossierPuzzle(puzzleId, selectedOptionIds),
     });
 
+    this.hud.updateSettings(
+      this.store.settings,
+      this.fullscreenManager.isFullscreenActive()
+    );
     this.hud.setPresenterModeUI(this.store.isPresenterMode);
     this.syncHudWithState();
 
-    // Khởi chạy Mở Màn Nứt Vỡ Màng Đen 16 Mảnh (0.0s -> 4.8s)
-    this.store.setMode('opening');
-    const opening = new OpeningFractureController(
-      '#rift-opening-overlay',
-      '#rift-opening-canvas',
-      () => {
-        this.store.setMode('exploring');
-        this.input.clearKeys();
-      }
-    );
-    opening.start();
+    this.mainMenu = new MainMenu({
+      onStartNewGame: (confirmedOverwrite: boolean) => {
+        void this.startNewGame(confirmedOverwrite);
+      },
+      onContinueGame: () => {
+        void this.continueGame();
+      },
+      onOpenSettings: () => {
+        this.hud.updateSettings(
+          this.store.settings,
+          this.fullscreenManager.isFullscreenActive()
+        );
+        const triggerBtn =
+          typeof document !== 'undefined'
+            ? document.getElementById('btn-menu-settings')
+            : null;
+        this.hud.toggleSettingsModal(true, triggerBtn);
+      },
+      onPlayUiSound: (kind) => {
+        if (kind === 'focus') {
+          this.sound.playMenuFocus();
+        } else if (kind === 'confirm') {
+          this.sound.playMenuConfirm();
+        } else {
+          this.sound.playMenuCancel();
+        }
+      },
+    });
+
+    // Khởi động vào MAIN_MENU: không chạy thế giới hay OpeningFracture trước khi người chơi chọn
+    this.enterMainMenu();
 
     requestAnimationFrame(this.gameLoop);
+  }
+
+  public getLifecycleState(): AppLifecycleState {
+    return this.store.getLifecycle();
+  }
+
+  public getSaveSummary(): SaveSummary | null {
+    const mapTitles: Record<string, string> = {};
+    for (const [id, map] of Object.entries(this.allMaps)) {
+      mapTitles[id] = map.title;
+    }
+    return this.saveManager.getSaveSummary(CHAPTERS, mapTitles);
+  }
+
+  private isInGameplaySession(): boolean {
+    const lifecycle = this.store.getLifecycle();
+    return lifecycle === 'PLAYING' || lifecycle === 'PAUSED';
+  }
+
+  private canOpenGameplayHotkeyOverlay(): boolean {
+    if (!this.isInGameplaySession()) {
+      return false;
+    }
+    const mode = this.store.getMode();
+    return mode !== 'opening' && mode !== 'climax' && mode !== 'loading';
+  }
+
+  private getLogicalViewportWidth(): number {
+    if (this.useLegacyRenderer) {
+      return INTERNAL_WIDTH;
+    }
+    return this.gameShell?.getMetrics().logicalWidth ?? INTERNAL_WIDTH;
+  }
+
+  private getLogicalViewportHeight(): number {
+    if (this.useLegacyRenderer) {
+      return INTERNAL_HEIGHT;
+    }
+    return this.gameShell?.getMetrics().logicalHeight ?? INTERNAL_HEIGHT;
+  }
+
+  private syncCameraBoundsAndSnap(): void {
+    const vw = this.getLogicalViewportWidth();
+    const vh = this.getLogicalViewportHeight();
+    this.cameraController.setViewport(vw, vh);
+    this.cameraController.setBounds(
+      this.currentMap.widthPx,
+      this.currentMap.heightPx,
+      vw,
+      vh
+    );
+    const snapped = this.cameraController.snapTo(this.playerX, this.playerY);
+    this.cameraX = snapped.x;
+    this.cameraY = snapped.y;
+  }
+
+  private handleViewportChange(metrics: ViewportMetrics): void {
+    if (!this.renderer || !this.cameraController || !this.currentMap) {
+      return;
+    }
+
+    if (this.useLegacyRenderer) {
+      this.renderer.setLogicalSize(INTERNAL_WIDTH, INTERNAL_HEIGHT);
+      if (typeof document !== 'undefined') {
+        const canvas = document.getElementById(
+          'pixel-canvas'
+        ) as HTMLCanvasElement | null;
+        if (canvas) {
+          const scale = Math.max(
+            1,
+            Math.floor(
+              Math.min(
+                metrics.cssWidth / INTERNAL_WIDTH,
+                metrics.cssHeight / INTERNAL_HEIGHT
+              )
+            )
+          );
+          canvas.style.width = `${INTERNAL_WIDTH * scale}px`;
+          canvas.style.height = `${INTERNAL_HEIGHT * scale}px`;
+        }
+      }
+      return;
+    }
+
+    this.renderer.setLogicalSize(metrics.logicalWidth, metrics.logicalHeight);
+    this.cameraController.setViewport(metrics.logicalWidth, metrics.logicalHeight);
+    this.cameraController.setBounds(
+      this.currentMap.widthPx,
+      this.currentMap.heightPx,
+      metrics.logicalWidth,
+      metrics.logicalHeight
+    );
+    const snapped = this.cameraController.snapTo(this.playerX, this.playerY);
+    this.cameraX = snapped.x;
+    this.cameraY = snapped.y;
+  }
+
+  public async toggleFullscreen(): Promise<boolean> {
+    const active = await this.fullscreenManager.toggle();
+    this.hud.updateSettings(this.store.settings, active);
+    this.gameShell.refresh(true);
+    return active;
+  }
+
+  private handlePresenterShortcut(): void {
+    if (!this.store.settings.presenterModeUnlocked) {
+      this.updateSettings({ presenterModeUnlocked: true });
+      this.hud.showToast(
+        '◆ Đã mở khóa Công cụ Giảng viên / Kiểm thử (Ctrl+Shift+P).'
+      );
+    }
+    if (this.isInGameplaySession()) {
+      this.syncHudWithState();
+      this.hud.togglePresenterDrawer();
+    }
+  }
+
+  private enterMainMenu(): void {
+    this.openingFracture.cancel();
+    this.loadingScreen.hide();
+    this.dialogueSystem.closeDialogue();
+    this.hud.closeAllOverlays();
+    this.hud.setHudVisible(false);
+    this.hud.updateInteractionPrompt(null);
+    this.input.clearKeys();
+    this.store.setMode('main_menu');
+    this.mainMenu.show(this.getSaveSummary(), this.store.settings.reducedMotion);
+  }
+
+  public async startNewGame(confirmedOverwrite = false): Promise<boolean> {
+    if (this.store.getLifecycle() === 'LOADING') {
+      return false;
+    }
+
+    if (this.saveManager.hasSave() && !confirmedOverwrite) {
+      const summary = this.getSaveSummary();
+      const detail = summary?.chapterLabel
+        ? `${summary.chapterLabel} — ${summary.mapTitle} (${summary.milestoneCount}/12 cột mốc)`
+        : 'tiến trình đã lưu hiện tại';
+      this.mainMenu.openConfirmDialog(
+        'KHỞI ĐẦU HÀNH TRÌNH MỚI?',
+        `Hệ thống phát hiện hồ sơ lưu trữ: ${detail}. Khởi đầu mới sẽ ghi đè dữ liệu này. Bạn có muốn tiếp tục?`,
+        'Ghi đè & Bắt đầu',
+        () => {
+          void this.startNewGame(true);
+        }
+      );
+      return false;
+    }
+
+    this.sound.unlockAudio();
+    const preservedSettings = this.saveManager.normalizeSettings(this.store.settings);
+
+    this.openingFracture.cancel();
+    this.dialogueSystem.closeDialogue();
+    this.hud.closeAllOverlays();
+    this.mainMenu.hide();
+    this.hud.setHudVisible(false);
+    this.hud.updateInteractionPrompt(null);
+    this.input.clearKeys();
+
+    this.saveManager.clearSave();
+    this.store.resetToDefault();
+    this.store.settings = preservedSettings;
+    this.saveManager.saveSettings(preservedSettings);
+
+    this.puzzleAttemptCounts.clear();
+    this.npcRouteStates.clear();
+    this.climaxBurstProgress = 0;
+    this.isBurstAnimating = false;
+    this.postBurstDelaySec = 0;
+    this.hazardCooldown = 0;
+    this.transitionFadeAlpha = 0;
+
+    if (this.store.debugOverlayEnabled) {
+      this.store.toggleDebugOverlay(false);
+      this.hud.setDebugOverlayUI(false);
+    }
+    this.hud.setPresenterModeUI(false);
+
+    this.store.setMode('loading');
+    this.loadMap('harbor_square', 'default_spawn', { x: 85, y: 384 }, 'right');
+    const activeToken = this.store.getTransitionToken();
+
+    await this.loadingScreen.playTransition({
+      mode: 'new_game',
+      reducedMotion: this.store.settings.reducedMotion,
+    });
+
+    if (this.store.getTransitionToken() !== activeToken) {
+      return false;
+    }
+
+    this.persistProgress();
+    this.syncHudWithState();
+    this.hud.setHudVisible(true);
+    this.renderCurrentWorldFrame(performance.now() * 0.001);
+
+    this.store.setMode('opening');
+    this.openingFracture.start({
+      mode: 'full',
+      reducedMotion: this.store.settings.reducedMotion,
+      onComplete: () => {
+        if (this.store.getTransitionToken() !== activeToken) {
+          return;
+        }
+        this.store.setMode('exploring');
+        this.input.clearKeys();
+        this.syncHudWithState();
+      },
+    });
+
+    return true;
+  }
+
+  public async continueGame(): Promise<boolean> {
+    if (this.store.getLifecycle() === 'LOADING') {
+      return false;
+    }
+
+    const saved = this.saveManager.load();
+    if (!saved) {
+      this.mainMenu.updateSaveSummary(null);
+      return false;
+    }
+
+    this.sound.unlockAudio();
+    const standaloneSettings = this.saveManager.loadSettings();
+
+    this.openingFracture.cancel();
+    this.dialogueSystem.closeDialogue();
+    this.hud.closeAllOverlays();
+    this.mainMenu.hide();
+    this.hud.setHudVisible(false);
+    this.hud.updateInteractionPrompt(null);
+    this.input.clearKeys();
+
+    this.puzzleAttemptCounts.clear();
+    this.npcRouteStates.clear();
+    this.climaxBurstProgress = 0;
+    this.isBurstAnimating = false;
+    this.postBurstDelaySec = 0;
+    this.hazardCooldown = 0;
+    this.transitionFadeAlpha = 0;
+
+    this.store.restoreFromSave(saved, CHAPTERS);
+    this.store.settings = this.saveManager.normalizeSettings({
+      ...saved.settings,
+      ...standaloneSettings,
+    });
+    this.saveManager.saveSettings(this.store.settings);
+    this.sound.setMuted(this.store.settings.muted);
+    this.sound.setVolume(this.store.settings.masterVolume ?? 0.85);
+    this.gameShell.setZoomPreset(this.store.settings.cameraZoom ?? 'normal');
+    this.hud.setPresenterModeUI(this.store.isPresenterMode);
+
+    const savedMapId =
+      saved.currentMapId && this.allMaps[saved.currentMapId]
+        ? saved.currentMapId
+        : 'harbor_square';
+    const safeY =
+      saved.playerPos.y && saved.playerPos.y !== 148 ? saved.playerPos.y : 384;
+
+    this.store.setMode('loading');
+    this.loadMap(
+      savedMapId,
+      saved.spawnId || 'default_spawn',
+      { x: saved.playerPos.x, y: safeY },
+      saved.playerFacing ?? 'right'
+    );
+    const activeToken = this.store.getTransitionToken();
+
+    await this.loadingScreen.playTransition({
+      mode: 'continue',
+      reducedMotion: this.store.settings.reducedMotion,
+    });
+
+    if (this.store.getTransitionToken() !== activeToken) {
+      return false;
+    }
+
+    this.syncHudWithState();
+    this.hud.setHudVisible(true);
+    this.renderCurrentWorldFrame(performance.now() * 0.001);
+
+    this.store.setMode('opening');
+    this.openingFracture.start({
+      mode: 'continue',
+      reducedMotion: this.store.settings.reducedMotion,
+      onComplete: () => {
+        if (this.store.getTransitionToken() !== activeToken) {
+          return;
+        }
+        this.store.setMode('exploring');
+        this.input.clearKeys();
+        this.syncHudWithState();
+      },
+    });
+
+    return true;
+  }
+
+  public returnToMainMenu(): void {
+    if (this.isInGameplaySession() && !this.store.isPresenterMode) {
+      this.persistProgress();
+    }
+
+    this.store.bumpTransitionToken();
+    this.climaxBurstProgress = 0;
+    this.isBurstAnimating = false;
+    this.postBurstDelaySec = 0;
+    this.transitionFadeAlpha = 0;
+
+    this.enterMainMenu();
   }
 
   public get currentChapterIndex(): number {
@@ -360,20 +717,68 @@ export class LuKhachKyUcGame {
 
   public toggleDebugOverlay(force?: boolean): boolean {
     const enabled = this.store.toggleDebugOverlay(force);
-    (this.hud as unknown as HudExtendedMethods).setDebugOverlayUI?.(enabled);
+    this.hud.setDebugOverlayUI(enabled, {
+      mapId: this.currentMap.id,
+      x: this.playerX,
+      y: this.playerY,
+      zoom: this.gameShell.getZoomPreset(),
+      scale: this.gameShell.getMetrics().pixelScale,
+      fps: this.smoothedFps,
+    });
     this.hud.showToast(
       enabled
-        ? '🛠️ Đã bật Lớp Phủ Gỡ Lỗi (F3): Hiển thị vật cản, vùng ẩn nấp, cổng & lộ trình NPC.'
-        : '🛠️ Đã tắt Lớp Phủ Gỡ Lỗi (F3).'
+        ? '◆ Đã bật Lớp Phủ Kiểm Định (F3): Hiển thị vật cản, vùng ẩn nấp, cổng & lộ trình NPC.'
+        : '○ Đã tắt Lớp Phủ Kiểm Định (F3).'
     );
     return enabled;
   }
 
   public updateSettings(partial: Partial<GameSettings>): GameSettings {
-    const next = this.store.updateSettings(partial);
-    this.persistProgress();
-    this.syncHudWithState();
-    return next;
+    const next = this.saveManager.normalizeSettings({
+      ...this.store.settings,
+      ...partial,
+    });
+    this.store.settings = next;
+    this.saveManager.saveSettings(next);
+
+    this.sound.setMuted(next.muted);
+    this.sound.setVolume(next.masterVolume ?? 0.85);
+
+    if (partial.cameraZoom !== undefined) {
+      this.gameShell.setZoomPreset(next.cameraZoom ?? 'normal');
+    }
+
+    if (partial.reducedMotion !== undefined) {
+      this.mainMenu.setReducedMotion(next.reducedMotion);
+    }
+
+    if (partial.presenterModeUnlocked === false) {
+      if (this.store.isPresenterMode) {
+        this.store.togglePresenterMode();
+        this.hud.setPresenterModeUI(false);
+      }
+      if (this.store.debugOverlayEnabled) {
+        this.store.toggleDebugOverlay(false);
+        this.hud.setDebugOverlayUI(false);
+      }
+      if (this.hud.isPresenterDrawerOpen()) {
+        this.hud.togglePresenterDrawer(false);
+      }
+    }
+
+    if (
+      this.isInGameplaySession() &&
+      !this.store.isPresenterMode &&
+      this.saveManager.hasSave()
+    ) {
+      this.persistProgress();
+    }
+
+    this.hud.updateSettings(next, this.fullscreenManager.isFullscreenActive());
+    if (this.isInGameplaySession()) {
+      this.syncHudWithState();
+    }
+    return { ...next };
   }
 
   public handleNumberKeyShortcut(num: 1 | 2 | 3 | 4): void {
@@ -400,35 +805,42 @@ export class LuKhachKyUcGame {
   public manualSave(): boolean {
     if (this.store.isPresenterMode) {
       this.hud.showToast(
-        '⚠️ Đang ở Chế độ Giảng Viên: Không ghi đè dữ liệu lưu tiến trình thường.'
+        '⚠ Đang ở Chế độ Giảng Viên: Không ghi đè dữ liệu lưu tiến trình thường.'
       );
       return false;
     }
     this.persistProgress();
-    this.hud.showToast('💾 Đã lưu tiến trình Lữ Khách vào bộ nhớ cục bộ (SaveV2)!');
+    this.mainMenu.updateSaveSummary(this.getSaveSummary());
+    this.hud.showToast('◆ Đã lưu tiến trình Lữ Khách vào bộ nhớ cục bộ (SaveV2)!');
     return true;
   }
 
   public resetSave(): void {
+    const preservedSettings = this.saveManager.normalizeSettings(this.store.settings);
     this.saveManager.clearSave();
     this.store.resetToDefault();
+    this.store.settings = preservedSettings;
+    this.saveManager.saveSettings(preservedSettings);
     this.puzzleAttemptCounts.clear();
+    this.npcRouteStates.clear();
+    this.climaxBurstProgress = 0;
+    this.isBurstAnimating = false;
+    this.postBurstDelaySec = 0;
     this.hud.setPresenterModeUI(false);
     this.loadMap('harbor_square', 'default_spawn', { x: 85, y: 384 }, 'right');
     this.hud.closeAllOverlays();
+    this.hud.setHudVisible(true);
     this.store.setMode('exploring');
+    this.mainMenu.updateSaveSummary(null);
     this.syncHudWithState();
-    this.hud.showToast('🔄 Đã xóa dữ liệu lưu và đặt lại hành trình từ đầu Chương I!');
+    this.hud.showToast('◆ Đã xóa dữ liệu lưu và đặt lại hành trình từ đầu Chương I!');
   }
 
   public openDossierPuzzle(puzzle?: DossierPuzzleDefinition): void {
     const resolved =
       puzzle ?? getEraPuzzleForMapOrId(this.currentMap.id, this.currentChapter.id);
     const attempts = this.puzzleAttemptCounts.get(resolved.id) ?? 0;
-    (this.hud as unknown as HudExtendedMethods).openDossierPuzzleModal?.(
-      resolved,
-      attempts
-    );
+    this.hud.openDossierPuzzleModal(resolved, attempts);
   }
 
   public submitDossierPuzzle(
@@ -512,7 +924,10 @@ export class LuKhachKyUcGame {
     this.stealthSystem.resetSuspicion();
   }
 
-  public openDialogueForNpc(npcIdOrDialogueId: string, milestone?: MilestoneArtifact): boolean {
+  public openDialogueForNpc(
+    npcIdOrDialogueId: string,
+    milestone?: MilestoneArtifact
+  ): boolean {
     const node = this.dialogueSystem.startDialogue(npcIdOrDialogueId);
     if (!node) return false;
     const choices = this.dialogueSystem.getAvailableChoices(
@@ -606,15 +1021,7 @@ export class LuKhachKyUcGame {
     this.sceneTransition.currentMapId = map.id;
     this.sceneTransition.currentSpawnId = spawn?.id ?? 'default_spawn';
 
-    this.cameraController.setBounds(
-      map.widthPx,
-      map.heightPx,
-      INTERNAL_WIDTH,
-      INTERNAL_HEIGHT
-    );
-    const cam = this.cameraController.snapTo(this.playerX, this.playerY);
-    this.cameraX = cam.x;
-    this.cameraY = cam.y;
+    this.syncCameraBoundsAndSnap();
 
     return map;
   }
@@ -635,7 +1042,7 @@ export class LuKhachKyUcGame {
 
     if (!res.transitioned || !res.targetMapId || !res.spawnPos) {
       if (res.reason === 'missing_flag') {
-        this.hud.showToast('🔒 Lối đi này cần hoàn thành nhiệm vụ liên lạc trước.');
+        this.hud.showToast('◆ Lối đi này cần hoàn thành nhiệm vụ liên lạc trước.');
       }
       return false;
     }
@@ -650,7 +1057,7 @@ export class LuKhachKyUcGame {
     );
     this.persistProgress();
     this.syncHudWithState();
-    this.hud.showToast(`🚪 Đã chuyển tới: ${this.currentMap.title}`);
+    this.hud.showToast(`◆ Đã chuyển tới: ${this.currentMap.title}`);
     return true;
   }
 
@@ -675,20 +1082,20 @@ export class LuKhachKyUcGame {
       )
     ) {
       this.hud.showToast(
-        '🔒 Khu vực này chưa được khám phá hoặc chưa kích hoạt Đèn Báo An Toàn!'
+        '◆ Khu vực này chưa được khám phá hoặc chưa kích hoạt Đèn Báo An Toàn!'
       );
       return false;
     }
 
     this.loadMap(zoneId, checkpointSpawnId);
     this.hud.toggleWorldMapModal(false);
-    if (this.store.getMode() !== 'opening') {
+    if (this.isInGameplaySession()) {
       this.store.setMode('exploring');
     }
     this.input.clearKeys();
     this.persistProgress();
     this.syncHudWithState();
-    this.hud.showToast(`🧭 Đã dịch chuyển nhanh tới: ${this.currentMap.title}`);
+    this.hud.showToast(`◆ Đã dịch chuyển nhanh tới: ${this.currentMap.title}`);
     return true;
   }
 
@@ -737,15 +1144,18 @@ export class LuKhachKyUcGame {
     );
     this.climaxBurstProgress = 0;
     this.isBurstAnimating = false;
+    this.postBurstDelaySec = 0;
     this.hazardCooldown = 0;
 
     this.hud.closeAllOverlays();
-    if (this.store.getMode() !== 'opening') {
+    if (this.isInGameplaySession()) {
       this.store.setMode('exploring');
     }
     this.input.clearKeys();
 
-    this.persistProgress();
+    if (this.isInGameplaySession()) {
+      this.persistProgress();
+    }
     this.syncHudWithState();
     this.hud.showToast(
       `Đã bước qua vết nứt thời gian tới ${this.currentChapter.chapterNum} (${this.currentChapter.years})`
@@ -758,7 +1168,7 @@ export class LuKhachKyUcGame {
         this.hud.showArtifactDialogue(m);
       } else {
         this.hud.showToast(
-          '🔒 Cột mốc chưa khôi phục! Hãy khám phá trong thế giới hoặc bật Chế độ Giảng Viên.'
+          '◆ Cột mốc chưa khôi phục! Hãy khám phá trong thế giới hoặc bật Chế độ Giảng Viên.'
         );
       }
       return;
@@ -770,6 +1180,7 @@ export class LuKhachKyUcGame {
       this.store.currentChapterIndex = eraIdx;
       this.climaxBurstProgress = 0;
       this.isBurstAnimating = false;
+      this.postBurstDelaySec = 0;
     }
 
     this.allMaps = getAllBuiltInMaps();
@@ -781,6 +1192,7 @@ export class LuKhachKyUcGame {
         this.playerY = m.worldY;
       }
       this.store.playerPos = { x: this.playerX, y: this.playerY };
+      this.syncCameraBoundsAndSnap();
     }
 
     this.store.presenterCollectedMilestones.add(m.roman);
@@ -791,7 +1203,17 @@ export class LuKhachKyUcGame {
 
   public togglePresenterMode(): void {
     const isNowPresenter = this.store.togglePresenterMode();
+    if (isNowPresenter && !this.store.settings.presenterModeUnlocked) {
+      this.store.settings = this.saveManager.normalizeSettings({
+        ...this.store.settings,
+        presenterModeUnlocked: true,
+      });
+    }
     this.hud.setPresenterModeUI(isNowPresenter);
+    this.hud.updateSettings(
+      this.store.settings,
+      this.fullscreenManager.isFullscreenActive()
+    );
 
     if (isNowPresenter) {
       this.sound.playClimaxFanfare();
@@ -800,10 +1222,12 @@ export class LuKhachKyUcGame {
         this.hud.showArtifactDialogue(firstOfChapter);
       }
       this.hud.showToast(
-        '⚡ Chế độ Giảng Viên: Đã mở khóa toàn bộ 12/12 Cột Mốc La Mã (I – XII)!'
+        '◆ Chế độ Giảng Viên: Đã mở khóa cô lập toàn bộ 12/12 Cột Mốc La Mã (I – XII)!'
       );
     } else {
-      this.hud.showToast('Đã tắt Chế độ Giảng Viên — Khôi phục tiến trình khám phá thực tế.');
+      this.hud.showToast(
+        'Đã tắt Chế độ Giảng Viên — Khôi phục tiến trình khám phá thực tế.'
+      );
     }
 
     this.syncHudWithState();
@@ -852,7 +1276,7 @@ export class LuKhachKyUcGame {
       this.sound.playSealStamp();
       this.syncHudWithState();
       this.hud.showToast(
-        `🏮 Đã kích hoạt Điểm Lưu & Dịch Chuyển: ${candidate.interactable.label}`
+        `◆ Đã kích hoạt Điểm Lưu & Dịch Chuyển: ${candidate.interactable.label}`
       );
       return true;
     }
@@ -872,7 +1296,7 @@ export class LuKhachKyUcGame {
       const check = this.store.canTriggerChapterClimax(chapter);
       if (!check.allowed) {
         this.hud.showToast(
-          `🔒 Cần khôi phục đủ Cột mốc ${check.missing.join(', ')} trước khi mở Cổng Thời Gian!`
+          `◆ Cần khôi phục đủ Cột mốc ${check.missing.join(', ')} trước khi mở Cổng Thời Gian!`
         );
         return false;
       }
@@ -952,7 +1376,7 @@ export class LuKhachKyUcGame {
       this.questSystem.evaluateProgress(this.store, chapter.id);
       this.persistProgress();
       this.sound.playSealStamp();
-      this.hud.showToast(`📜 Đã thu thập tư liệu: ${candidate.interactable.label}`);
+      this.hud.showToast(`◆ Đã thu thập tư liệu: ${candidate.interactable.label}`);
       this.syncHudWithState();
       return true;
     }
@@ -965,7 +1389,7 @@ export class LuKhachKyUcGame {
       const check = this.store.canTriggerChapterClimax(chapter);
       if (!check.allowed) {
         this.hud.showToast(
-          `🔒 Cần khôi phục đủ Cột mốc ${check.missing.join(', ')} trước khi mở Cổng Thời Gian!`
+          `◆ Cần khôi phục đủ Cột mốc ${check.missing.join(', ')} trước khi mở Cổng Thời Gian!`
         );
         return false;
       }
@@ -973,7 +1397,9 @@ export class LuKhachKyUcGame {
       return true;
     }
 
-    this.hud.showToast('Hãy di chuyển lại gần Cột Mốc La Mã, Cửa Kho hoặc Cổng Thời Gian rồi bấm [E].');
+    this.hud.showToast(
+      'Hãy di chuyển lại gần Nhân vật, Cửa Kho hoặc Cột Mốc Lịch Sử rồi bấm [E].'
+    );
     return false;
   }
 
@@ -981,6 +1407,7 @@ export class LuKhachKyUcGame {
     const chapter = this.currentChapter;
     const token = this.store.bumpTransitionToken();
     this.activeBurstToken = token;
+    this.postBurstDelaySec = 0;
 
     if (!this.store.isPresenterMode) {
       for (const m of chapter.milestones) {
@@ -998,11 +1425,12 @@ export class LuKhachKyUcGame {
     this.isBurstAnimating = true;
     this.climaxBurstProgress = 0.05;
     this.syncHudWithState();
-    this.hud.showToast(`✨ ${chapter.climax.stepBTitle}`);
+    this.hud.showToast(`◆ ${chapter.climax.stepBTitle}`);
   }
 
   public advanceToNextChapter(): void {
     this.store.bumpTransitionToken();
+    this.postBurstDelaySec = 0;
 
     if (this.store.currentChapterIndex < CHAPTERS.length - 1) {
       this.store.currentChapterIndex++;
@@ -1026,7 +1454,7 @@ export class LuKhachKyUcGame {
       this.climaxBurstProgress = 0;
       this.isBurstAnimating = false;
       this.hud.showToast(
-        '🎉 Chúc mừng Lữ Khách! Bạn đã khôi phục trọn vẹn Biên Niên Sử 1930 – 2045 (12/12 Cột mốc)!'
+        '◆ Chúc mừng Lữ Khách! Bạn đã khôi phục trọn vẹn Biên Niên Sử 1930 – 2045 (12/12 Cột mốc)!'
       );
     }
   }
@@ -1054,7 +1482,10 @@ export class LuKhachKyUcGame {
   }
 
   public isPlayerInShelter(): boolean {
-    const inMapShelter = this.collisionWorld.isPointInShelter(this.playerX, this.playerY);
+    const inMapShelter = this.collisionWorld.isPointInShelter(
+      this.playerX,
+      this.playerY
+    );
     if (inMapShelter) return true;
     return this.store.isPlayerInShelter(
       this.playerX,
@@ -1072,23 +1503,76 @@ export class LuKhachKyUcGame {
     );
   }
 
+  private getCurrentStealthAlertState(
+    patrolActors?: PatrolActorRenderState[]
+  ): StealthAlertState {
+    const states =
+      patrolActors ??
+      this.stealthSystem.getRenderStates(this.hasPatrolScheduleBonus());
+    let highest: StealthAlertState = 'calm';
+    for (const actor of states) {
+      if (actor.alertState === 'alert') {
+        return 'alert';
+      }
+      if (actor.alertState === 'suspicious') {
+        highest = 'suspicious';
+      }
+    }
+    return highest;
+  }
+
+  private updateScreenInteractionPrompt(
+    candidate: InteractionCandidate | null,
+    allowWorldInput: boolean
+  ): void {
+    if (!allowWorldInput || !candidate?.promptText) {
+      this.hud.updateInteractionPrompt(null);
+      return;
+    }
+
+    const metrics = this.gameShell.getMetrics();
+    const screenPt = this.gameShell.worldToScreen(
+      candidate.x,
+      candidate.y - 24,
+      this.cameraX,
+      this.cameraY
+    );
+    this.hud.updateInteractionPrompt(
+      candidate.promptText,
+      screenPt.x,
+      screenPt.y,
+      metrics.cssWidth,
+      metrics.cssHeight
+    );
+  }
+
   public syncHudWithState(): void {
     const chapter = this.currentChapter;
     this.questSystem.evaluateProgress(this.store, chapter.id);
 
     const candidate = this.findNearestInteractionCandidate();
     const nearby = candidate?.milestone ?? this.findNearbyMilestone();
+    const patrolActors = this.stealthSystem.getRenderStates(
+      this.hasPatrolScheduleBonus()
+    );
+    const stealthAlertState = this.getCurrentStealthAlertState(patrolActors);
+
     this.hud.renderSidebarCodex(
       chapter,
       this.store.getActiveMilestones(),
       nearby
     );
-    this.hud.updateStageHeader(chapter, this.isPlayerInShelter());
+    this.hud.updateStageHeader(
+      chapter,
+      this.isPlayerInShelter(),
+      stealthAlertState
+    );
     this.hud.updateMapLocationBadge(
       this.currentMap.title || chapter.locationLabel,
       chapter.coordinates,
       candidate?.promptText ?? null
     );
+    this.updateScreenInteractionPrompt(candidate, this.store.isWorldInputAllowed());
     this.hud.updateWorldMapState(
       this.currentMap.id,
       this.store.discoveredMaps,
@@ -1173,27 +1657,18 @@ export class LuKhachKyUcGame {
     }
   }
 
-  private readonly gameLoop = (nowMs: number): void => {
-    const dt = Math.min(0.05, (nowMs - this.lastFrameMs) * 0.001);
-    this.lastFrameMs = nowMs;
-    const timeSec = nowMs * 0.001;
-
-    this.updatePhysics(dt, timeSec);
-
+  private renderCurrentWorldFrame(timeSec: number): void {
     const candidate = this.findNearestInteractionCandidate();
     const nearbyMilestone = candidate?.milestone ?? this.findNearbyMilestone();
     const nearClimaxGate =
       candidate?.kind === 'climax_gate' ||
       Math.abs(this.playerX - this.currentChapter.climax.gateWorldX) <= 38;
-
     const allowWorldInput = this.store.isWorldInputAllowed();
+    const patrolActors = this.stealthSystem.getRenderStates(
+      this.hasPatrolScheduleBonus()
+    );
 
-    const renderState: RenderState & {
-      debugOverlay?: boolean;
-      patrolActors?: PatrolActorRenderState[];
-      reducedMotion?: boolean;
-      transitionFadeAlpha?: number;
-    } = {
+    const renderState: RenderState = {
       chapter: this.currentChapter,
       playerX: this.playerX,
       playerY: this.playerY,
@@ -1212,17 +1687,59 @@ export class LuKhachKyUcGame {
       nearbyPrompt: candidate?.promptText ?? null,
       nearbyTargetPos: candidate ? { x: candidate.x, y: candidate.y } : null,
       debugOverlay: this.store.debugOverlayEnabled,
-      patrolActors: this.stealthSystem.getRenderStates(this.hasPatrolScheduleBonus()),
+      patrolActors,
       reducedMotion: this.store.settings.reducedMotion,
+      effectsQuality: this.store.settings.effectsQuality ?? 'full',
       transitionFadeAlpha: this.transitionFadeAlpha,
     };
 
     this.renderer.render(renderState);
+  }
+
+  private readonly gameLoop = (nowMs: number): void => {
+    const rawDt = Math.max(0.0001, (nowMs - this.lastFrameMs) * 0.001);
+    const dt = Math.min(0.05, rawDt);
+    this.lastFrameMs = nowMs;
+    const instantFps = Math.min(240, 1 / rawDt);
+    this.smoothedFps = this.smoothedFps * 0.9 + instantFps * 0.1;
+
+    const lifecycle = this.store.getLifecycle();
+    if (
+      lifecycle === 'BOOT' ||
+      lifecycle === 'MAIN_MENU' ||
+      lifecycle === 'LOADING'
+    ) {
+      requestAnimationFrame(this.gameLoop);
+      return;
+    }
+
+    const timeSec = nowMs * 0.001;
+    if (lifecycle === 'PLAYING') {
+      this.updatePhysics(dt, timeSec);
+    }
+
+    this.renderCurrentWorldFrame(timeSec);
+
+    if (this.store.debugOverlayEnabled) {
+      const metrics = this.gameShell.getMetrics();
+      this.hud.setDebugOverlayUI(true, {
+        mapId: this.currentMap.id,
+        x: this.playerX,
+        y: this.playerY,
+        zoom: metrics.zoomPreset,
+        scale: metrics.pixelScale,
+        fps: this.smoothedFps,
+      });
+    }
 
     requestAnimationFrame(this.gameLoop);
   };
 
   public updatePhysics(dt: number, timeSec: number): void {
+    if (this.store.getLifecycle() === 'PAUSED' || this.store.getMode() === 'paused') {
+      return;
+    }
+
     const chapter = this.currentChapter;
     const allowWorldInput = this.store.isWorldInputAllowed();
     const moveVec = this.input.getMoveVector(allowWorldInput);
@@ -1257,7 +1774,7 @@ export class LuKhachKyUcGame {
           this.hazardCooldown = 1.0;
           this.sound.playAlertPushback();
           this.hud.showToast(
-            '🚨 Đội tuần tra phát hiện! Lữ Khách đã rút lui về Đèn Báo An Toàn gần nhất (giữ nguyên mọi tư liệu).'
+            '◆ Đội tuần tra phát hiện! Lữ Khách đã rút lui về Đèn Báo An Toàn gần nhất (giữ nguyên mọi tư liệu).'
           );
           return;
         }
@@ -1312,7 +1829,7 @@ export class LuKhachKyUcGame {
             );
             this.persistProgress();
             this.syncHudWithState();
-            this.hud.showToast(`🚪 Đã chuyển tới: ${this.currentMap.title}`);
+            this.hud.showToast(`◆ Đã chuyển tới: ${this.currentMap.title}`);
             return;
           }
         }
@@ -1336,7 +1853,7 @@ export class LuKhachKyUcGame {
             }
             this.hazardCooldown = 1.0;
             this.sound.playAlertPushback();
-            this.hud.showToast(`⚠️ ${h.warningToast}`);
+            this.hud.showToast(`⚠ ${h.warningToast}`);
             break;
           }
         }
@@ -1345,14 +1862,19 @@ export class LuKhachKyUcGame {
 
     // Cập nhật tiến trình Đại Cảnh Bùng Nổ (Bước B)
     if (this.isBurstAnimating) {
-      const token = this.activeBurstToken;
       this.climaxBurstProgress = Math.min(1, this.climaxBurstProgress + dt * 0.35);
       if (this.climaxBurstProgress >= 1) {
         this.isBurstAnimating = false;
-        window.setTimeout(() => {
-          if (this.store.getTransitionToken() !== token) return;
+        this.postBurstDelaySec = 1.6;
+      }
+    } else if (this.postBurstDelaySec > 0) {
+      if (this.store.getTransitionToken() !== this.activeBurstToken) {
+        this.postBurstDelaySec = 0;
+      } else {
+        this.postBurstDelaySec = Math.max(0, this.postBurstDelaySec - dt);
+        if (this.postBurstDelaySec <= 0) {
           this.advanceToNextChapter();
-        }, 1600);
+        }
       }
     }
 
@@ -1360,7 +1882,10 @@ export class LuKhachKyUcGame {
     if (this.useLegacyRenderer) {
       const targetCamX = Math.max(
         0,
-        Math.min(chapter.worldWidth - INTERNAL_WIDTH, this.playerX - INTERNAL_WIDTH * 0.38)
+        Math.min(
+          chapter.worldWidth - INTERNAL_WIDTH,
+          this.playerX - INTERNAL_WIDTH * 0.38
+        )
       );
       this.cameraX += (targetCamX - this.cameraX) * Math.min(1, dt * 8);
       this.cameraY = 0;
@@ -1371,11 +1896,21 @@ export class LuKhachKyUcGame {
     }
 
     const candidate = this.findNearestInteractionCandidate();
-    this.hud.updateStageHeader(chapter, this.isPlayerInShelter());
+    const patrolActors = this.stealthSystem.getRenderStates(
+      this.hasPatrolScheduleBonus()
+    );
+    const stealthAlertState = this.getCurrentStealthAlertState(patrolActors);
+
+    this.hud.updateStageHeader(
+      chapter,
+      this.isPlayerInShelter(),
+      stealthAlertState
+    );
     this.hud.updateMapLocationBadge(
       this.currentMap.title || chapter.locationLabel,
       chapter.coordinates,
       candidate?.promptText ?? null
     );
+    this.updateScreenInteractionPrompt(candidate, allowWorldInput);
   }
 }

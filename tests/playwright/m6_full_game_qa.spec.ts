@@ -16,23 +16,23 @@
  */
 
 import { expect, test } from '@playwright/test';
-
-const ARTIFACT_DIR =
-  '/home/antigravity/.gemini/jetski/brain/31f52e7023c04649246b83f79b9ff3a6';
+import {
+  ARTIFACT_DIR,
+  openPresenterDrawer,
+  startNewExploringSession,
+} from './helpers';
 
 test.describe('M6 Chapters II–IV, Distinct Era Mechanics, Provenance & Performance — Browser E2E Suite', () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto('/');
-    await page.evaluate(() => localStorage.clear());
-    await page.reload();
-    await page.locator('#skip-opening-btn').click();
+    await startNewExploringSession(page);
   });
 
   test('M6-E2E-01: Chapter II (1945 Tân Trào -> Ba Đình) Map Traversal, Dispatch Network Mechanic & Climax', async ({
     page,
   }) => {
-    // 1. Chuyển sang Chương II (1945) và kiểm tra xuất phát tại tan_trao_banyan
+    // 1. Mở Ngăn Giảng Viên (Ctrl+Shift+P), chuyển sang Chương II (1945) và kiểm tra xuất phát tại tan_trao_banyan
+    await openPresenterDrawer(page);
     await page.locator('[data-era-tab="1945"]').click();
 
     const initialMapId = await page.evaluate(() => {
@@ -207,7 +207,8 @@ test.describe('M6 Chapters II–IV, Distinct Era Mechanics, Provenance & Perform
   test('M6-E2E-02: Chapter III (1954–1975 Đèo Pha Đin -> Hành Lang Mùa Xuân 1975) Supply Logistics Mechanic & Traversal', async ({
     page,
   }) => {
-    // 1. Chuyển sang Chương III (1954–1975) và kiểm tra xuất phát tại pha_din_pass
+    // 1. Mở Ngăn Giảng Viên (Ctrl+Shift+P), chuyển sang Chương III (1954–1975) và kiểm tra xuất phát tại pha_din_pass
+    await openPresenterDrawer(page);
     await page.locator('[data-era-tab="1954_1975"]').click();
 
     const initialMapId = await page.evaluate(() => {
@@ -380,7 +381,8 @@ test.describe('M6 Chapters II–IV, Distinct Era Mechanics, Provenance & Perform
   test('M6-E2E-03: Chapter IV (1986–2045 Đại Lộ Đổi Mới -> Quảng Trường Kỷ Nguyên Số 2045) Causal Policy Mechanic, Speculative 2045 Provenance & Frame-Time Performance Audit', async ({
     page,
   }) => {
-    // 1. Chuyển sang Chương IV (1986–2045) và kiểm tra xuất phát tại doi_moi_avenue
+    // 1. Mở Ngăn Giảng Viên (Ctrl+Shift+P), chuyển sang Chương IV (1986–2045) và kiểm tra xuất phát tại doi_moi_avenue
+    await openPresenterDrawer(page);
     await page.locator('[data-era-tab="1986_2045"]').click();
 
     const initialMapId = await page.evaluate(() => {

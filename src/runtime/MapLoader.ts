@@ -3651,7 +3651,7 @@ export function getAllBuiltInMaps(): Record<string, NormalizedMapData> {
  */
 export async function fetchAndParseMap(
   id: string,
-  url = `/maps/ch1/${id}.tmj`
+  url = `./maps/ch1/${id}.tmj`
 ): Promise<NormalizedMapData> {
   if (typeof fetch === 'function') {
     try {

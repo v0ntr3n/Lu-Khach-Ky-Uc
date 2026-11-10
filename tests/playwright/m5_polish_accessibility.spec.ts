@@ -10,17 +10,12 @@
  */
 
 import { expect, test } from '@playwright/test';
-
-const ARTIFACT_DIR =
-  '/home/antigravity/.gemini/jetski/brain/31f52e7023c04649246b83f79b9ff3a6';
+import { ARTIFACT_DIR, startNewExploringSession } from './helpers';
 
 test.describe('M5 Art, Gameplay Polish & Accessibility — Browser E2E Suite', () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto('/');
-    await page.evaluate(() => localStorage.clear());
-    await page.reload();
-    await page.locator('#skip-opening-btn').click();
+    await startNewExploringSession(page);
   });
 
   test('M5-E2E-01: Keyboard-Only Accessibility ([H] Hint Toggle, [1..3] Dialogue Choice Selection, Pixel-Perfect Canvas)', async ({
@@ -92,9 +87,12 @@ test.describe('M5 Art, Gameplay Polish & Accessibility — Browser E2E Suite', (
   test('M5-E2E-02: Reduced Motion & Large Text Accessibility Modes', async ({
     page,
   }) => {
-    // Mở bảng Tạm Dừng & Thiết Lập bằng phím Tab
+    // Mở bảng Tạm Dừng bằng phím Tab, sau đó mở Cài đặt hệ thống (#settings-modal)
     await page.keyboard.press('Tab');
     await expect(page.locator('#pause-modal')).toBeVisible();
+
+    await page.locator('#pause-open-settings').click();
+    await expect(page.locator('#settings-modal')).toBeVisible();
 
     await page.locator('#toggle-reduced-motion').click();
     await page.locator('#toggle-text-scale').click();
@@ -103,6 +101,7 @@ test.describe('M5 Art, Gameplay Polish & Accessibility — Browser E2E Suite', (
     await expect(page.locator('body')).toHaveClass(/text-scale-large/);
 
     await page.keyboard.press('Escape');
+    await expect(page.locator('#settings-modal')).toBeHidden();
     await expect(page.locator('#pause-modal')).toBeHidden();
 
     // Khi bật Reduced Motion, bước qua portal sang warehouse_interior giữ transitionFadeAlpha === 0

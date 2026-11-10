@@ -1,48 +1,55 @@
 /**
  * @file tests/playwright/m3_systems_ui.spec.ts
  * @description Bộ kiểm thử End-to-End (Playwright Chromium) cho Cột mốc M3 — RPG Systems & UI:
- * - M3-E2E-01: Kiểm tra bố cục toàn màn hình (.main-stage chiếm >= 90% chiều rộng viewport, loại bỏ cột cố định 1/5)
- *              và thanh theo dõi mục tiêu trực tiếp (#hud-objective-tracker) cùng #codex-progress-count.
+ * - M3-E2E-01: Kiểm tra bố cục toàn màn hình (#game-shell / .main-stage chiếm 100vw × 100dvh),
+ *              thanh theo dõi mục tiêu trực tiếp (#hud-objective-tracker) và #codex-progress-count trong #journal-modal -> #tab-journal-codex.
  * - M3-E2E-02: Hội thoại phân nhánh đa lựa chọn với NPC tại harbor_square, hiển thị #dialogue-provenance-badge,
  *              chọn nút .dialogue-choice-btn, cập nhật cờ nhiệm vụ & mục tiêu trên HUD và chụp ảnh m3_dialogue_choices.png.
  * - M3-E2E-03: Kiểm tra các cửa sổ Nhật Ký (#journal-modal, phím J), Túi Tư Liệu (#inventory-modal, phím I),
- *              Tạm Dừng & Cài Đặt (#pause-modal, phím Tab), khóa điều khiển di chuyển thế giới khi mở modal,
- *              bật/tắt Reduced Motion & Large Text, lưu thủ công (#btn-manual-save) và khôi phục sau khi tải lại trang.
+ *              Tạm Dừng & Cài Đặt (#pause-modal -> #pause-open-settings -> #settings-modal), khóa điều khiển di chuyển thế giới,
+ *              bật/tắt Reduced Motion & Large Text, lưu thủ công (#btn-manual-save) và khôi phục sau khi tải lại trang qua #btn-menu-continue.
  */
 
 import { expect, test } from '@playwright/test';
-
-const ARTIFACT_DIR =
-  '/home/antigravity/.gemini/jetski/brain/31f52e7023c04649246b83f79b9ff3a6';
+import {
+  ARTIFACT_DIR,
+  continueSavedSession,
+  startNewExploringSession,
+} from './helpers';
 
 test.describe('M3 RPG Systems & UI — Browser E2E Suite', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.evaluate(() => localStorage.clear());
-    await page.reload();
-    await page.locator('#skip-opening-btn').click();
+    await startNewExploringSession(page);
   });
 
   test('M3-E2E-01: Fullscreen Viewport Layout & Active Quest HUD Tracker', async ({
     page,
   }) => {
+    const gameShell = page.locator('#game-shell');
     const mainStage = page.locator('.main-stage');
+    await expect(gameShell).toBeVisible();
     await expect(mainStage).toBeVisible();
-    await expect(page.locator('#codex-progress-count')).toBeVisible();
     await expect(page.locator('#hud-objective-tracker')).toBeVisible();
 
     const layoutMetrics = await page.evaluate(() => {
+      const shellEl = document.getElementById('game-shell');
       const stageEl = document.querySelector('.main-stage') as HTMLElement | null;
+      const shellRect = shellEl?.getBoundingClientRect();
       const stageRect = stageEl?.getBoundingClientRect();
       return {
         viewportWidth: window.innerWidth,
-        stageWidth: stageRect?.width ?? 0,
+        viewportHeight: window.innerHeight,
+        shellWidth: Math.round(shellRect?.width ?? 0),
+        shellHeight: Math.round(shellRect?.height ?? 0),
+        stageWidth: Math.round(stageRect?.width ?? 0),
+        stageHeight: Math.round(stageRect?.height ?? 0),
       };
     });
 
-    expect(layoutMetrics.stageWidth).toBeGreaterThanOrEqual(
-      layoutMetrics.viewportWidth * 0.9
-    );
+    expect(layoutMetrics.shellWidth).toBe(layoutMetrics.viewportWidth);
+    expect(layoutMetrics.shellHeight).toBe(layoutMetrics.viewportHeight);
+    expect(layoutMetrics.stageWidth).toBe(layoutMetrics.viewportWidth);
+    expect(layoutMetrics.stageHeight).toBe(layoutMetrics.viewportHeight);
 
     await expect(page.locator('#hud-active-quest-title')).toContainText(
       'Hội Nghị Hợp Nhất Cửu Long'
@@ -50,6 +57,15 @@ test.describe('M3 RPG Systems & UI — Browser E2E Suite', () => {
     await expect(page.locator('#hud-active-objective-text')).toContainText(
       'Bắt liên lạc tại Quảng Trường Bến Cảng'
     );
+
+    // Mở #journal-modal -> #tab-journal-codex để xác minh #codex-progress-count hiển thị rõ ràng, sau đó đóng lại
+    await page.keyboard.press('KeyJ');
+    await expect(page.locator('#journal-modal')).toBeVisible();
+    await page.locator('#tab-journal-codex').click();
+    await expect(page.locator('#codex-progress-count')).toBeVisible();
+    await expect(page.locator('#codex-progress-count')).toHaveText('0 / 12 CỘT MỐC');
+    await page.locator('#btn-close-journal').click();
+    await expect(page.locator('#journal-modal')).toBeHidden();
   });
 
   test('M3-E2E-02: Multi-Choice NPC Dialogue & Objective Progression', async ({
@@ -221,10 +237,15 @@ test.describe('M3 RPG Systems & UI — Browser E2E Suite', () => {
     await page.locator('#btn-close-inventory').click();
     await expect(inventoryModal).toBeHidden();
 
-    // 3. Mở Tạm Dừng & Thiết Lập (#pause-modal), bật Reduced Motion & Large Text, bấm Lưu Thủ Công rồi tải lại trang
+    // 3. Mở Tạm Dừng (#pause-modal) -> Cài đặt hệ thống (#pause-open-settings -> #settings-modal),
+    //    bật Reduced Motion & Large Text, đóng Cài đặt, bấm Lưu Thủ Công rồi tải lại trang và bấm TIẾP TỤC
     await page.locator('#btn-open-pause').click();
     const pauseModal = page.locator('#pause-modal');
     await expect(pauseModal).toBeVisible();
+
+    await page.locator('#pause-open-settings').click();
+    const settingsModal = page.locator('#settings-modal');
+    await expect(settingsModal).toBeVisible();
 
     await page.locator('#toggle-reduced-motion').click();
     await page.locator('#toggle-text-scale').click();
@@ -232,11 +253,16 @@ test.describe('M3 RPG Systems & UI — Browser E2E Suite', () => {
     await expect(page.locator('body')).toHaveClass(/reduced-motion/);
     await expect(page.locator('body')).toHaveClass(/text-scale-large/);
 
+    await page.locator('#btn-close-settings').click();
+    await expect(settingsModal).toBeHidden();
+
+    await page.locator('#btn-open-pause').click();
+    await expect(pauseModal).toBeVisible();
     await page.locator('#btn-manual-save').click();
 
-    // Tải lại trang và kiểm tra dữ liệu đã lưu được khôi phục đầy đủ
+    // Tải lại trang, bấm TIẾP TỤC (#btn-menu-continue) và kiểm tra dữ liệu đã lưu được khôi phục đầy đủ
     await page.reload();
-    await page.locator('#skip-opening-btn').click();
+    await continueSavedSession(page);
 
     await expect(page.locator('body')).toHaveClass(/reduced-motion/);
     await expect(page.locator('body')).toHaveClass(/text-scale-large/);

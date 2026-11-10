@@ -5,20 +5,19 @@
  *              cập nhật discoveredMaps và đảm bảo collectedMilestones.size vẫn bằng 0 khi chỉ di chuyển qua cổng.
  * - M2-E2E-02: Mở Sơ Đồ Khu Vực (#world-map-modal) bằng phím [M] / #btn-open-map, khóa điều khiển di chuyển thế giới (mode === 'map'),
  *              chặn Fast Travel tới khu vực chưa khám phá, mở khóa Checkpoint tại old_street và dịch chuyển nhanh 2 chiều giữa harbor_square <-> old_street.
- * - M2-E2E-03: Bật/tắt Lớp Phủ Kiểm Định Bản Đồ (#btn-debug-overlay / F3), xác minh store.debugOverlayEnabled === true và chụp ảnh nghiệm thu thực tế.
+ * - M2-E2E-03: Bật/tắt Lớp Phủ Kiểm Định Bản Đồ (#btn-debug-overlay trong #presenter-drawer / F3), xác minh store.debugOverlayEnabled === true và chụp ảnh nghiệm thu thực tế.
  */
 
 import { expect, test } from '@playwright/test';
-
-const ARTIFACT_DIR =
-  '/home/antigravity/.gemini/jetski/brain/31f52e7023c04649246b83f79b9ff3a6';
+import {
+  ARTIFACT_DIR,
+  openPresenterDrawer,
+  startNewExploringSession,
+} from './helpers';
 
 test.describe('M2 World Exploration — Browser E2E Suite', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.evaluate(() => localStorage.clear());
-    await page.reload();
-    await page.locator('#skip-opening-btn').click();
+    await startNewExploringSession(page);
   });
 
   test('M2-E2E-01: Multi-Zone Connected Traversal (harbor_square -> old_street -> safehouse_interior -> shadow_alley -> archive_courtyard -> secret_archive)', async ({
@@ -200,7 +199,9 @@ test.describe('M2 World Exploration — Browser E2E Suite', () => {
       game.syncHudWithState();
     });
 
-    // Mở lại #world-map-modal và bấm nút Dịch Chuyển Nhanh về harbor_square rồi quay lại old_street
+    // Mở #world-map-modal từ #pause-modal (#btn-open-pause -> #btn-open-map) và bấm nút Dịch Chuyển Nhanh về harbor_square
+    await page.locator('#btn-open-pause').click();
+    await expect(page.locator('#pause-modal')).toBeVisible();
     await page.locator('#btn-open-map').click();
     await expect(mapModal).toBeVisible();
 
@@ -218,8 +219,9 @@ test.describe('M2 World Exploration — Browser E2E Suite', () => {
     });
     expect(atHarbor).toBe('harbor_square');
 
-    // Mở lại bản đồ và dịch chuyển nhanh sang old_street
-    await page.locator('#btn-open-map').click();
+    // Mở lại bản đồ bằng phím [M] và dịch chuyển nhanh sang old_street
+    await page.keyboard.press('KeyM');
+    await expect(mapModal).toBeVisible();
     const fastTravelStreetBtn = page.locator('[data-fast-travel-zone="old_street"]');
     await expect(fastTravelStreetBtn).toBeVisible();
     await fastTravelStreetBtn.click();
@@ -245,7 +247,9 @@ test.describe('M2 World Exploration — Browser E2E Suite', () => {
   test('M2-E2E-03: Debug Overlay Toggle ([F3] / #btn-debug-overlay) & Visual Screenshot Audit', async ({
     page,
   }) => {
+    await openPresenterDrawer(page);
     const debugBtn = page.locator('#btn-debug-overlay');
+    await expect(debugBtn).toBeVisible();
     await debugBtn.click();
 
     const debugEnabled = await page.evaluate(() => {
@@ -258,6 +262,11 @@ test.describe('M2 World Exploration — Browser E2E Suite', () => {
     });
     expect(debugEnabled).toBe(true);
 
+    // Đóng ngăn Giảng viên để quan sát trọn vẹn lớp kiểm định va chạm trên khung cảnh
+    await page.locator('#btn-close-presenter').click();
+    await expect(page.locator('#presenter-drawer')).toBeHidden();
+    await expect(page.locator('#dev-debug-readout')).toBeVisible();
+
     await page.waitForTimeout(150);
     await page.screenshot({
       path: `${ARTIFACT_DIR}/m2_debug_overlay.png`,
@@ -265,7 +274,7 @@ test.describe('M2 World Exploration — Browser E2E Suite', () => {
     });
 
     // Mở Sơ Đồ Khu Vực (#world-map-modal) và chụp ảnh nghiệm thu giao diện Sơn Mài & Giấy Dó
-    await page.locator('#btn-open-map').click();
+    await page.keyboard.press('KeyM');
     await expect(page.locator('#world-map-modal')).toBeVisible();
     await page.waitForTimeout(150);
     await page.screenshot({

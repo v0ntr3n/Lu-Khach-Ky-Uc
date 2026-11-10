@@ -2,10 +2,15 @@
  * @file src/engine/SpriteAtlas.ts
  * @description Bộ dựng ma trận điểm ảnh 16-bit (Procedural Pixel Art Sprites & Top-Down Tiles)
  * tuân thủ tuyệt đối Bảng Màu 12 Sắc Độ Sơn Mài & Giấy Dó (DESIGN.md & SPRITE_ATLAS.md).
+ * Nhân vật chính & NPC được thiết kế ở kích thước chuẩn 16×22 (hoặc 16×21) điểm ảnh với
+ * phom dáng (silhouette) tách biệt rõ nét theo từng vai trò lịch sử.
  */
 
 import { PALETTE_12 } from '../data/chronicles';
 import type { Facing4, MilestoneArtifact } from '../types/game';
+
+export const CHARACTER_SPRITE_WIDTH = 16;
+export const CHARACTER_SPRITE_HEIGHT = 22;
 
 export type CharacterAtlasRole =
   | 'player'
@@ -35,254 +40,1532 @@ const COLOR_MAP: Record<string, string> = {
   'W': PALETTE_12.PARCHMENT_LIGHT,   // #F4EFE4 - Điểm sáng trắng ngà
 };
 
-/**
- * Sprite Lữ Khách Ký Ức 2045 (12x18 pixel matrix)
- * Đội mũ/kính lưu trữ viên 2045, khăn quàng đỏ son, áo choàng lữ hành đồng cổ
- */
-const TRAVELER_IDLE: string[] = [
-  '....KKKK....',
-  '...KBBBBK...',
-  '..KGGGGGGK..',
-  '..KPPPPPPK..',
-  '..KPWPPWPK..',
-  '...KPPPPK...',
-  '..KRRRRRRK..',
-  '.KBBBBBBBBK.',
-  '.KBBGKKGBBK.',
-  '.KBBBBBBBBK.',
-  '.KBBBBBBBBK.',
-  '..KBBBBBBK..',
-  '..KDDDDDDK..',
-  '..KDD..DDK..',
-  '..KDD..DDK..',
-  '..KMM..MMK..',
-  '..KKK..KKK..',
-];
-
-const TRAVELER_WALK_1: string[] = [
-  '....KKKK....',
-  '...KBBBBK...',
-  '..KGGGGGGK..',
-  '..KPPPPPPK..',
-  '..KPWPPWPK..',
-  '...KPPPPK...',
-  '..KRRRRRRK..',
-  '.KBBBBBBBBK.',
-  'KBBBGKKGBBBK',
-  '.KBBBBBBBBK.',
-  '..KBBBBBBK..',
-  '..KDDDDDDK..',
-  '.KDD....DDK.',
-  '.KDD.....DDK',
-  '.KMM.....MMK',
-  '.KKK.....KKK',
-];
-
-const TRAVELER_WALK_2: string[] = [
-  '....KKKK....',
-  '...KBBBBK...',
-  '..KGGGGGGK..',
-  '..KPPPPPPK..',
-  '..KPWPPWPK..',
-  '...KPPPPK...',
-  '..KRRRRRRK..',
-  '.KBBBBBBBBK.',
-  'KBBGKKKKGBBK',
-  '.KBBBBBBBBK.',
-  '..KBBBBBBK..',
-  '..KDDDDDDK..',
-  '.KDD....DDK.',
-  'KDD.....DDK.',
-  'KMM.....MMK.',
-  'KKK.....KKK.',
-];
-
-const TRAVELER_UP_IDLE: string[] = [
-  '....KKKK....',
-  '...KBBBBK...',
-  '..KBBBBBBK..',
-  '..KGGGGGGK..',
-  '..KBBBBBBK..',
-  '...KRRRRK...',
-  '..KRRRRRRK..',
-  '.KBBBBBBBBK.',
-  '.KBBBBBBBBK.',
-  '.KBBMMMMBBK.',
-  '.KBBBBBBBBK.',
-  '..KBBBBBBK..',
-  '..KDDDDDDK..',
-  '..KDD..DDK..',
-  '..KDD..DDK..',
-  '..KMM..MMK..',
-  '..KKK..KKK..',
-];
-
-const TRAVELER_UP_WALK_1: string[] = [
-  '....KKKK....',
-  '...KBBBBK...',
-  '..KBBBBBBK..',
-  '..KGGGGGGK..',
-  '..KBBBBBBK..',
-  '...KRRRRK...',
-  '..KRRRRRRK..',
-  '.KBBBBBBBBK.',
-  'KBBBBBBBBBBK',
-  '.KBBMMMMBBK.',
-  '..KBBBBBBK..',
-  '..KDDDDDDK..',
-  '.KDD....DDK.',
-  '.KMM.....DDK',
-  '.KKK.....MMK',
-  '.........KKK',
-];
-
-const TRAVELER_UP_WALK_2: string[] = [
-  '....KKKK....',
-  '...KBBBBK...',
-  '..KBBBBBBK..',
-  '..KGGGGGGK..',
-  '..KBBBBBBK..',
-  '...KRRRRK...',
-  '..KRRRRRRK..',
-  '.KBBBBBBBBK.',
-  'KBBBBBBBBBBK',
-  '.KBBMMMMBBK.',
-  '..KBBBBBBK..',
-  '..KDDDDDDK..',
-  '.KDD....DDK.',
-  'KDD.....MMK.',
-  'KMM.....KKK.',
-  'KKK.........',
-];
-
-const TRAVELER_SIDE_IDLE: string[] = [
-  '....KKKK....',
-  '...KBBBBK...',
-  '..KGGGGGGK..',
-  '..KPPPPPK...',
-  '..KPPPPWK...',
-  '...KPPPPK...',
-  '..KRRRRRRK..',
-  '..KBBBBBBK..',
-  '..KBBGGBBK..',
-  '..KBBBBBBK..',
-  '..KBBBBBBK..',
-  '...KBBBBK...',
-  '...KDDDDK...',
-  '...KDDDDK...',
-  '...KDDDDK...',
-  '...KMMMMK...',
-  '...KKKKKK...',
-];
-
-const TRAVELER_SIDE_WALK_1: string[] = [
-  '....KKKK....',
-  '...KBBBBK...',
-  '..KGGGGGGK..',
-  '..KPPPPPK...',
-  '..KPPPPWK...',
-  '...KPPPPK...',
-  '..KRRRRRRK..',
-  '..KBBBBBBK..',
-  '.KBBBGGBBBK.',
-  '..KBBBBBBK..',
-  '...KBBBBK...',
-  '...KDDDDK...',
-  '..KDD..DDK..',
-  '.KDD....DDK.',
-  '.KMM....MMK.',
-  '.KKK....KKK.',
-];
-
-const TRAVELER_SIDE_WALK_2: string[] = [
-  '....KKKK....',
-  '...KBBBBK...',
-  '..KGGGGGGK..',
-  '..KPPPPPK...',
-  '..KPPPPWK...',
-  '...KPPPPK...',
-  '..KRRRRRRK..',
-  '..KBBBBBBK..',
-  '..KBBGGBBK..',
-  '..KBBBBBBK..',
-  '...KBBBBK...',
-  '...KDDDDK...',
-  '..KDD..DDK..',
-  '..KDD...DDK.',
-  '..KMM...MMK.',
-  '..KKK...KKK.',
-];
-
-const TRAVELER_CROUCH: string[] = [
-  '............',
-  '............',
-  '............',
-  '....KKKK....',
-  '...KBBBBK...',
-  '..KGGGGGGK..',
-  '..KPPPPPPK..',
-  '..KRRRRRRK..',
-  '.KBBBBBBBBK.',
-  'KBBBBBBBBBBK',
-  'KBBBBBBBBBBK',
-  '.KDDDDDDDDK.',
-  '..KMM..MMK..',
-  '..KKK..KKK..',
-];
-
-const NPC_HISTORIAN: string[] = [
-  '....KKKK....',
-  '...KMMMMK...',
-  '..KMMMMMMK..',
-  '..KPPPPPPK..',
-  '..KPKPPKPK..',
-  '...KPPPPK...',
-  '..KGGGGGGK..',
-  '.KDDDDDDDDK.',
-  '.KDDGKKGDDK.',
-  '.KDDDDDDDDK.',
-  '..KDDDDDDK..',
-  '..KDDDDDDK..',
-  '..KMM..MMK..',
-  '..KMM..MMK..',
-  '..KKK..KKK..',
-];
-
-interface RolePaletteRemap {
-  hat: string;
-  trim: string;
-  scarf: string;
-  coat: string;
+interface DirectionalCharacterSet {
+  downIdle: string[];
+  downBreathe: string[];
+  downWalk1: string[];
+  downWalk2: string[];
+  upIdle: string[];
+  upBreathe: string[];
+  upWalk1: string[];
+  upWalk2: string[];
+  sideIdle: string[];
+  sideBreathe: string[];
+  sideWalk1: string[];
+  sideWalk2: string[];
+  crouch?: string[];
 }
 
-const ROLE_REMAP: Record<CharacterAtlasRole, RolePaletteRemap | null> = {
-  player: null,
-  traveler: null,
-  liaison: { hat: 'D', trim: 'V', scarf: 'R', coat: 'S' },
-  courier: { hat: 'D', trim: 'V', scarf: 'R', coat: 'S' },
-  worker: { hat: 'B', trim: 'M', scarf: 'G', coat: 'M' },
-  observer: { hat: 'B', trim: 'M', scarf: 'G', coat: 'M' },
-  guard: { hat: 'I', trim: 'R', scarf: 'V', coat: 'D' },
-  scholar: { hat: 'M', trim: 'G', scarf: 'P', coat: 'D' },
-  archivist: { hat: 'M', trim: 'G', scarf: 'P', coat: 'D' },
-  historian: { hat: 'M', trim: 'G', scarf: 'G', coat: 'D' },
+// ============================================================================
+// 1. LỮ KHÁCH KÝ ỨC 2045 (TRAVELER / PLAYER) — 16×22
+// Mũ beret lưu trữ viên viền vàng kim (G/W), khăn quàng đỏ son tung bay (R/V),
+// áo khoác măng-tô đồng cổ thắt đai (B/M/G), ủng tối (D/K).
+// ============================================================================
+const TRAVELER_SET: DirectionalCharacterSet = {
+  downIdle: [
+    '....KKKKKKKK....',
+    '...KBBBBBBMMK...',
+    '..KBBBBBBBBMMK..',
+    '..KGGGGGGGGWGK..',
+    '..KPPPPPPPPPPK..',
+    '..KPWKPPPPKWPK..',
+    '...KPPPPPPPPK...',
+    '..KRRRRVVRRRRK..',
+    '.KBBBBBRRRBBBBK.',
+    '.KBBMBBRRBBMBBK.',
+    '.KBBBBBRVBBBBBK.',
+    '.KPBBMGGGGMBBPK.',
+    '..KBBBBMMBBBBK..',
+    '..KBBBBMMBBBBK..',
+    '..KBBBBKKBBBBK..',
+    '..KBBBK..KBBBK..',
+    '..KMMMK..KMMMK..',
+    '...KDDK..KDDK...',
+    '...KDDK..KDDK...',
+    '...KMMK..KMMK...',
+    '..KDDDK..KDDDK..',
+    '..KKKKK..KKKKK..',
+  ],
+  downBreathe: [
+    '....KKKKKKKK....',
+    '...KBBBBBBMMK...',
+    '..KBBBBBBBBMMK..',
+    '..KGGGGGGGGWGK..',
+    '..KPPPPPPPPPPK..',
+    '..KPWKPPPPKWPK..',
+    '...KPPPPPPPPK...',
+    '..KRRRRVVRVRRK..',
+    '.KBBBBBRRRRBBBK.',
+    '.KBBMBBRRRBMMPK.',
+    '.KPBBBBBRVBBBBK.',
+    '..KBBMGGGGMBBPK.',
+    '..KBBBBMMBBBBK..',
+    '..KBBBBMMBBBBK..',
+    '..KBBBBKKBBBBK..',
+    '..KBBBK..KBBBK..',
+    '..KMMMK..KMMMK..',
+    '...KDDK..KDDK...',
+    '...KDDK..KDDK...',
+    '...KMMK..KMMK...',
+    '..KDDDK..KDDDK..',
+    '..KKKKK..KKKKK..',
+  ],
+  downWalk1: [
+    '....KKKKKKKK....',
+    '...KBBBBBBMMK...',
+    '..KBBBBBBBBMMK..',
+    '..KGGGGGGGGWGK..',
+    '..KPPPPPPPPPPK..',
+    '..KPWKPPPPKWPK..',
+    '...KPPPPPPPPK...',
+    '..KRRRRVVRRRRK..',
+    '.KBBBBBRRRRBBBK.',
+    'KBBMBBBRRRBBBBBK',
+    'KPBBBBBRRVBBBBK.',
+    '.KBBBMGGGGMBBPK.',
+    '..KBBBBMMBBBBK..',
+    '.KBBBBBKKBBBBBK.',
+    '.KBBBBK..KBBBBK.',
+    '.KMMMK....KBBBK.',
+    '..KDDK....KMMMK.',
+    '..KDDK.....KDDK.',
+    '..KMMK.....KMMK.',
+    '.KDDDK.....KKKK.',
+    '.KKKKK..........',
+    '................',
+  ],
+  downWalk2: [
+    '....KKKKKKKK....',
+    '...KBBBBBBMMK...',
+    '..KBBBBBBBBMMK..',
+    '..KGGGGGGGGWGK..',
+    '..KPPPPPPPPPPK..',
+    '..KPWKPPPPKWPK..',
+    '...KPPPPPPPPK...',
+    '..KRRRRVVRRRRK..',
+    '.KBBBRRRRBBBBBK.',
+    'KBBBBBRRRBBBMBBK',
+    '.KBBBBVRRBBBBBPK',
+    '.KPBBMGGGGMBBBK.',
+    '..KBBBBMMBBBBK..',
+    '.KBBBBBKKBBBBBK.',
+    '.KBBBBK..KBBBBK.',
+    '.KBBBK....KMMMK.',
+    '.KMMMK....KDDK..',
+    '.KDDK.....KDDK..',
+    '.KMMK.....KMMK..',
+    '.KKKK.....KDDDK.',
+    '..........KKKKK.',
+    '................',
+  ],
+  upIdle: [
+    '....KKKKKKKK....',
+    '...KMMBBBBBBK...',
+    '..KMMBBBBBBBBK..',
+    '..KGGGGGGGGGGK..',
+    '..KLLLLLLLLLLK..',
+    '...KLLLLLLLLK...',
+    '..KRRRRVVRRRRK..',
+    '.KBBBBBRRRBBBBK.',
+    '.KBBBBBRVRBBBBK.',
+    '.KBBMBBRRBBMBBK.',
+    '.KBBBBBRKBBBBBK.',
+    '.KPBBMMMMMMBBPK.',
+    '..KBBBBMMBBBBK..',
+    '..KBBBBMMBBBBK..',
+    '..KBBBBKKBBBBK..',
+    '..KBBBK..KBBBK..',
+    '..KMMMK..KMMMK..',
+    '...KDDK..KDDK...',
+    '...KDDK..KDDK...',
+    '...KMMK..KMMK...',
+    '..KDDDK..KDDDK..',
+    '..KKKKK..KKKKK..',
+  ],
+  upBreathe: [
+    '....KKKKKKKK....',
+    '...KMMBBBBBBK...',
+    '..KMMBBBBBBBBK..',
+    '..KGGGGGGGGGGK..',
+    '..KLLLLLLLLLLK..',
+    '...KLLLLLLLLK...',
+    '..KRRRRVVRRRRK..',
+    '.KBBBBBRRRRBBBK.',
+    '.KBBBBBRVRRBBBK.',
+    '.KBBMBBBRRBMMPK.',
+    '.KPBBBBBRKBBBBK.',
+    '..KBBMMMMMMBBPK.',
+    '..KBBBBMMBBBBK..',
+    '..KBBBBMMBBBBK..',
+    '..KBBBBKKBBBBK..',
+    '..KBBBK..KBBBK..',
+    '..KMMMK..KMMMK..',
+    '...KDDK..KDDK...',
+    '...KDDK..KDDK...',
+    '...KMMK..KMMK...',
+    '..KDDDK..KDDDK..',
+    '..KKKKK..KKKKK..',
+  ],
+  upWalk1: [
+    '....KKKKKKKK....',
+    '...KMMBBBBBBK...',
+    '..KMMBBBBBBBBK..',
+    '..KGGGGGGGGGGK..',
+    '..KLLLLLLLLLLK..',
+    '...KLLLLLLLLK...',
+    '..KRRRRVVRRRRK..',
+    '.KBBBBBRRRRBBBK.',
+    'KBBBBBBRVRRBBBBK',
+    'KPBBBBBRRRBBBBK.',
+    '.KBBMMMMMMMBBPK.',
+    '..KBBBBMMBBBBK..',
+    '.KBBBBBKKBBBBBK.',
+    '.KBBBBK..KBBBBK.',
+    '.KMMMK....KBBBK.',
+    '..KDDK....KMMMK.',
+    '..KDDK.....KDDK.',
+    '..KMMK.....KMMK.',
+    '.KDDDK.....KKKK.',
+    '.KKKKK..........',
+    '................',
+    '................',
+  ],
+  upWalk2: [
+    '....KKKKKKKK....',
+    '...KMMBBBBBBK...',
+    '..KMMBBBBBBBBK..',
+    '..KGGGGGGGGGGK..',
+    '..KLLLLLLLLLLK..',
+    '...KLLLLLLLLK...',
+    '..KRRRRVVRRRRK..',
+    '.KBBBRRRRBBBBBK.',
+    'KBBBBRRVRBBBBBBK',
+    '.KBBBBRRRBBBBBPK',
+    '.KPBBMMMMMMMBBK.',
+    '..KBBBBMMBBBBK..',
+    '.KBBBBBKKBBBBBK.',
+    '.KBBBBK..KBBBBK.',
+    '.KBBBK....KMMMK.',
+    '.KMMMK....KDDK..',
+    '.KDDK.....KDDK..',
+    '.KMMK.....KMMK..',
+    '.KKKK.....KDDDK.',
+    '..........KKKKK.',
+    '................',
+    '................',
+  ],
+  sideIdle: [
+    '....KKKKKKKK....',
+    '...KMMBBBBBBK...',
+    '..KMMBBBBBBBBK..',
+    '..KGGGGGGGGGWK..',
+    '...KLLPPPPPPK...',
+    '...KLPPPPPWWKK..',
+    '....KPPPPPPPK...',
+    '.KKKRRRRVVRRK...',
+    'KRRVBBBBBBBBK...',
+    '.KKKBBMBBBBBK...',
+    '...KBBBBBBMBK...',
+    '...KBBMGGGGBK...',
+    '...KBBBBPPBBK...',
+    '...KBBBBMMBBK...',
+    '..KBBBBBBBBBK...',
+    '..KBBBBKKBBBK...',
+    '..KMMMK.KMMMK...',
+    '...KDDK..KDDK...',
+    '...KDDK..KDDK...',
+    '...KMMK..KMMK...',
+    '...KDDDK.KDDDK..',
+    '...KKKKK.KKKKK..',
+  ],
+  sideBreathe: [
+    '....KKKKKKKK....',
+    '...KMMBBBBBBK...',
+    '..KMMBBBBBBBBK..',
+    '..KGGGGGGGGGWK..',
+    '...KLLPPPPPPK...',
+    '...KLPPPPPWWKK..',
+    '....KPPPPPPPK...',
+    'KKKKRRRRVVRRK...',
+    'KRVKBBBBBBBBK...',
+    '.KK.KBBMBBBBK...',
+    '...KBBBBBBMBK...',
+    '...KBBMGGGGBK...',
+    '...KBBBBPPBBK...',
+    '...KBBBBMMBBK...',
+    '..KBBBBBBBBBK...',
+    '..KBBBBKKBBBK...',
+    '..KMMMK.KMMMK...',
+    '...KDDK..KDDK...',
+    '...KDDK..KDDK...',
+    '...KMMK..KMMK...',
+    '...KDDDK.KDDDK..',
+    '...KKKKK.KKKKK..',
+  ],
+  sideWalk1: [
+    '....KKKKKKKK....',
+    '...KMMBBBBBBK...',
+    '..KMMBBBBBBBBK..',
+    '..KGGGGGGGGGWK..',
+    '...KLLPPPPPPK...',
+    '...KLPPPPPWWKK..',
+    '....KPPPPPPPK...',
+    'KKKKRRRRVVRRK...',
+    'KRRVBBBBBBBBK...',
+    '.KKKBBBBBBMBBK..',
+    '...KBBMBBBBPPK..',
+    '...KBBMGGGGBKK..',
+    '..KBBBBBBBBBK...',
+    '..KBBBBKKBBBBK..',
+    '.KBBBBK..KBBBBK.',
+    '.KMMMK....KMMMK.',
+    '.KDDK......KDDK.',
+    '.KMMK......KDDK.',
+    'KDDDK......KMMK.',
+    'KKKK.......KDDDK',
+    '...........KKKKK',
+    '................',
+  ],
+  sideWalk2: [
+    '....KKKKKKKK....',
+    '...KMMBBBBBBK...',
+    '..KMMBBBBBBBBK..',
+    '..KGGGGGGGGGWK..',
+    '...KLLPPPPPPK...',
+    '...KLPPPPPWWKK..',
+    '....KPPPPPPPK...',
+    '.KKKRRRRVVRRK...',
+    'KRVKBBBBBBBBK...',
+    '.KKKPPBBBBMBK...',
+    '..KKBBBBBBBBK...',
+    '...KBBMGGGGBK...',
+    '...KBBBBBBBBK...',
+    '..KBBBBKKBBBBK..',
+    '..KBBBK..KBBBK..',
+    '..KMMMK..KMMMK..',
+    '..KDDK....KDDK..',
+    '..KDDK....KMMK..',
+    '..KMMK....KDDDK.',
+    '.KDDDK....KKKKK.',
+    '.KKKKK..........',
+    '................',
+  ],
+  crouch: [
+    '....KKKKKKKK....',
+    '...KBBBBBBMMK...',
+    '..KBBBBBBBBMMK..',
+    '..KGGGGGGGGWGK..',
+    '..KPWKPPPPKWPK..',
+    '.KRRRRVVRRRRRRK.',
+    'KBBBBBRRRRBBBBBK',
+    'KBBMBBBRVBBBMBBK',
+    'KPBBBBGGGGMBBBPK',
+    '.KBBBBMMMMBBBBK.',
+    '.KBBBBBBBBBBBBK.',
+    '..KBBBBKKBBBBK..',
+    '..KMMMK..KMMMK..',
+    '..KDDDK..KDDDK..',
+    '..KMMMK..KMMMK..',
+    '..KDDDK..KDDDK..',
+    '..KKKKK..KKKKK..',
+  ],
 };
 
-function remapMatrixForRole(matrix: string[], role: CharacterAtlasRole): string[] {
-  const remap = ROLE_REMAP[role];
-  if (!remap) return matrix;
-  return matrix.map((row, idx) => {
-    let out = '';
-    for (let c = 0; c < row.length; c++) {
-      const ch = row[c];
-      if (idx <= 2 && ch === 'B') out += remap.hat;
-      else if (idx <= 3 && ch === 'G') out += remap.trim;
-      else if (ch === 'R') out += remap.scarf;
-      else if (ch === 'B') out += remap.coat;
-      else out += ch;
-    }
-    return out;
-  });
+// ============================================================================
+// 2. GIAO LIÊN / LIÊN LẠC (COURIER / LIAISON) — 16×21
+// Mũ lưỡi trai phẳng (M/B + vành K/D), áo khoác chàm mực (D/S),
+// dây đeo chéo vàng đồng & túi da công văn bên hông (G/P/M).
+// ============================================================================
+const COURIER_SET: DirectionalCharacterSet = {
+  downIdle: [
+    '....KKKKKKKK....',
+    '...KMMMMMMMMK...',
+    '..KBBBBBBBBMMK..',
+    '..KDDDDDDDDDDKK.',
+    '...KPPPPPPPPK...',
+    '...KPWKPPKWPK...',
+    '....KPPPPPPK....',
+    '...KSSPPPPSSK...',
+    '..KDDGDDDDDDDK..',
+    '..KDDDGGDDDDDK..',
+    '.KPDDDDGGDDDSPK.',
+    '..KDDDDDGGDDDK..',
+    '..KDDDDDMGGGGK..',
+    '..KSSSSSMGPPGK..',
+    '...KDDDDMMMMK...',
+    '...KDDDK.KDDK...',
+    '...KDDK..KDDK...',
+    '...KDDK..KDDK...',
+    '...KMMK..KMMK...',
+    '..KDDDK..KDDDK..',
+    '..KKKKK..KKKKK..',
+  ],
+  downBreathe: [
+    '....KKKKKKKK....',
+    '...KMMMMMMMMK...',
+    '..KBBBBBBBBMMK..',
+    '..KDDDDDDDDDDKK.',
+    '...KPPPPPPPPK...',
+    '...KPWKPPKWPK...',
+    '....KPPPPPPK....',
+    '...KSSPPPPSSK...',
+    '..KDDGDDDDDDDK..',
+    '.KPDDDGGDDDDDPK.',
+    '..KDDDDGGDDDDK..',
+    '..KDDDDDGGDDDK..',
+    '..KDDDDDMGGGGK..',
+    '..KSSSSSMGPPGK..',
+    '...KDDDDMMMMK...',
+    '...KDDDK.KDDK...',
+    '...KDDK..KDDK...',
+    '...KDDK..KDDK...',
+    '...KMMK..KMMK...',
+    '..KDDDK..KDDDK..',
+    '..KKKKK..KKKKK..',
+  ],
+  downWalk1: [
+    '....KKKKKKKK....',
+    '...KMMMMMMMMK...',
+    '..KBBBBBBBBMMK..',
+    '..KDDDDDDDDDDKK.',
+    '...KPPPPPPPPK...',
+    '...KPWKPPKWPK...',
+    '....KPPPPPPK....',
+    '...KSSPPPPSSK...',
+    '..KDDGDDDDDDDK..',
+    '.KPDDDGGDDDDDK..',
+    '.KDDDDDGGDDDSPK.',
+    '..KDDDDDGGDDDK..',
+    '..KSSSSSMGGGGK..',
+    '...KDDDDMGPPGK..',
+    '..KDDDK..MMMMK..',
+    '..KDDK....KDDK..',
+    '..KMMK....KDDK..',
+    '.KDDDK....KMMK..',
+    '.KKKKK....KKKK..',
+    '................',
+    '................',
+  ],
+  downWalk2: [
+    '....KKKKKKKK....',
+    '...KMMMMMMMMK...',
+    '..KBBBBBBBBMMK..',
+    '..KDDDDDDDDDDKK.',
+    '...KPPPPPPPPK...',
+    '...KPWKPPKWPK...',
+    '....KPPPPPPK....',
+    '...KSSPPPPSSK...',
+    '..KDDGDDDDDDDK..',
+    '..KDDDGGDDDDDPK.',
+    '.KPDDDDGGDDDDSK.',
+    '..KDDDDDGGDDDK..',
+    '..KSSSSSMGGGGK..',
+    '...KDDDDMGPPGK..',
+    '..KDDDK..MMMMK..',
+    '..KDDK....KDDK..',
+    '..KDDK....KMMK..',
+    '..KMMK....KDDDK.',
+    '..KKKK....KKKKK.',
+    '................',
+    '................',
+  ],
+  upIdle: [
+    '....KKKKKKKK....',
+    '...KMMMMMMMMK...',
+    '..KMMBBBBBBBBK..',
+    '...KLLLLLLLLK...',
+    '...KLLLLLLLLK...',
+    '....KPPPPPPK....',
+    '...KSSSSSSSSK...',
+    '..KDDDDDDGGDDK..',
+    '..KDDDDDGGDDDK..',
+    '.KPDDDDGGDDDDPK.',
+    '..KDDDGGDDDDDK..',
+    '..KDDGGDDDDDDK..',
+    '..KGGGGMDDDDDK..',
+    '..KGPPGMSSSSSK..',
+    '...KMMMMDDDDK...',
+    '...KDDK.KDDDK...',
+    '...KDDK..KDDK...',
+    '...KDDK..KDDK...',
+    '...KMMK..KMMK...',
+    '..KDDDK..KDDDK..',
+    '..KKKKK..KKKKK..',
+  ],
+  upBreathe: [
+    '....KKKKKKKK....',
+    '...KMMMMMMMMK...',
+    '..KMMBBBBBBBBK..',
+    '...KLLLLLLLLK...',
+    '...KLLLLLLLLK...',
+    '....KPPPPPPK....',
+    '...KSSSSSSSSK...',
+    '..KDDDDDDGGDDK..',
+    '.KPDDDDDGGDDDPK.',
+    '..KDDDDGGDDDDK..',
+    '..KDDDGGDDDDDK..',
+    '..KDDGGDDDDDDK..',
+    '..KGGGGMDDDDDK..',
+    '..KGPPGMSSSSSK..',
+    '...KMMMMDDDDK...',
+    '...KDDK.KDDDK...',
+    '...KDDK..KDDK...',
+    '...KDDK..KDDK...',
+    '...KMMK..KMMK...',
+    '..KDDDK..KDDDK..',
+    '..KKKKK..KKKKK..',
+  ],
+  upWalk1: [
+    '....KKKKKKKK....',
+    '...KMMMMMMMMK...',
+    '..KMMBBBBBBBBK..',
+    '...KLLLLLLLLK...',
+    '...KLLLLLLLLK...',
+    '....KPPPPPPK....',
+    '...KSSSSSSSSK...',
+    '..KDDDDDDGGDDK..',
+    '.KPDDDDDGGDDDK..',
+    '..KDDDDGGDDDSPK.',
+    '..KDDDGGDDDDDK..',
+    '..KGGGGMSSSSSK..',
+    '..KGPPGMDDDDK...',
+    '...KMMMM.KDDDK..',
+    '..KDDK....KDDK..',
+    '..KMMK....KDDK..',
+    '.KDDDK....KMMK..',
+    '.KKKKK....KKKK..',
+    '................',
+    '................',
+    '................',
+  ],
+  upWalk2: [
+    '....KKKKKKKK....',
+    '...KMMMMMMMMK...',
+    '..KMMBBBBBBBBK..',
+    '...KLLLLLLLLK...',
+    '...KLLLLLLLLK...',
+    '....KPPPPPPK....',
+    '...KSSSSSSSSK...',
+    '..KDDDDDDGGDDK..',
+    '..KDDDDDGGDDDPK.',
+    '.KPDDDDGGDDDDSK.',
+    '..KDDDGGDDDDDK..',
+    '..KGGGGMSSSSSK..',
+    '..KGPPGMDDDDK...',
+    '...KMMMM.KDDDK..',
+    '..KDDK....KDDK..',
+    '..KDDK....KMMK..',
+    '..KMMK....KDDDK.',
+    '..KKKK....KKKKK.',
+    '................',
+    '................',
+    '................',
+  ],
+  sideIdle: [
+    '....KKKKKKKK....',
+    '...KMMMMMMMMK...',
+    '..KMMBBBBBBBBKK.',
+    '..KLLDDDDDDDDKKK',
+    '...KLLPPPPPPK...',
+    '...KLPPPPPWWK...',
+    '....KPPPPPPK....',
+    '...KSSDDDDSSK...',
+    '...KDDGGDDDDK...',
+    '...KDDDGGDDDK...',
+    '...KDDDDGGDDK...',
+    '...KDDDDPPDDK...',
+    '..KGGGGMDDDDK...',
+    '..KGPPGMSSSSK...',
+    '..KMMMMKDDDDK...',
+    '...KDDDK.KDDK...',
+    '...KDDK..KDDK...',
+    '...KDDK..KDDK...',
+    '...KMMK..KMMK...',
+    '...KDDDK.KDDDK..',
+    '...KKKKK.KKKKK..',
+  ],
+  sideBreathe: [
+    '....KKKKKKKK....',
+    '...KMMMMMMMMK...',
+    '..KMMBBBBBBBBKK.',
+    '..KLLDDDDDDDDKKK',
+    '...KLLPPPPPPK...',
+    '...KLPPPPPWWK...',
+    '....KPPPPPPK....',
+    '...KSSDDDDSSK...',
+    '...KDDGGDDDDK...',
+    '...KDDDGGDDDK...',
+    '...KDDDDGGPPK...',
+    '..KGGGGMDDDDK...',
+    '..KGPPGMDDDDK...',
+    '..KMMMMKSSSSK...',
+    '...KDDDDDDDDK...',
+    '...KDDDK.KDDK...',
+    '...KDDK..KDDK...',
+    '...KDDK..KDDK...',
+    '...KMMK..KMMK...',
+    '...KDDDK.KDDDK..',
+    '...KKKKK.KKKKK..',
+  ],
+  sideWalk1: [
+    '....KKKKKKKK....',
+    '...KMMMMMMMMK...',
+    '..KMMBBBBBBBBKK.',
+    '..KLLDDDDDDDDKKK',
+    '...KLLPPPPPPK...',
+    '...KLPPPPPWWK...',
+    '....KPPPPPPK....',
+    '...KSSDDDDSSK...',
+    '...KDDGGDDDDK...',
+    '...KDDDGGDDPPK..',
+    '..KGGGGMDDDDKK..',
+    '..KGPPGMDDDDK...',
+    '..KMMMMKSSSSK...',
+    '..KDDDDK.KDDDK..',
+    '.KDDDK....KDDK..',
+    '.KDDK......KDDK.',
+    '.KMMK......KMMK.',
+    'KDDDK......KDDDK',
+    'KKKK.......KKKKK',
+    '................',
+    '................',
+  ],
+  sideWalk2: [
+    '....KKKKKKKK....',
+    '...KMMMMMMMMK...',
+    '..KMMBBBBBBBBKK.',
+    '..KLLDDDDDDDDKKK',
+    '...KLLPPPPPPK...',
+    '...KLPPPPPWWK...',
+    '....KPPPPPPK....',
+    '...KSSDDDDSSK...',
+    '...KDDGGDDDDK...',
+    '..KPPDDGGDDDK...',
+    '..KKDDDDGGDDK...',
+    '..KGGGGMDDDDK...',
+    '..KGPPGMSSSSK...',
+    '..KMMMMKDDDDK...',
+    '..KDDDK..KDDDK..',
+    '..KDDK....KDDK..',
+    '..KDDK....KMMK..',
+    '..KMMK....KDDDK.',
+    '.KDDDK....KKKKK.',
+    '.KKKKK..........',
+    '................',
+  ],
+};
+
+// ============================================================================
+// 3. HỌC GIẢ / LƯU TRỮ VIÊN / SỬ GIA (ARCHIVIST / SCHOLAR / HISTORIAN) — 16×22
+// Khăn đóng xếp lớp truyền thống (K/L/D), kính trắng ngà lấp lánh (W),
+// áo dài thâm (L/I/D) tà dài chấm gót, tay nâng cuộn thư / sổ sử liệu đỏ son (P/W/R).
+// ============================================================================
+const SCHOLAR_SET: DirectionalCharacterSet = {
+  downIdle: [
+    '....KKKKKKKK....',
+    '...KLLLLLLLLK...',
+    '..KLDDDDDDDDLK..',
+    '..KLLDDDDDDLLK..',
+    '...KPPPPPPPPK...',
+    '..KPWWKPPKWWPK..',
+    '...KPPPPPPPPK...',
+    '...KLLWWWWLLK...',
+    '..KLLLIIIILLLK..',
+    '.KLLLLILLLPPPPK.',
+    '.KPLLLILLLPWRPK.',
+    '..KLLLILLLPPPPK.',
+    '..KLLLIIIILLLK..',
+    '..KLLLLLLLLLLK..',
+    '..KLLLLDDLLLLK..',
+    '..KLLLLDDLLLLK..',
+    '..KLLLKPPKLLLK..',
+    '..KLLLKPPKLLLK..',
+    '..KLLLK..KLLLK..',
+    '...KMMK..KMMK...',
+    '..KDDDK..KDDDK..',
+    '..KKKKK..KKKKK..',
+  ],
+  downBreathe: [
+    '....KKKKKKKK....',
+    '...KLLLLLLLLK...',
+    '..KLDDDDDDDDLK..',
+    '..KLLDDDDDDLLK..',
+    '...KPPPPPPPPK...',
+    '..KPWWKPPKWWPK..',
+    '...KPPPPPPPPK...',
+    '...KLLWWWWLLK...',
+    '..KLLLIIIILLLK..',
+    '.KLLLLILLPPPPK..',
+    '.KPLLLILLPWRPPK.',
+    '..KLLLILLPPPPK..',
+    '..KLLLIIIILLLK..',
+    '..KLLLLLLLLLLK..',
+    '..KLLLLDDLLLLK..',
+    '..KLLLLDDLLLLK..',
+    '..KLLLKPPKLLLK..',
+    '..KLLLKPPKLLLK..',
+    '..KLLLK..KLLLK..',
+    '...KMMK..KMMK...',
+    '..KDDDK..KDDDK..',
+    '..KKKKK..KKKKK..',
+  ],
+  downWalk1: [
+    '....KKKKKKKK....',
+    '...KLLLLLLLLK...',
+    '..KLDDDDDDDDLK..',
+    '..KLLDDDDDDLLK..',
+    '...KPPPPPPPPK...',
+    '..KPWWKPPKWWPK..',
+    '...KPPPPPPPPK...',
+    '...KLLWWWWLLK...',
+    '..KLLLIIIILLLK..',
+    '.KPLLLILLLPPPPK.',
+    '..KLLLILLLPWRPK.',
+    '..KLLLIIIIPPPPK.',
+    '..KLLLLLLLLLLK..',
+    '..KLLLLDDLLLLK..',
+    '.KLLLLKPPKLLLLK.',
+    '.KLLLK.PP.KLLLK.',
+    '.KLLLK....KLLLK.',
+    '..KMMK.....KMMK.',
+    '.KDDDK.....KKKK.',
+    '.KKKKK..........',
+    '................',
+    '................',
+  ],
+  downWalk2: [
+    '....KKKKKKKK....',
+    '...KLLLLLLLLK...',
+    '..KLDDDDDDDDLK..',
+    '..KLLDDDDDDLLK..',
+    '...KPPPPPPPPK...',
+    '..KPWWKPPKWWPK..',
+    '...KPPPPPPPPK...',
+    '...KLLWWWWLLK...',
+    '..KLLLIIIILLLK..',
+    '.KLLLLILLLPPPPK.',
+    '.KPLLLILLLPWRPK.',
+    '..KLLLIIIIPPPPK.',
+    '..KLLLLLLLLLLK..',
+    '..KLLLLDDLLLLK..',
+    '.KLLLLKPPKLLLLK.',
+    '.KLLLK.PP.KLLLK.',
+    '.KLLLK....KLLLK.',
+    '.KMMK.....KMMK..',
+    '.KKKK.....KDDDK.',
+    '..........KKKKK.',
+    '................',
+    '................',
+  ],
+  upIdle: [
+    '....KKKKKKKK....',
+    '...KLLLLLLLLK...',
+    '..KLDDDDDDDDLK..',
+    '..KLLLLLLLLLLK..',
+    '...KLLLLLLLLK...',
+    '...KLLLLLLLLK...',
+    '....KPPPPPPK....',
+    '...KLLWWWWLLK...',
+    '..KLLLLIILLLLK..',
+    '.KLLLLLIILLLLLK.',
+    '.KPLLLLIILLLLPK.',
+    '..KLLLLIILLLLK..',
+    '..KLLLLIILLLLK..',
+    '..KLLLLLLLLLLK..',
+    '..KLLLLDDLLLLK..',
+    '..KLLLLDDLLLLK..',
+    '..KLLLKPPKLLLK..',
+    '..KLLLKPPKLLLK..',
+    '..KLLLK..KLLLK..',
+    '...KMMK..KMMK...',
+    '..KDDDK..KDDDK..',
+    '..KKKKK..KKKKK..',
+  ],
+  upBreathe: [
+    '....KKKKKKKK....',
+    '...KLLLLLLLLK...',
+    '..KLDDDDDDDDLK..',
+    '..KLLLLLLLLLLK..',
+    '...KLLLLLLLLK...',
+    '...KLLLLLLLLK...',
+    '....KPPPPPPK....',
+    '...KLLWWWWLLK...',
+    '..KLLLLIILLLLK..',
+    '.KPLLLLIILLLLPK.',
+    '..KLLLLIILLLLK..',
+    '..KLLLLIILLLLK..',
+    '..KLLLLIILLLLK..',
+    '..KLLLLLLLLLLK..',
+    '..KLLLLDDLLLLK..',
+    '..KLLLLDDLLLLK..',
+    '..KLLLKPPKLLLK..',
+    '..KLLLKPPKLLLK..',
+    '..KLLLK..KLLLK..',
+    '...KMMK..KMMK...',
+    '..KDDDK..KDDDK..',
+    '..KKKKK..KKKKK..',
+  ],
+  upWalk1: [
+    '....KKKKKKKK....',
+    '...KLLLLLLLLK...',
+    '..KLDDDDDDDDLK..',
+    '..KLLLLLLLLLLK..',
+    '...KLLLLLLLLK...',
+    '...KLLLLLLLLK...',
+    '....KPPPPPPK....',
+    '...KLLWWWWLLK...',
+    '..KLLLLIILLLLK..',
+    '.KPLLLLIILLLLPK.',
+    '..KLLLLIILLLLK..',
+    '..KLLLLLLLLLLK..',
+    '..KLLLLDDLLLLK..',
+    '.KLLLLKPPKLLLLK.',
+    '.KLLLK.PP.KLLLK.',
+    '.KLLLK....KLLLK.',
+    '..KMMK.....KMMK.',
+    '.KDDDK.....KKKK.',
+    '.KKKKK..........',
+    '................',
+    '................',
+    '................',
+  ],
+  upWalk2: [
+    '....KKKKKKKK....',
+    '...KLLLLLLLLK...',
+    '..KLDDDDDDDDLK..',
+    '..KLLLLLLLLLLK..',
+    '...KLLLLLLLLK...',
+    '...KLLLLLLLLK...',
+    '....KPPPPPPK....',
+    '...KLLWWWWLLK...',
+    '..KLLLLIILLLLK..',
+    '.KPLLLLIILLLLPK.',
+    '..KLLLLIILLLLK..',
+    '..KLLLLLLLLLLK..',
+    '..KLLLLDDLLLLK..',
+    '.KLLLLKPPKLLLLK.',
+    '.KLLLK.PP.KLLLK.',
+    '.KLLLK....KLLLK.',
+    '.KMMK.....KMMK..',
+    '.KKKK.....KDDDK.',
+    '..........KKKKK.',
+    '................',
+    '................',
+    '................',
+  ],
+  sideIdle: [
+    '....KKKKKKKK....',
+    '...KLLLLLLLLK...',
+    '..KLDDDDDDDDLK..',
+    '..KLLLLDDDDLLK..',
+    '...KLLPPPPPPK...',
+    '...KLPPPWWKWWK..',
+    '....KPPPPPPPK...',
+    '...KLLWWWWLLK...',
+    '...KLLLLIILLK...',
+    '...KLLLLIIPPPPK.',
+    '...KLLLLIIPWRPK.',
+    '...KLLLLPPPPP.K.',
+    '...KLLLLIILLK...',
+    '...KLLLLLLLLK...',
+    '...KLLLDDLLLK...',
+    '..KLLLLPPLLLLK..',
+    '..KLLLKPPKLLLK..',
+    '..KLLLKPPKLLLK..',
+    '...KLLK..KLLK...',
+    '...KMMK..KMMK...',
+    '...KDDDK.KDDDK..',
+    '...KKKKK.KKKKK..',
+  ],
+  sideBreathe: [
+    '....KKKKKKKK....',
+    '...KLLLLLLLLK...',
+    '..KLDDDDDDDDLK..',
+    '..KLLLLDDDDLLK..',
+    '...KLLPPPPPPK...',
+    '...KLPPPWWKWWK..',
+    '....KPPPPPPPK...',
+    '...KLLWWWWLLK...',
+    '...KLLLLIILLK...',
+    '...KLLLLIIPPPPK.',
+    '...KLLLLPPPWPPK.',
+    '...KLLLLIIPRPPK.',
+    '...KLLLLIILLK...',
+    '...KLLLLLLLLK...',
+    '...KLLLDDLLLK...',
+    '..KLLLLPPLLLLK..',
+    '..KLLLKPPKLLLK..',
+    '..KLLLKPPKLLLK..',
+    '...KLLK..KLLK...',
+    '...KMMK..KMMK...',
+    '...KDDDK.KDDDK..',
+    '...KKKKK.KKKKK..',
+  ],
+  sideWalk1: [
+    '....KKKKKKKK....',
+    '...KLLLLLLLLK...',
+    '..KLDDDDDDDDLK..',
+    '..KLLLLDDDDLLK..',
+    '...KLLPPPPPPK...',
+    '...KLPPPWWKWWK..',
+    '....KPPPPPPPK...',
+    '...KLLWWWWLLK...',
+    '...KLLLLIILLK...',
+    '...KLLLLIIPPPPK.',
+    '...KLLLLPPPWRPK.',
+    '...KLLLLIIPPPPK.',
+    '...KLLLLLLLLK...',
+    '..KLLLLDDLLLLK..',
+    '.KLLLLKPPKLLLLK.',
+    '.KLLLK.PP.KLLLK.',
+    '.KLLK......KLLK.',
+    '.KMMK......KMMK.',
+    'KDDDK......KDDDK',
+    'KKKK.......KKKKK',
+    '................',
+    '................',
+  ],
+  sideWalk2: [
+    '....KKKKKKKK....',
+    '...KLLLLLLLLK...',
+    '..KLDDDDDDDDLK..',
+    '..KLLLLDDDDLLK..',
+    '...KLLPPPPPPK...',
+    '...KLPPPWWKWWK..',
+    '....KPPPPPPPK...',
+    '...KLLWWWWLLK...',
+    '...KLLLLIILLK...',
+    '...KLLLLIIPPPPK.',
+    '...KLLLLPPPWRPK.',
+    '...KLLLLIIPPPPK.',
+    '...KLLLLLLLLK...',
+    '..KLLLLDDLLLLK..',
+    '..KLLLKPPKLLLK..',
+    '..KLLLKPPKLLLK..',
+    '..KLLK....KLLK..',
+    '..KMMK....KMMK..',
+    '.KDDDK....KDDDK.',
+    '.KKKKK....KKKK..',
+    '................',
+    '................',
+  ],
+};
+
+// ============================================================================
+// 4. PHU BẾN CẢNG / NGƯỜI QUAN SÁT (WORKER / OBSERVER) — 16×21
+// Nón lá / nón rộng vành chóp nhọn 16px (G/B/M), áo cánh Giấy Dó xắn tay (P/W)
+// khoác ghi-lê nâu gỗ (M/B), đai lưng đỏ son (R), quần vải thô bền chắc (D/S).
+// ============================================================================
+const WORKER_SET: DirectionalCharacterSet = {
+  downIdle: [
+    '......KKKK......',
+    '....KKGGGGKK....',
+    '..KKGGGGGGGGKK..',
+    '.KGGGGGGGGGGGGK.',
+    'KBBBBBBBBBBBBBBK',
+    '...KPPPPPPPPK...',
+    '...KPWKPPKWPK...',
+    '....KPPPPPPK....',
+    '..KPPPMMMPPPPK..',
+    '.KPPPMMBBMMPPPK.',
+    '.KPP.MMBBMM.PPK.',
+    '.....MMBBMM.....',
+    '...KRRRRRRRRK...',
+    '..KMMMMMMMMMMK..',
+    '..KDDDDKKDDDDK..',
+    '..KDDDK..KDDDK..',
+    '..KSSSK..KSSSK..',
+    '...KPPK..KPPK...',
+    '...KMMK..KMMK...',
+    '..KMMMK..KMMMK..',
+    '..KKKKK..KKKKK..',
+  ],
+  downBreathe: [
+    '......KKKK......',
+    '....KKGGGGKK....',
+    '..KKGGGGGGGGKK..',
+    '.KGGGGGGGGGGGGK.',
+    'KBBBBBBBBBBBBBBK',
+    '...KPPPPPPPPK...',
+    '...KPWKPPKWPK...',
+    '....KPPPPPPK....',
+    '..KPPPMMMPPPPK..',
+    '.KPPPMMBBMMPPPK.',
+    '..KPPMMBBMMPPK..',
+    '...K.MMBBMM.K...',
+    '...KRRRRRRRRK...',
+    '..KMMMMMMMMMMK..',
+    '..KDDDDKKDDDDK..',
+    '..KDDDK..KDDDK..',
+    '..KSSSK..KSSSK..',
+    '...KPPK..KPPK...',
+    '...KMMK..KMMK...',
+    '..KMMMK..KMMMK..',
+    '..KKKKK..KKKKK..',
+  ],
+  downWalk1: [
+    '......KKKK......',
+    '....KKGGGGKK....',
+    '..KKGGGGGGGGKK..',
+    '.KGGGGGGGGGGGGK.',
+    'KBBBBBBBBBBBBBBK',
+    '...KPPPPPPPPK...',
+    '...KPWKPPKWPK...',
+    '....KPPPPPPK....',
+    '.KPPPPMMMPPPPK..',
+    '.KPP.MMBBMMPPPK.',
+    '.....MMBBMM.PPK.',
+    '...KRRRRRRRRK...',
+    '..KMMMMMMMMMMK..',
+    '.KDDDDK..KDDDDK.',
+    '.KDDDK....KSSSK.',
+    '.KSSSK.....KPPK.',
+    '..KPPK.....KMMK.',
+    '.KMMMK.....KKKK.',
+    '.KKKKK..........',
+    '................',
+    '................',
+  ],
+  downWalk2: [
+    '......KKKK......',
+    '....KKGGGGKK....',
+    '..KKGGGGGGGGKK..',
+    '.KGGGGGGGGGGGGK.',
+    'KBBBBBBBBBBBBBBK',
+    '...KPPPPPPPPK...',
+    '...KPWKPPKWPK...',
+    '....KPPPPPPK....',
+    '..KPPPPMMMPPPPK.',
+    '.KPPPMMBBMM.PPK.',
+    '.KPP.MMBBMM.....',
+    '...KRRRRRRRRK...',
+    '..KMMMMMMMMMMK..',
+    '.KDDDDK..KDDDDK.',
+    '.KSSSK....KDDDK.',
+    '.KPPK.....KSSSK.',
+    '.KMMK.....KPPK..',
+    '.KKKK.....KMMMK.',
+    '..........KKKKK.',
+    '................',
+    '................',
+  ],
+  upIdle: [
+    '......KKKK......',
+    '....KKGGGGKK....',
+    '..KKGGGGGGGGKK..',
+    '.KGGGGGGGGGGGGK.',
+    'KBBBBBBBBBBBBBBK',
+    '...KLLLLLLLLK...',
+    '....KPPPPPPK....',
+    '..KPPPMMMMPPPK..',
+    '.KPPPMMBBMMPPPK.',
+    '.KPP.MMBBMM.PPK.',
+    '.....MMBBMM.....',
+    '...KRRRRRRRRK...',
+    '..KMMMMMMMMMMK..',
+    '..KDDDDKKDDDDK..',
+    '..KDDDK..KDDDK..',
+    '..KSSSK..KSSSK..',
+    '...KPPK..KPPK...',
+    '...KMMK..KMMK...',
+    '..KMMMK..KMMMK..',
+    '..KKKKK..KKKKK..',
+    '................',
+  ],
+  upBreathe: [
+    '......KKKK......',
+    '....KKGGGGKK....',
+    '..KKGGGGGGGGKK..',
+    '.KGGGGGGGGGGGGK.',
+    'KBBBBBBBBBBBBBBK',
+    '...KLLLLLLLLK...',
+    '....KPPPPPPK....',
+    '..KPPPMMMMPPPK..',
+    '.KPPPMMBBMMPPPK.',
+    '..KPPMMBBMMPPK..',
+    '...K.MMBBMM.K...',
+    '...KRRRRRRRRK...',
+    '..KMMMMMMMMMMK..',
+    '..KDDDDKKDDDDK..',
+    '..KDDDK..KDDDK..',
+    '..KSSSK..KSSSK..',
+    '...KPPK..KPPK...',
+    '...KMMK..KMMK...',
+    '..KMMMK..KMMMK..',
+    '..KKKKK..KKKKK..',
+    '................',
+  ],
+  upWalk1: [
+    '......KKKK......',
+    '....KKGGGGKK....',
+    '..KKGGGGGGGGKK..',
+    '.KGGGGGGGGGGGGK.',
+    'KBBBBBBBBBBBBBBK',
+    '...KLLLLLLLLK...',
+    '....KPPPPPPK....',
+    '.KPPPPMMMMPPPK..',
+    '.KPP.MMBBMMPPPK.',
+    '.....MMBBMM.PPK.',
+    '...KRRRRRRRRK...',
+    '..KMMMMMMMMMMK..',
+    '.KDDDDK..KDDDDK.',
+    '.KDDDK....KSSSK.',
+    '.KSSSK.....KPPK.',
+    '..KPPK.....KMMK.',
+    '.KMMMK.....KKKK.',
+    '.KKKKK..........',
+    '................',
+    '................',
+    '................',
+  ],
+  upWalk2: [
+    '......KKKK......',
+    '....KKGGGGKK....',
+    '..KKGGGGGGGGKK..',
+    '.KGGGGGGGGGGGGK.',
+    'KBBBBBBBBBBBBBBK',
+    '...KLLLLLLLLK...',
+    '....KPPPPPPK....',
+    '..KPPPPMMMMPPPK.',
+    '.KPPPMMBBMM.PPK.',
+    '.KPP.MMBBMM.....',
+    '...KRRRRRRRRK...',
+    '..KMMMMMMMMMMK..',
+    '.KDDDDK..KDDDDK.',
+    '.KSSSK....KDDDK.',
+    '.KPPK.....KSSSK.',
+    '.KMMK.....KPPK..',
+    '.KKKK.....KMMMK.',
+    '..........KKKKK.',
+    '................',
+    '................',
+    '................',
+  ],
+  sideIdle: [
+    '......KKKK......',
+    '....KKGGGGKK....',
+    '..KKGGGGGGGGKK..',
+    '.KGGGGGGGGGGGGK.',
+    'KBBBBBBBBBBBBBBK',
+    '...KLLPPPPPPK...',
+    '...KLPPPPPWWK...',
+    '....KPPPPPPK....',
+    '...KMMBBBBMMK...',
+    '...KMMBPPBMMK...',
+    '...KMMBPPBMMK...',
+    '...KMMBBBBMMK...',
+    '...KRRRRRRRRK...',
+    '...KMMMMMMMMK...',
+    '...KDDDDDDDDK...',
+    '...KDDDK.KDDK...',
+    '...KSSK..KSSK...',
+    '...KPPK..KPPK...',
+    '...KMMK..KMMK...',
+    '...KMMMK.KMMMK..',
+    '...KKKKK.KKKKK..',
+  ],
+  sideBreathe: [
+    '......KKKK......',
+    '....KKGGGGKK....',
+    '..KKGGGGGGGGKK..',
+    '.KGGGGGGGGGGGGK.',
+    'KBBBBBBBBBBBBBBK',
+    '...KLLPPPPPPK...',
+    '...KLPPPPPWWK...',
+    '....KPPPPPPK....',
+    '...KMMBBBBMMK...',
+    '...KMMBPPBMMK...',
+    '...KMMBBBBPPK...',
+    '...KMMBBBBMMK...',
+    '...KRRRRRRRRK...',
+    '...KMMMMMMMMK...',
+    '...KDDDDDDDDK...',
+    '...KDDDK.KDDK...',
+    '...KSSK..KSSK...',
+    '...KPPK..KPPK...',
+    '...KMMK..KMMK...',
+    '...KMMMK.KMMMK..',
+    '...KKKKK.KKKKK..',
+  ],
+  sideWalk1: [
+    '......KKKK......',
+    '....KKGGGGKK....',
+    '..KKGGGGGGGGKK..',
+    '.KGGGGGGGGGGGGK.',
+    'KBBBBBBBBBBBBBBK',
+    '...KLLPPPPPPK...',
+    '...KLPPPPPWWK...',
+    '....KPPPPPPK....',
+    '...KMMBBBBMMK...',
+    '...KMMBBBBPPPK..',
+    '...KMMBBBBMMKK..',
+    '...KRRRRRRRRK...',
+    '...KMMMMMMMMK...',
+    '..KDDDDKKDDDDK..',
+    '.KDDDK....KDDDK.',
+    '.KSSK......KSSK.',
+    '.KPPK......KPPK.',
+    'KMMMK......KMMMK',
+    'KKKK.......KKKKK',
+    '................',
+    '................',
+  ],
+  sideWalk2: [
+    '......KKKK......',
+    '....KKGGGGKK....',
+    '..KKGGGGGGGGKK..',
+    '.KGGGGGGGGGGGGK.',
+    'KBBBBBBBBBBBBBBK',
+    '...KLLPPPPPPK...',
+    '...KLPPPPPWWK...',
+    '....KPPPPPPK....',
+    '...KMMBBBBMMK...',
+    '..KPPPMBBBMMK...',
+    '..KKMMBBBBMMK...',
+    '...KRRRRRRRRK...',
+    '...KMMMMMMMMK...',
+    '..KDDDDKKDDDDK..',
+    '..KDDDK..KDDDK..',
+    '..KSSK....KSSK..',
+    '..KPPK....KPPK..',
+    '.KMMMK....KMMMK.',
+    '.KKKKK....KKKK..',
+    '................',
+    '................',
+  ],
+};
+
+// ============================================================================
+// 5. LÍNH TUẦN TRA THUỘC ĐỊA (GUARD) — 16×22
+// Mũ kepi / mũ cối tuần tra chóp cao gắn huy hiệu đồng (S/I/K + G),
+// cầu vai rộng đính lon đỏ son (R/V), quân phục tối thắt dây chéo & thắt lưng đỏ (L/I/R/G).
+// ============================================================================
+const GUARD_SET: DirectionalCharacterSet = {
+  downIdle: [
+    '.....KKKKKK.....',
+    '....KSSSSSSK....',
+    '...KSSGGSSSSK...',
+    '..KIIIIIIIIIIK..',
+    '..KKKKKKKKKKKK..',
+    '...KPPPPPPPPK...',
+    '...KPKKPPKKPK...',
+    '....KPPPPPPK....',
+    '.KRRVLLLLLLVRRK.',
+    'KLLLLLRLLLLLLLLK',
+    'KLLLLLLRLLLLLLLK',
+    'KPLLLLLLRLLLLLPK',
+    '.KRRRRGGGGRRRRK.',
+    '..KLLLLIILLLLK..',
+    '..KLLLLKKLLLLK..',
+    '..KLLLK..KLLLK..',
+    '..KIIIK..KIIIK..',
+    '...KLLK..KLLK...',
+    '...KLLK..KLLK...',
+    '...KDDK..KDDK...',
+    '..KKKKK..KKKKK..',
+    '..KKKKK..KKKKK..',
+  ],
+  downBreathe: [
+    '.....KKKKKK.....',
+    '....KSSSSSSK....',
+    '...KSSWGSSSSK...',
+    '..KIIIIIIIIIIK..',
+    '..KKKKKKKKKKKK..',
+    '...KPPPPPPPPK...',
+    '...KPKKPPKKPK...',
+    '....KPPPPPPK....',
+    '.KRRVLLLLLLVRRK.',
+    'KLLLLLRLLLLLLLLK',
+    'KPLLLLLRLLLLLLPK',
+    '.KLLLLLLRLLLLLK.',
+    '.KRRRRGGGGRRRRK.',
+    '..KLLLLIILLLLK..',
+    '..KLLLLKKLLLLK..',
+    '..KLLLK..KLLLK..',
+    '..KIIIK..KIIIK..',
+    '...KLLK..KLLK...',
+    '...KLLK..KLLK...',
+    '...KDDK..KDDK...',
+    '..KKKKK..KKKKK..',
+    '..KKKKK..KKKKK..',
+  ],
+  downWalk1: [
+    '.....KKKKKK.....',
+    '....KSSSSSSK....',
+    '...KSSGGSSSSK...',
+    '..KIIIIIIIIIIK..',
+    '..KKKKKKKKKKKK..',
+    '...KPPPPPPPPK...',
+    '...KPKKPPKKPK...',
+    '....KPPPPPPK....',
+    '.KRRVLLLLLLVRRK.',
+    'KPLLLLRLLLLLLLLK',
+    '.KLLLLLRLLLLLLPK',
+    '.KRRRRGGGGRRRRK.',
+    '..KLLLLIILLLLK..',
+    '.KLLLLK..KLLLLK.',
+    '.KLLLK....KIIIK.',
+    '.KIIIK.....KLLK.',
+    '..KLLK.....KDDK.',
+    '..KDDK.....KKKK.',
+    '.KKKKK..........',
+    '.KKKKK..........',
+    '................',
+    '................',
+  ],
+  downWalk2: [
+    '.....KKKKKK.....',
+    '....KSSSSSSK....',
+    '...KSSGGSSSSK...',
+    '..KIIIIIIIIIIK..',
+    '..KKKKKKKKKKKK..',
+    '...KPPPPPPPPK...',
+    '...KPKKPPKKPK...',
+    '....KPPPPPPK....',
+    '.KRRVLLLLLLVRRK.',
+    'KLLLLLRLLLLLLLPK',
+    'KPLLLLLRLLLLLLK.',
+    '.KRRRRGGGGRRRRK.',
+    '..KLLLLIILLLLK..',
+    '.KLLLLK..KLLLLK.',
+    '.KIIIK....KLLLK.',
+    '.KLLK.....KIIIK.',
+    '.KDDK.....KLLK..',
+    '.KKKK.....KDDK..',
+    '..........KKKKK.',
+    '..........KKKKK.',
+    '................',
+    '................',
+  ],
+  upIdle: [
+    '.....KKKKKK.....',
+    '....KSSSSSSK....',
+    '...KSSSSSSSSK...',
+    '..KIIIIIIIIIIK..',
+    '...KLLLLLLLLK...',
+    '...KLLLLLLLLK...',
+    '....KLLLLLLK....',
+    '.KRRVLLLLLLVRRK.',
+    'KLLLLLLLLRLLLLLK',
+    'KLLLLLLLRLLLLLLK',
+    'KPLLLLLRLLLLLLPK',
+    '.KRRRRRRRRRRRRK.',
+    '..KLLLLIILLLLK..',
+    '..KLLLLKKLLLLK..',
+    '..KLLLK..KLLLK..',
+    '..KIIIK..KIIIK..',
+    '...KLLK..KLLK...',
+    '...KLLK..KLLK...',
+    '...KDDK..KDDK...',
+    '..KKKKK..KKKKK..',
+    '..KKKKK..KKKKK..',
+    '................',
+  ],
+  upBreathe: [
+    '.....KKKKKK.....',
+    '....KSSSSSSK....',
+    '...KSSSSSSSSK...',
+    '..KIIIIIIIIIIK..',
+    '...KLLLLLLLLK...',
+    '...KLLLLLLLLK...',
+    '....KLLLLLLK....',
+    '.KRRVLLLLLLVRRK.',
+    'KLLLLLLLLRLLLLLK',
+    'KPLLLLLLRLLLLLPK',
+    '.KLLLLLRLLLLLLK.',
+    '.KRRRRRRRRRRRRK.',
+    '..KLLLLIILLLLK..',
+    '..KLLLLKKLLLLK..',
+    '..KLLLK..KLLLK..',
+    '..KIIIK..KIIIK..',
+    '...KLLK..KLLK...',
+    '...KLLK..KLLK...',
+    '...KDDK..KDDK...',
+    '..KKKKK..KKKKK..',
+    '..KKKKK..KKKKK..',
+    '................',
+  ],
+  upWalk1: [
+    '.....KKKKKK.....',
+    '....KSSSSSSK....',
+    '...KSSSSSSSSK...',
+    '..KIIIIIIIIIIK..',
+    '...KLLLLLLLLK...',
+    '...KLLLLLLLLK...',
+    '....KLLLLLLK....',
+    '.KRRVLLLLLLVRRK.',
+    'KPLLLLLLLRLLLLLK',
+    '.KLLLLLLRLLLLLPK',
+    '.KRRRRRRRRRRRRK.',
+    '..KLLLLIILLLLK..',
+    '.KLLLLK..KLLLLK.',
+    '.KLLLK....KIIIK.',
+    '.KIIIK.....KLLK.',
+    '..KLLK.....KDDK.',
+    '..KDDK.....KKKK.',
+    '.KKKKK..........',
+    '.KKKKK..........',
+    '................',
+    '................',
+    '................',
+  ],
+  upWalk2: [
+    '.....KKKKKK.....',
+    '....KSSSSSSK....',
+    '...KSSSSSSSSK...',
+    '..KIIIIIIIIIIK..',
+    '...KLLLLLLLLK...',
+    '...KLLLLLLLLK...',
+    '....KLLLLLLK....',
+    '.KRRVLLLLLLVRRK.',
+    'KLLLLLLLLRLLLLPK',
+    'KPLLLLLLRLLLLLK.',
+    '.KRRRRRRRRRRRRK.',
+    '..KLLLLIILLLLK..',
+    '.KLLLLK..KLLLLK.',
+    '.KIIIK....KLLLK.',
+    '.KLLK.....KIIIK.',
+    '.KDDK.....KLLK..',
+    '.KKKK.....KDDK..',
+    '..........KKKKK.',
+    '..........KKKKK.',
+    '................',
+    '................',
+    '................',
+  ],
+  sideIdle: [
+    '.....KKKKKK.....',
+    '....KSSSSSSK....',
+    '...KSSSSSSGGK...',
+    '..KIIIIIIIIIIKK.',
+    '...KLLKKKKKKK...',
+    '...KLLPPPPPPK...',
+    '...KLPPPPKKPK...',
+    '....KPPPPPPK....',
+    '..KKLLLLRRVLLK..',
+    '..KLLLLLRRLLLK..',
+    '..KLLLLLLLLLLK..',
+    '..KLLLLPPPLLLK..',
+    '..KRRRRGGGRRRK..',
+    '..KLLLLIILLLLK..',
+    '..KLLLLLLLLLLK..',
+    '...KLLLK.KLLLK..',
+    '...KIIIK.KIIIK..',
+    '...KLLK...KLLK..',
+    '...KLLK...KLLK..',
+    '...KDDK...KDDK..',
+    '...KKKKK..KKKKK.',
+    '...KKKKK..KKKKK.',
+  ],
+  sideBreathe: [
+    '.....KKKKKK.....',
+    '....KSSSSSSK....',
+    '...KSSSSSSWGK...',
+    '..KIIIIIIIIIIKK.',
+    '...KLLKKKKKKK...',
+    '...KLLPPPPPPK...',
+    '...KLPPPPKKPK...',
+    '....KPPPPPPK....',
+    '..KKLLLLRRVLLK..',
+    '..KLLLLLRRLLLK..',
+    '..KLLLLLLLPPPK..',
+    '..KLLLLLLLLLLK..',
+    '..KRRRRGGGRRRK..',
+    '..KLLLLIILLLLK..',
+    '..KLLLLLLLLLLK..',
+    '...KLLLK.KLLLK..',
+    '...KIIIK.KIIIK..',
+    '...KLLK...KLLK..',
+    '...KLLK...KLLK..',
+    '...KDDK...KDDK..',
+    '...KKKKK..KKKKK.',
+    '...KKKKK..KKKKK.',
+  ],
+  sideWalk1: [
+    '.....KKKKKK.....',
+    '....KSSSSSSK....',
+    '...KSSSSSSGGK...',
+    '..KIIIIIIIIIIKK.',
+    '...KLLKKKKKKK...',
+    '...KLLPPPPPPK...',
+    '...KLPPPPKKPK...',
+    '....KPPPPPPK....',
+    '..KKLLLLRRVLLK..',
+    '..KLLLLLRRLLPPK.',
+    '..KLLLLLLLLLLKK.',
+    '..KRRRRGGGRRRK..',
+    '..KLLLLIILLLLK..',
+    '.KLLLLK..KLLLLK.',
+    '.KLLLK....KLLLK.',
+    '.KIIIK.....KIIIK',
+    '.KLLK......KLLK.',
+    'KDDDK......KDDK.',
+    'KKKK.......KKKKK',
+    '...........KKKKK',
+    '................',
+    '................',
+  ],
+  sideWalk2: [
+    '.....KKKKKK.....',
+    '....KSSSSSSK....',
+    '...KSSSSSSGGK...',
+    '..KIIIIIIIIIIKK.',
+    '...KLLKKKKKKK...',
+    '...KLLPPPPPPK...',
+    '...KLPPPPKKPK...',
+    '....KPPPPPPK....',
+    '..KKLLLLRRVLLK..',
+    '.KPPPLLLRRLLLK..',
+    '.KKLLLLLLLLLLK..',
+    '..KRRRRGGGRRRK..',
+    '..KLLLLIILLLLK..',
+    '..KLLLK..KLLLK..',
+    '..KIIIK..KIIIK..',
+    '..KLLK....KLLK..',
+    '..KDDK....KDDK..',
+    '.KKKKK....KKKKK.',
+    '.KKKKK....KKKK..',
+    '................',
+    '................',
+    '................',
+  ],
+};
+
+function getCharacterSetForRole(role: CharacterAtlasRole): DirectionalCharacterSet {
+  switch (role) {
+    case 'player':
+    case 'traveler':
+      return TRAVELER_SET;
+    case 'courier':
+    case 'liaison':
+      return COURIER_SET;
+    case 'archivist':
+    case 'scholar':
+    case 'historian':
+      return SCHOLAR_SET;
+    case 'observer':
+    case 'worker':
+      return WORKER_SET;
+    case 'guard':
+      return GUARD_SET;
+    default:
+      return SCHOLAR_SET;
+  }
+}
+
+function drawGroundedContactShadow(
+  ctx: CanvasRenderingContext2D,
+  footX: number,
+  footY: number
+): void {
+  const rx = Math.round(footX);
+  const ry = Math.round(footY);
+  ctx.save();
+  ctx.fillStyle = 'rgba(17, 14, 11, 0.52)';
+  ctx.fillRect(rx - 5, ry - 3, 10, 1);
+  ctx.fillRect(rx - 6, ry - 2, 12, 3);
+  ctx.fillRect(rx - 5, ry + 1, 10, 1);
+  ctx.restore();
 }
 
 export function drawMatrixSprite(
@@ -325,7 +1608,8 @@ export function drawCharacter4Dir(
   role: CharacterAtlasRole,
   facing: Facing4,
   walkFrame: number,
-  isSheltered?: boolean
+  isSheltered?: boolean,
+  reducedMotion?: boolean
 ): void;
 export function drawCharacter4Dir(
   ctx: CanvasRenderingContext2D,
@@ -335,7 +1619,8 @@ export function drawCharacter4Dir(
   facing: Facing4,
   isMoving: boolean,
   isSheltered: boolean,
-  timeSec: number
+  timeSec: number,
+  reducedMotion?: boolean
 ): void;
 export function drawCharacter4Dir(
   ctx: CanvasRenderingContext2D,
@@ -345,73 +1630,103 @@ export function drawCharacter4Dir(
   facing: Facing4,
   arg5: number | boolean,
   arg6 = false,
-  arg7 = 0
+  arg7: number | boolean = 0,
+  arg8?: boolean
 ): void {
   let role: CharacterAtlasRole;
   let x: number;
   let y: number;
-  let stepPhase: number;
-  let isMoving: boolean;
+  let stepPhase = 0;
+  let isMoving = false;
+  let timeSec = 0;
   const isSheltered = Boolean(arg6);
+
+  const domReducedMotion =
+    typeof document !== 'undefined' &&
+    Boolean(document.body?.classList.contains('reduced-motion'));
+
+  let reducedMotion = domReducedMotion;
 
   if (typeof arg1 === 'number') {
     x = arg1;
     y = arg2;
     role = arg3 as CharacterAtlasRole;
+    if (typeof arg7 === 'boolean') {
+      reducedMotion = arg7;
+    }
     const wf = Math.abs(Math.floor(Number(arg5)));
-    isMoving = wf > 0;
-    stepPhase = wf % 4;
+    isMoving = !reducedMotion && wf > 0;
+    stepPhase = reducedMotion ? 0 : wf % 4;
   } else {
     role = arg1;
     x = arg2;
     y = Number(arg3);
-    isMoving = Boolean(arg5);
-    stepPhase = isMoving ? Math.floor(arg7 * 8) % 4 : 0;
+    timeSec = typeof arg7 === 'number' && Number.isFinite(arg7) ? Math.max(0, arg7) : 0;
+    if (typeof arg8 === 'boolean') {
+      reducedMotion = arg8;
+    }
+    isMoving = !reducedMotion && Boolean(arg5);
+    stepPhase = isMoving ? Math.floor(timeSec * 8) % 4 : 0;
   }
 
-  let baseMatrix: string[];
-  let flipX = false;
+  const charSet = getCharacterSetForRole(role);
+  const idleBreatheActive =
+    !isMoving && !reducedMotion && Math.floor(timeSec / 0.9) % 2 === 1;
 
-  if (isSheltered && (role === 'traveler' || role === 'player')) {
-    baseMatrix = TRAVELER_CROUCH;
+  let finalMatrix: string[];
+  let flipX = false;
+  let bobOffsetPx = 0;
+
+  if (isSheltered && charSet.crouch && (role === 'traveler' || role === 'player')) {
+    finalMatrix = charSet.crouch;
     flipX = facing === 'left';
   } else if (facing === 'up') {
-    baseMatrix = !isMoving
-      ? TRAVELER_UP_IDLE
-      : stepPhase === 1
-        ? TRAVELER_UP_WALK_1
-        : stepPhase === 3
-          ? TRAVELER_UP_WALK_2
-          : TRAVELER_UP_IDLE;
+    if (!isMoving) {
+      finalMatrix = idleBreatheActive ? charSet.upBreathe : charSet.upIdle;
+    } else if (stepPhase === 1) {
+      finalMatrix = charSet.upWalk1;
+      bobOffsetPx = -1;
+    } else if (stepPhase === 3) {
+      finalMatrix = charSet.upWalk2;
+      bobOffsetPx = -1;
+    } else {
+      finalMatrix = charSet.upIdle;
+    }
   } else if (facing === 'left' || facing === 'right') {
     flipX = facing === 'left';
-    baseMatrix = !isMoving
-      ? TRAVELER_SIDE_IDLE
-      : stepPhase === 1
-        ? TRAVELER_SIDE_WALK_1
-        : stepPhase === 3
-          ? TRAVELER_SIDE_WALK_2
-          : TRAVELER_SIDE_IDLE;
+    if (!isMoving) {
+      finalMatrix = idleBreatheActive ? charSet.sideBreathe : charSet.sideIdle;
+    } else if (stepPhase === 1) {
+      finalMatrix = charSet.sideWalk1;
+      bobOffsetPx = -1;
+    } else if (stepPhase === 3) {
+      finalMatrix = charSet.sideWalk2;
+      bobOffsetPx = -1;
+    } else {
+      finalMatrix = charSet.sideIdle;
+    }
   } else {
-    baseMatrix = !isMoving
-      ? TRAVELER_IDLE
-      : stepPhase === 1
-        ? TRAVELER_WALK_1
-        : stepPhase === 3
-          ? TRAVELER_WALK_2
-          : TRAVELER_IDLE;
+    if (!isMoving) {
+      finalMatrix = idleBreatheActive ? charSet.downBreathe : charSet.downIdle;
+    } else if (stepPhase === 1) {
+      finalMatrix = charSet.downWalk1;
+      bobOffsetPx = -1;
+    } else if (stepPhase === 3) {
+      finalMatrix = charSet.downWalk2;
+      bobOffsetPx = -1;
+    } else {
+      finalMatrix = charSet.downIdle;
+    }
   }
 
-  const finalMatrix = remapMatrixForRole(baseMatrix, role);
+  // Bóng đổ tiếp đất hình elip chuẩn xác tại tâm chân (footX, footY)
+  drawGroundedContactShadow(ctx, x, y);
 
-  // Bóng đổ tiếp đất hình elip dưới chân nhân vật
-  ctx.save();
-  ctx.fillStyle = 'rgba(15, 12, 10, 0.45)';
-  ctx.fillRect(Math.round(x - 5), Math.round(y - 2), 10, 3);
-  ctx.fillRect(Math.round(x - 4), Math.round(y - 3), 8, 1);
-  ctx.restore();
+  const cols = finalMatrix[0]?.length ?? CHARACTER_SPRITE_WIDTH;
+  const drawX = Math.round(x - cols * 0.5);
+  const drawY = Math.round(y - finalMatrix.length + bobOffsetPx);
 
-  drawMatrixSprite(ctx, finalMatrix, x - 6, y - finalMatrix.length, 1, flipX);
+  drawMatrixSprite(ctx, finalMatrix, drawX, drawY, 1, flipX);
 }
 
 export function drawTravelerSprite(
@@ -423,13 +1738,16 @@ export function drawTravelerSprite(
   isSheltered: boolean,
   timeSec: number
 ): void {
-  const frame = isSheltered
-    ? TRAVELER_CROUCH
-    : isMoving && Math.floor(timeSec * 8) % 2 === 1
-      ? TRAVELER_WALK_1
-      : TRAVELER_IDLE;
-
-  drawMatrixSprite(ctx, frame, x - 6, y - frame.length, 1, !facingRight);
+  drawCharacter4Dir(
+    ctx,
+    'traveler',
+    x,
+    y,
+    facingRight ? 'right' : 'left',
+    isMoving,
+    isSheltered,
+    timeSec
+  );
 }
 
 export function drawNpcSprite(
@@ -438,7 +1756,17 @@ export function drawNpcSprite(
   y: number,
   facingRight: boolean
 ): void {
-  drawMatrixSprite(ctx, NPC_HISTORIAN, x - 6, y - NPC_HISTORIAN.length, 1, !facingRight);
+  drawCharacter4Dir(
+    ctx,
+    'historian',
+    x,
+    y,
+    facingRight ? 'right' : 'left',
+    false,
+    false,
+    0,
+    true
+  );
 }
 
 export function drawTopDownTile(
@@ -950,4 +2278,3 @@ export function drawCuratedProp(
   drawTopDownTile(ctx, slotIdx + 1, Math.round(x), Math.round(y), false);
   ctx.restore();
 }
-
