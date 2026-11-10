@@ -2,12 +2,12 @@
 <html lang="vi">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Lữ Khách Ký Ức (1930 – 2045) — Sơn Mài & Giấy Dó HD-2D Pixel Chronicle</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Lữ Khách Ký Ức (1930 – 2045) — Hành Trình Lịch Sử Sơn Mài &amp; Giấy Dó</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=JetBrains+Mono:wght@400;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap"
       rel="stylesheet"
     />
     <style>
@@ -25,6 +25,13 @@
         --crimson-vermilion: #df6b57;
         --parchment-warm: #e6e5dc;
         --parchment-light: #f4efe4;
+
+        /* Hệ thống phông chữ tiếng Việt sắc nét */
+        --font-display: 'Cormorant Garamond', 'Noto Serif', Georgia, 'Times New Roman', serif;
+        --font-serif: 'Newsreader', 'Be Vietnam Pro', Georgia, serif;
+        --font-ui: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          sans-serif;
+        --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       }
 
       * {
@@ -33,21 +40,929 @@
         padding: 0;
       }
 
-      html,
-      body {
-        width: 100%;
-        min-height: 100vh;
-        background-color: var(--lacquer-void);
-        color: var(--parchment-light);
-        font-family: 'Newsreader', Georgia, serif;
-        overflow-x: hidden;
+      [hidden] {
+        display: none !important;
       }
 
-      /* 1. LỚP PHỦ MỞ MÀN NỨT VỠ MÀNG ĐEN 16 MẢNH (0.0s -> 4.8s) */
+      html {
+        font-size: 16px;
+        -webkit-text-size-adjust: 100%;
+      }
+
+      html.text-scale-large {
+        font-size: 114%;
+      }
+
+      html,
+      body {
+        width: 100vw;
+        height: 100dvh;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background-color: var(--lacquer-void);
+        color: var(--parchment-light);
+        font-family: var(--font-ui);
+        line-height: 1.5;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+
+      body.text-scale-large {
+        font-size: 114%;
+      }
+
+      body.reduced-motion *,
+      body.reduced-motion *::before,
+      body.reduced-motion *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+      }
+
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+        color: inherit;
+      }
+
+      /* ==========================================================================
+         KHUNG VỎ RPG TOÀN MÀN HÌNH (#game-shell)
+         ========================================================================== */
+      #game-shell {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100dvh;
+        overflow: hidden;
+        background: var(--lacquer-void);
+      }
+
+      /* 1. KHUNG NHÌN THẾ GIỚI 100% (#stage-viewport.main-stage) */
+      #stage-viewport.main-stage {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        max-width: none;
+      }
+
+      .pixel-frame-wrapper.canvas-frame {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        max-height: none;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--lacquer-void);
+        overflow: hidden;
+      }
+
+      #pixel-canvas {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+        display: block;
+        flex-shrink: 0;
+      }
+
+      /* NHÃN TƯƠNG TÁC NỔI TRONG KHÔNG GIAN MÀN HÌNH (#world-interaction-prompt) */
+      .world-interaction-prompt {
+        position: absolute;
+        left: 50%;
+        top: 72%;
+        transform: translate(-50%, -100%);
+        z-index: 150;
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        padding: 7px 14px 7px 9px;
+        background: var(--lacquer-deep);
+        color: var(--parchment-light);
+        border: 1.5px solid var(--bronze-bright);
+        box-shadow: 0 8px 22px rgba(17, 14, 11, 0.88), inset 0 0 0 1px rgba(212, 165, 93, 0.22);
+        font-family: var(--font-ui);
+        font-size: 1rem;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        white-space: nowrap;
+        pointer-events: none;
+      }
+
+      .prompt-key,
+      .choice-key,
+      .hud-keycap {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 24px;
+        height: 24px;
+        padding: 0 6px;
+        background: var(--crimson-seal);
+        color: var(--parchment-light);
+        border: 1px solid var(--bronze-bright);
+        font-family: var(--font-mono);
+        font-size: 0.82rem;
+        font-weight: 600;
+        line-height: 1;
+      }
+
+      /* THÔNG BÁO TOAST TRUNG TÂM (#stage-toast) */
+      #stage-toast {
+        position: fixed;
+        top: 18px;
+        left: 50%;
+        transform: translateX(-50%) translateY(-10px);
+        z-index: 700;
+        max-width: min(720px, calc(100vw - 32px));
+        background: var(--lacquer-deep);
+        color: var(--parchment-light);
+        border: 1.5px solid var(--bronze-bright);
+        border-left: 4px solid var(--crimson-seal);
+        box-shadow: 0 10px 28px rgba(17, 14, 11, 0.88);
+        padding: 10px 18px;
+        font-family: var(--font-ui);
+        font-size: 1rem;
+        font-weight: 500;
+        text-align: center;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.22s ease-out, transform 0.22s ease-out;
+      }
+
+      #stage-toast.is-visible {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+
+      /* ==========================================================================
+         2. LỚP HUD NGỮ CẢNH TỐI GIẢN (#hud-layer)
+         ========================================================================== */
+      #hud-layer {
+        position: absolute;
+        inset: 0;
+        z-index: 180;
+        pointer-events: none;
+      }
+
+      #hud-top-left {
+        position: absolute;
+        top: 14px;
+        left: 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+        max-width: min(44vw, 440px);
+      }
+
+      .hud-location-plaque {
+        display: inline-flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 7px 14px;
+        background: rgba(27, 22, 18, 0.94);
+        border: 1px solid var(--bronze-antique);
+        border-left: 3px solid var(--crimson-seal);
+        box-shadow: 0 6px 18px rgba(17, 14, 11, 0.72);
+      }
+
+      #stage-chapter-num {
+        font-family: var(--font-mono);
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--crimson-vermilion);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .hud-plaque-sep {
+        color: var(--bronze-antique);
+        font-size: 0.72rem;
+      }
+
+      #stage-location-badge {
+        font-family: var(--font-ui);
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--parchment-light);
+      }
+
+      #stage-shelter-status {
+        display: inline-flex;
+        align-items: center;
+        padding: 5px 12px;
+        font-family: var(--font-ui);
+        font-size: 0.92rem;
+        font-weight: 600;
+        background: var(--lacquer-deep);
+        border: 1px solid var(--bronze-antique);
+        color: var(--parchment-light);
+      }
+
+      #stage-shelter-status.is-sheltered {
+        background: var(--lacquer-elevated);
+        border-color: var(--bronze-bright);
+        color: var(--bronze-bright);
+      }
+
+      #stage-shelter-status.is-suspicious {
+        background: var(--bronze-muted);
+        border-color: var(--bronze-bright);
+        color: var(--parchment-light);
+      }
+
+      #stage-shelter-status.is-alert {
+        background: var(--crimson-seal);
+        border-color: var(--crimson-vermilion);
+        color: var(--parchment-light);
+      }
+
+      #hud-top-right {
+        position: absolute;
+        top: 14px;
+        right: 16px;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        max-width: min(52vw, 520px);
+      }
+
+      #hud-objective-tracker {
+        background: rgba(27, 22, 18, 0.94);
+        border: 1px solid var(--bronze-antique);
+        border-right: 3px solid var(--bronze-bright);
+        box-shadow: 0 6px 18px rgba(17, 14, 11, 0.72);
+        padding: 8px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        max-width: 410px;
+      }
+
+      #hud-active-quest-title {
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        color: var(--bronze-bright);
+      }
+
+      #hud-active-objective-text {
+        font-family: var(--font-ui);
+        font-size: 1rem;
+        font-weight: 500;
+        line-height: 1.42;
+        color: var(--parchment-light);
+      }
+
+      #hud-active-objective-hint {
+        font-family: var(--font-ui);
+        font-size: 0.90625rem; /* 14.5px */
+        line-height: 1.4;
+        color: var(--crimson-vermilion);
+        margin-top: 2px;
+      }
+
+      #btn-open-pause {
+        pointer-events: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 44px;
+        padding: 8px 12px;
+        background: rgba(27, 22, 18, 0.95);
+        color: var(--parchment-light);
+        border: 1px solid var(--bronze-antique);
+        box-shadow: 0 6px 18px rgba(17, 14, 11, 0.72);
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: background-color 0.16s ease, border-color 0.16s ease;
+      }
+
+      #btn-open-pause:hover {
+        background: var(--lacquer-elevated);
+        border-color: var(--bronze-bright);
+      }
+
+      #btn-open-pause svg {
+        width: 18px;
+        height: 18px;
+        stroke: var(--bronze-bright);
+        flex-shrink: 0;
+      }
+
+      #dev-debug-readout {
+        position: absolute;
+        left: 16px;
+        bottom: 14px;
+        padding: 6px 12px;
+        background: rgba(17, 14, 11, 0.94);
+        color: var(--bronze-bright);
+        border: 1px solid var(--bronze-antique);
+        font-family: var(--font-mono);
+        font-size: 0.85rem;
+        letter-spacing: 0.02em;
+      }
+
+      /* NÚT CẢM ỨNG XOAY NGANG DI ĐỘNG (.controls-bar — Ẩn hoàn toàn trên Desktop) */
+      .controls-bar {
+        display: none;
+        position: absolute;
+        left: 14px;
+        right: 14px;
+        bottom: 14px;
+        justify-content: space-between;
+        align-items: flex-end;
+        pointer-events: none;
+      }
+
+      body.is-touch-controls .controls-bar {
+        display: flex;
+      }
+
+      @media (pointer: coarse) and (orientation: landscape),
+        (max-height: 500px) and (orientation: landscape) {
+        .controls-bar {
+          display: flex;
+        }
+      }
+
+      .touch-controls {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 12px;
+      }
+
+      .touch-dpad {
+        pointer-events: auto;
+        display: grid;
+        grid-template-columns: repeat(3, 46px);
+        grid-template-rows: repeat(2, 44px);
+        gap: 5px;
+      }
+
+      #ctrl-up {
+        grid-column: 2;
+        grid-row: 1;
+      }
+      #ctrl-left {
+        grid-column: 1;
+        grid-row: 2;
+      }
+      #ctrl-down {
+        grid-column: 2;
+        grid-row: 2;
+      }
+      #ctrl-right {
+        grid-column: 3;
+        grid-row: 2;
+      }
+
+      .touch-actions {
+        pointer-events: auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      /* ==========================================================================
+         HỆ THỐNG NÚT SƠN MÀI DÙNG CHUNG (.ctrl-btn, .lacquer-button)
+         ========================================================================== */
+      .ctrl-btn,
+      .lacquer-button {
+        min-height: 44px;
+        padding: 9px 16px;
+        background: var(--lacquer-elevated);
+        color: var(--parchment-light);
+        border: 1px solid var(--bronze-antique);
+        font-family: var(--font-ui);
+        font-size: 1rem;
+        font-weight: 500;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+      }
+
+      .ctrl-btn:hover:not(:disabled),
+      .lacquer-button:hover:not(:disabled) {
+        background: var(--bronze-muted);
+        border-color: var(--bronze-bright);
+        color: var(--parchment-light);
+      }
+
+      .ctrl-btn.is-primary,
+      .ctrl-btn.is-active,
+      .lacquer-button.is-active,
+      .lacquer-button.is-presenter-active {
+        background: var(--crimson-seal);
+        border-color: var(--bronze-bright);
+        color: var(--parchment-light);
+      }
+
+      .ctrl-btn.is-primary:hover:not(:disabled) {
+        background: #b13b27;
+      }
+
+      .ctrl-btn.is-danger {
+        border-color: var(--crimson-seal);
+        color: var(--crimson-vermilion);
+      }
+
+      .ctrl-btn.is-danger:hover:not(:disabled) {
+        background: var(--crimson-seal);
+        color: var(--parchment-light);
+      }
+
+      .touch-dpad .ctrl-btn,
+      .touch-actions .ctrl-btn {
+        background: rgba(27, 22, 18, 0.86);
+        font-size: 0.92rem;
+        padding: 6px 12px;
+      }
+
+      .touch-actions .ctrl-btn.is-primary {
+        background: rgba(158, 51, 33, 0.92);
+      }
+
+      /* ==========================================================================
+         3. HỘP THOẠI SỬ LIỆU GIẤY DÓ NEO ĐÁY (#dialogue-modal)
+         ========================================================================== */
+      #dialogue-modal {
+        position: absolute;
+        left: 50%;
+        bottom: 20px;
+        transform: translateX(-50%);
+        width: min(880px, calc(100vw - 32px));
+        max-height: min(48dvh, 420px);
+        z-index: 220;
+        display: none;
+      }
+
+      #dialogue-modal.is-open {
+        display: block;
+      }
+
+      #dialogue-parchment-card {
+        max-height: min(48dvh, 420px);
+        overflow-y: auto;
+        background: var(--parchment-warm);
+        color: var(--ink-primary);
+        border: 2px solid var(--bronze-antique);
+        box-shadow: inset 0 0 0 3px var(--parchment-warm),
+          inset 0 0 0 4px rgba(138, 90, 43, 0.45), 0 18px 44px rgba(17, 14, 11, 0.86);
+        padding: 18px 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .dialogue-top-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+        border-bottom: 1px solid rgba(138, 90, 43, 0.36);
+        padding-bottom: 8px;
+      }
+
+      .dialogue-speaker-cluster {
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      #dialogue-speaker {
+        font-family: var(--font-display);
+        font-size: 1.42rem;
+        font-weight: 700;
+        color: var(--crimson-seal);
+        letter-spacing: 0.01em;
+      }
+
+      #dialogue-role {
+        font-family: var(--font-ui);
+        font-size: 0.94rem;
+        font-weight: 500;
+        color: var(--ink-secondary);
+      }
+
+      #dialogue-milestone-title {
+        font-family: var(--font-display);
+        font-size: 1.24rem;
+        font-weight: 700;
+        color: var(--ink-primary);
+      }
+
+      #dialogue-body-text {
+        font-family: var(--font-serif);
+        font-size: 1.22rem; /* ~19.5px desktop */
+        line-height: 1.65;
+        max-width: 68ch;
+        color: var(--ink-primary);
+        text-wrap: pretty;
+      }
+
+      #dialogue-significance {
+        font-family: var(--font-serif);
+        font-size: 1rem;
+        line-height: 1.55;
+        color: var(--ink-secondary);
+        font-style: italic;
+        max-width: 68ch;
+      }
+
+      #dialogue-citation {
+        font-family: var(--font-ui);
+        font-size: 0.94rem;
+        font-weight: 600;
+        color: var(--crimson-seal);
+      }
+
+      .provenance-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        font-family: var(--font-ui);
+        font-size: 0.84rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+
+      .provenance-badge.is-historical_fact {
+        background: var(--crimson-seal);
+        color: var(--parchment-light);
+        border: 1px solid var(--bronze-bright);
+      }
+
+      .provenance-badge.is-fictional_npc {
+        background: var(--parchment-light);
+        color: var(--ink-primary);
+        border: 1px solid var(--bronze-antique);
+      }
+
+      .provenance-badge.is-speculative_2045 {
+        background: var(--lacquer-elevated);
+        color: var(--bronze-bright);
+        border: 1px solid var(--bronze-bright);
+      }
+
+      #dialogue-choices {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        margin-top: 4px;
+      }
+
+      .dialogue-choice-btn {
+        width: 100%;
+        justify-content: flex-start;
+        text-align: left;
+        padding: 10px 14px;
+        background: var(--lacquer-deep);
+        color: var(--parchment-light);
+        border: 1px solid var(--bronze-antique);
+        font-family: var(--font-ui);
+        font-size: 1.03125rem; /* 16.5px */
+        line-height: 1.45;
+      }
+
+      .dialogue-choice-btn:hover {
+        background: var(--crimson-seal);
+        border-color: var(--bronze-bright);
+      }
+
+      .choice-label {
+        flex: 1;
+      }
+
+      .modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 10px;
+        margin-top: 4px;
+      }
+
+      /* ==========================================================================
+         4. MENU CHÍNH ĐIỆN ẢNH (#main-menu-screen, z-index: 500)
+         ========================================================================== */
+      #main-menu-screen {
+        position: fixed;
+        inset: 0;
+        z-index: 500;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        align-items: center;
+        padding: clamp(20px, 4.5dvh, 48px) 24px clamp(16px, 3dvh, 30px);
+        background: var(--lacquer-void);
+        overflow: hidden;
+      }
+
+      #main-menu-bg-canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+        z-index: 0;
+      }
+
+      .main-menu-vignette {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+        background: radial-gradient(
+            ellipse 68% 74% at 50% 46%,
+            rgba(17, 14, 11, 0.42) 0%,
+            rgba(17, 14, 11, 0.78) 70%,
+            rgba(17, 14, 11, 0.94) 100%
+          ),
+          linear-gradient(
+            180deg,
+            rgba(17, 14, 11, 0.65) 0%,
+            rgba(17, 14, 11, 0.2) 45%,
+            rgba(17, 14, 11, 0.86) 100%
+          );
+      }
+
+      .main-menu-centerpiece {
+        position: relative;
+        z-index: 2;
+        margin: auto 0;
+        width: min(560px, 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: clamp(16px, 2.8dvh, 28px);
+      }
+
+      .menu-title-block {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .menu-seal-emblem {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 14px;
+        background: var(--crimson-seal);
+        color: var(--parchment-light);
+        border: 1px solid var(--bronze-bright);
+        font-family: var(--font-mono);
+        font-size: 0.84rem;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+      }
+
+      .menu-main-title {
+        font-family: var(--font-display);
+        font-size: clamp(2.8rem, 6.2vw, 4.75rem);
+        font-weight: 700;
+        line-height: 1.04;
+        letter-spacing: 0.06em;
+        color: var(--parchment-light);
+        text-shadow: 0 3px 0 var(--lacquer-void), 0 8px 28px rgba(17, 14, 11, 0.95);
+      }
+
+      .menu-title-rule {
+        width: min(320px, 72vw);
+        height: 2px;
+        background: linear-gradient(
+          90deg,
+          transparent 0%,
+          var(--bronze-antique) 20%,
+          var(--bronze-bright) 50%,
+          var(--bronze-antique) 80%,
+          transparent 100%
+        );
+      }
+
+      .menu-subtitle {
+        font-family: var(--font-serif);
+        font-size: clamp(1.05rem, 1.8vw, 1.24rem);
+        font-weight: 500;
+        color: var(--bronze-bright);
+        letter-spacing: 0.03em;
+        text-shadow: 0 2px 10px rgba(17, 14, 11, 0.95);
+      }
+
+      .menu-command-list {
+        width: min(430px, 100%);
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+      }
+
+      .menu-cmd-btn {
+        position: relative;
+        width: 100%;
+        min-height: 50px;
+        padding: 11px 20px 11px 40px;
+        background: rgba(27, 22, 18, 0.92);
+        color: var(--parchment-light);
+        border: 1px solid var(--bronze-antique);
+        box-shadow: 0 6px 20px rgba(17, 14, 11, 0.72);
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        gap: 2px;
+        text-align: left;
+        cursor: pointer;
+        transition: transform 0.16s ease, background-color 0.16s ease, border-color 0.16s ease;
+      }
+
+      .menu-cmd-indicator {
+        position: absolute;
+        left: 15px;
+        top: 50%;
+        transform: translateY(-50%) scale(0.75);
+        color: var(--bronze-antique);
+        font-size: 0.9rem;
+        opacity: 0.45;
+        transition: transform 0.16s ease, color 0.16s ease, opacity 0.16s ease;
+      }
+
+      .menu-cmd-row {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .menu-cmd-label {
+        font-family: var(--font-ui);
+        font-size: 1.08rem; /* >17px */
+        font-weight: 700;
+        letter-spacing: 0.08em;
+      }
+
+      #menu-save-summary {
+        font-family: var(--font-ui);
+        font-size: 0.88rem;
+        font-weight: 400;
+        color: var(--bronze-bright);
+      }
+
+      .menu-soon-tag {
+        padding: 2px 8px;
+        background: var(--lacquer-void);
+        color: var(--bronze-bright);
+        border: 1px solid var(--bronze-muted);
+        font-family: var(--font-ui);
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+      }
+
+      .menu-cmd-btn:hover:not(:disabled),
+      .menu-cmd-btn.is-focused:not(:disabled) {
+        background: var(--lacquer-elevated);
+        border-color: var(--bronze-bright);
+        box-shadow: inset 3px 0 0 var(--crimson-seal), 0 8px 24px rgba(17, 14, 11, 0.88);
+        transform: translateX(3px);
+      }
+
+      .menu-cmd-btn:hover:not(:disabled) .menu-cmd-indicator,
+      .menu-cmd-btn.is-focused:not(:disabled) .menu-cmd-indicator {
+        color: var(--crimson-vermilion);
+        opacity: 1;
+        transform: translateY(-50%) scale(1.08);
+      }
+
+      .menu-cmd-btn:disabled,
+      .menu-cmd-btn.is-disabled {
+        opacity: 0.48;
+        cursor: not-allowed;
+      }
+
+      .menu-cmd-btn:disabled #menu-save-summary {
+        color: var(--parchment-warm);
+      }
+
+      .main-menu-keybind-bar {
+        position: relative;
+        z-index: 2;
+        padding: 7px 18px;
+        background: rgba(17, 14, 11, 0.88);
+        border: 1px solid rgba(138, 90, 43, 0.55);
+        color: var(--parchment-warm);
+        font-family: var(--font-ui);
+        font-size: 0.95rem;
+        letter-spacing: 0.02em;
+        text-align: center;
+      }
+
+      /* ==========================================================================
+         5. MÀN HÌNH TẢI DỮ LIỆU THEO GIAI ĐOẠN (#loading-screen, z-index: 550)
+         ========================================================================== */
+      #loading-screen {
+        position: fixed;
+        inset: 0;
+        z-index: 550;
+        background: var(--lacquer-void);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        opacity: 1;
+        transition: opacity 0.16s ease-out;
+      }
+
+      #loading-screen.is-fading-out {
+        opacity: 0;
+      }
+
+      .loading-card {
+        width: min(500px, 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 16px;
+        padding: 32px 28px;
+        background: var(--lacquer-deep);
+        border: 1.5px solid var(--bronze-antique);
+        box-shadow: inset 0 0 0 3px var(--lacquer-void), 0 18px 42px rgba(0, 0, 0, 0.85);
+      }
+
+      .loading-crest {
+        padding: 5px 14px;
+        background: var(--crimson-seal);
+        color: var(--parchment-light);
+        border: 1px solid var(--bronze-bright);
+        font-family: var(--font-mono);
+        font-size: 0.82rem;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+      }
+
+      #loading-stage-label {
+        font-family: var(--font-serif);
+        font-size: 1.12rem;
+        color: var(--parchment-light);
+        min-height: 1.6em;
+      }
+
+      #loading-progress-bar {
+        width: 100%;
+        height: 10px;
+        background: var(--lacquer-void);
+        border: 1px solid var(--bronze-antique);
+        overflow: hidden;
+      }
+
+      #loading-progress-fill {
+        width: 0%;
+        height: 100%;
+        background: linear-gradient(90deg, var(--crimson-seal) 0%, var(--bronze-bright) 100%);
+        transition: width 0.12s ease-out;
+      }
+
+      #loading-progress-pct {
+        font-family: var(--font-mono);
+        font-size: 0.92rem;
+        font-weight: 600;
+        color: var(--bronze-bright);
+      }
+
+      /* ==========================================================================
+         6. MỞ MÀN VẾT NỨT THỜI GIAN (#rift-opening-overlay, z-index: 600)
+         ========================================================================== */
       #rift-opening-overlay {
         position: fixed;
         inset: 0;
-        z-index: 99999;
+        z-index: 600;
         display: flex;
         align-items: flex-end;
         justify-content: center;
@@ -66,699 +981,514 @@
       #skip-opening-btn {
         position: relative;
         z-index: 2;
-        background: var(--lacquer-elevated);
-        color: var(--bronze-bright);
-        border: 1px solid var(--bronze-antique);
-        padding: 8px 16px;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.78rem;
-        cursor: pointer;
         min-height: 44px;
-      }
-
-      /* 2. THANH ĐIỀU HƯỚNG MỎNG 50PX (.w26-topbar) */
-      .w26-topbar {
-        position: sticky;
-        top: 0;
-        z-index: 100;
-        min-height: 48px;
-        height: auto;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 6px 16px;
-        gap: 10px;
-        flex-wrap: wrap;
-        background: rgba(17, 14, 11, 0.88);
-        backdrop-filter: blur(12px);
-        border-bottom: 1px solid rgba(212, 165, 93, 0.24);
-      }
-
-      .brand-cluster {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-
-      .brand-seal {
-        background: var(--crimson-seal);
+        padding: 9px 18px;
+        background: var(--lacquer-deep);
         color: var(--parchment-light);
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.72rem;
+        border: 1.5px solid var(--bronze-bright);
+        font-family: var(--font-ui);
+        font-size: 1rem;
         font-weight: 600;
-        padding: 3px 8px;
-        letter-spacing: 0.06em;
+        cursor: pointer;
       }
 
-      .brand-title {
-        font-family: 'Cormorant Garamond', serif;
-        font-size: 1.08rem;
+      #skip-opening-btn:hover {
+        background: var(--crimson-seal);
+      }
+
+      /* ==========================================================================
+         7. HỆ THỐNG CỬA SỔ ĐỘC QUYỀN THEO YÊU CẦU (MODALS & DRAWERS)
+         ========================================================================== */
+      #world-map-modal,
+      #journal-modal,
+      #inventory-modal,
+      #dossier-puzzle-modal,
+      #climax-modal,
+      #pause-modal,
+      #settings-modal,
+      #instructions-modal,
+      #multiplayer-modal,
+      #confirm-modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(17, 14, 11, 0.88);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 18px;
+      }
+
+      #world-map-modal {
+        z-index: 320;
+      }
+      #journal-modal,
+      #inventory-modal,
+      #dossier-puzzle-modal {
+        z-index: 330;
+      }
+      #climax-modal {
+        z-index: 335;
+      }
+      #pause-modal {
+        z-index: 350;
+      }
+      #settings-modal,
+      #instructions-modal,
+      #multiplayer-modal {
+        z-index: 520;
+      }
+      #confirm-modal {
+        z-index: 540;
+      }
+
+      #world-map-modal.is-open,
+      #journal-modal.is-open,
+      #inventory-modal.is-open,
+      #dossier-puzzle-modal.is-open,
+      #climax-modal.is-open,
+      #pause-modal.is-open,
+      #settings-modal.is-open,
+      #instructions-modal.is-open,
+      #multiplayer-modal.is-open,
+      #confirm-modal.is-open {
+        display: flex;
+      }
+
+      .rpg-modal-dialog,
+      .world-map-dialog {
+        background: var(--lacquer-deep);
+        color: var(--parchment-light);
+        border: 2px solid var(--bronze-bright);
+        box-shadow: 0 22px 56px rgba(0, 0, 0, 0.88);
+        max-width: 940px;
+        width: 100%;
+        max-height: min(90dvh, 860px);
+        padding: 22px 26px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        overflow-y: auto;
+      }
+
+      .rpg-modal-dialog.is-compact {
+        max-width: 660px;
+      }
+
+      .rpg-modal-dialog.is-narrow {
+        max-width: 520px;
+      }
+
+      .rpg-modal-header,
+      .world-map-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 12px;
+        border-bottom: 1px solid rgba(212, 165, 93, 0.3);
+        padding-bottom: 12px;
+      }
+
+      .rpg-modal-header h3,
+      .world-map-header h3 {
+        font-family: var(--font-display);
+        font-size: 1.65rem;
         font-weight: 700;
         color: var(--bronze-bright);
         letter-spacing: 0.02em;
       }
 
-      .era-tabs {
-        display: flex;
-        gap: 5px;
+      .modal-subtitle {
+        font-family: var(--font-ui);
+        font-size: 1rem;
+        color: var(--parchment-warm);
+        margin-top: 3px;
       }
 
-      .era-tab-btn,
-      .utility-btn {
+      /* THANH CHUYỂN THẺ (TABS) TRONG NHẬT KÝ & HƯỚNG DẪN */
+      .rpg-tab-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        border-bottom: 1px solid rgba(212, 165, 93, 0.24);
+        padding-bottom: 10px;
+      }
+
+      .rpg-tab-btn {
+        min-height: 44px;
+        padding: 8px 18px;
         background: var(--lacquer-elevated);
         color: var(--parchment-warm);
-        border: 1px solid rgba(212, 165, 93, 0.28);
-        padding: 5px 9px;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.72rem;
+        border: 1px solid var(--bronze-muted);
+        font-family: var(--font-ui);
+        font-size: 1rem;
+        font-weight: 600;
         cursor: pointer;
-        transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s;
       }
 
-      .era-tab-btn:hover,
-      .utility-btn:hover {
-        background: var(--bronze-muted);
+      .rpg-tab-btn:hover {
+        border-color: var(--bronze-bright);
         color: var(--parchment-light);
       }
 
-      .era-tab-btn.is-active,
-      .utility-btn.is-presenter-active,
-      .utility-btn.is-active,
-      .lacquer-button.is-active {
+      .rpg-tab-btn.is-active {
         background: var(--crimson-seal);
         color: var(--parchment-light);
         border-color: var(--bronze-bright);
       }
 
-      .utility-cluster,
-      .topbar-actions {
-        display: flex;
-        gap: 5px;
-        flex-wrap: wrap;
-      }
-
-      /* 3. BỐ CỤC TOÀN MÀN HÌNH + THANH BIÊN NIÊN SỬ LA MÃ NGANG */
-      .chronicle-layout,
-      .workspace-grid {
+      /* NHẬT KÝ NHIỆM VỤ & BIÊN NIÊN SỬ LA MÃ I–XII (#journal-modal) */
+      #journal-quests-panel,
+      #journal-codex-panel {
         display: flex;
         flex-direction: column;
-        flex: 1;
-        min-height: calc(100vh - 50px);
-        width: 100%;
-        overflow-x: hidden;
+        gap: 14px;
       }
 
-      /* THANH BIÊN NIÊN SỬ LA MÃ (I - XII) DẠNG DẢI NGANG GỌN GÀNG */
-      #codex-sidebar,
-      aside.codex-sidebar {
-        background: var(--lacquer-deep);
-        border-right: none;
-        border-bottom: 1px solid rgba(212, 165, 93, 0.28);
-        padding: 6px 14px;
-        max-height: 54px;
+      #journal-active-banner {
+        background: var(--lacquer-elevated);
+        border: 1px solid var(--bronze-bright);
+        border-left: 4px solid var(--crimson-seal);
+        padding: 14px 16px;
         display: flex;
-        flex-direction: row;
-        align-items: center;
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      .journal-banner-label {
+        font-family: var(--font-mono);
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--bronze-bright);
+      }
+
+      .journal-banner-title {
+        font-size: 1.08rem;
+        color: var(--parchment-light);
+      }
+
+      .journal-banner-desc,
+      .journal-banner-hint {
+        font-size: 1rem;
+        line-height: 1.5;
+      }
+
+      .journal-banner-hint {
+        color: var(--crimson-vermilion);
+      }
+
+      #journal-quest-list {
+        display: flex;
+        flex-direction: column;
         gap: 12px;
-        overflow-x: auto;
       }
 
-      .codex-header {
-        border-bottom: none;
-        border-right: 1px solid rgba(212, 165, 93, 0.25);
-        padding-bottom: 0;
-        padding-right: 12px;
-        flex-shrink: 0;
+      .journal-quest-card {
+        background: var(--parchment-warm);
+        color: var(--ink-primary);
+        border: 1px solid var(--bronze-antique);
+        padding: 16px 18px;
         display: flex;
-        align-items: center;
+        flex-direction: column;
         gap: 10px;
       }
 
-      .codex-header h2 {
-        font-family: 'Cormorant Garamond', serif;
-        font-size: 1rem;
-        color: var(--bronze-bright);
-        white-space: nowrap;
+      .journal-quest-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 10px;
       }
 
-      .codex-sub {
+      .journal-category-badge {
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--crimson-seal);
+      }
+
+      .journal-quest-title {
+        font-family: var(--font-display);
+        font-size: 1.38rem;
+        font-weight: 700;
+        color: var(--ink-primary);
+      }
+
+      .journal-quest-sub,
+      .journal-quest-summary {
+        font-size: 1rem;
+        line-height: 1.55;
+      }
+
+      .journal-objective-list {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .journal-objective-row {
+        padding: 10px 12px;
+        background: var(--parchment-light);
+        border-left: 4px solid var(--bronze-muted);
+        font-size: 1rem;
+      }
+
+      .journal-objective-row.is-completed {
+        border-left-color: var(--crimson-seal);
+      }
+
+      .journal-objective-row.is-active {
+        border-left-color: var(--bronze-bright);
+      }
+
+      .journal-obj-top {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 4px;
+      }
+
+      .journal-status-badge {
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--crimson-seal);
+      }
+
+      .journal-quest-cite {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--crimson-seal);
+      }
+
+      .codex-panel-banner {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        gap: 8px;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.7rem;
-        color: var(--parchment-warm);
-        margin-top: 0;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 12px 16px;
+        background: var(--lacquer-elevated);
+        border: 1px solid var(--bronze-antique);
+      }
+
+      .codex-sub {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+        font-size: 1rem;
       }
 
       #codex-progress-count {
-        white-space: nowrap;
+        font-family: var(--font-mono);
+        font-size: 0.95rem;
         color: var(--bronze-bright);
       }
 
-      #codex-milestone-list {
+      #codex-milestone-list,
+      #presenter-codex-list {
         display: flex;
-        flex-direction: row;
-        gap: 8px;
-        overflow-x: auto;
-        align-items: center;
-        flex: 1;
+        flex-direction: column;
+        gap: 14px;
       }
 
       .codex-chapter-group {
         display: flex;
-        flex-direction: row;
-        align-items: center;
-        gap: 4px;
-        flex-shrink: 0;
+        flex-direction: column;
+        gap: 8px;
       }
 
       .codex-chapter-header {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.66rem;
-        color: var(--bronze-antique);
-        letter-spacing: 0.04em;
-        margin-bottom: 0;
-        white-space: nowrap;
-        padding-right: 4px;
+        font-family: var(--font-display);
+        font-size: 1.24rem;
+        font-weight: 700;
+        color: var(--parchment-warm);
+        border-bottom: 1px solid rgba(212, 165, 93, 0.22);
+        padding-bottom: 4px;
       }
 
       .codex-chapter-header.is-active {
         color: var(--bronze-bright);
-        font-weight: 600;
+      }
+
+      .codex-chapter-items {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 8px;
       }
 
       .codex-item {
-        width: auto;
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 12px 14px;
         background: var(--lacquer-elevated);
-        border: 1px solid rgba(212, 165, 93, 0.22);
-        color: rgba(230, 229, 220, 0.75);
-        padding: 3px 8px;
+        border: 1px solid var(--bronze-muted);
+        color: var(--parchment-warm);
         text-align: left;
-        font-family: 'Newsreader', serif;
-        font-size: 0.76rem;
+        font-size: 1rem;
         cursor: pointer;
-        white-space: nowrap;
-        flex-shrink: 0;
       }
 
       .codex-item:hover {
-        background: rgba(212, 165, 93, 0.16);
+        border-color: var(--bronze-bright);
         color: var(--parchment-light);
       }
 
       .codex-item.is-collected {
-        color: var(--parchment-light);
+        background: var(--parchment-warm);
+        color: var(--ink-primary);
         border-color: var(--bronze-antique);
       }
 
-      .codex-item.is-collected .codex-roman {
-        color: var(--crimson-vermilion);
-        font-weight: 700;
-      }
-
       .codex-item.is-current {
-        background: rgba(158, 51, 33, 0.28);
-        outline: 1px solid var(--bronze-bright);
+        outline: 2px solid var(--bronze-bright);
       }
 
       .codex-roman {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.72rem;
+        font-family: var(--font-mono);
+        font-size: 0.92rem;
+        font-weight: 700;
+        padding: 2px 7px;
+        background: var(--lacquer-void);
         color: var(--bronze-bright);
-        min-width: auto;
+        flex-shrink: 0;
+      }
+
+      .codex-item.is-collected .codex-roman {
+        background: var(--crimson-seal);
+        color: var(--parchment-light);
       }
 
       .codex-dots {
         display: none;
       }
 
+      .codex-item-body {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+
       .codex-title {
-        max-width: 120px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        font-size: 1rem;
+        line-height: 1.4;
       }
 
-      /* SÂN KHẤU CHÍNH 100% TOÀN MÀN HÌNH */
-      #stage-viewport,
-      .main-stage {
-        padding: 12px 24px 22px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        max-width: 1440px;
-        margin: 0 auto;
-        width: 100%;
+      .codex-cite {
+        font-size: 0.88rem;
+        opacity: 0.85;
       }
 
-      .stage-banner {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-end;
-        flex-wrap: wrap;
-        gap: 10px;
-        border-bottom: 1px solid rgba(212, 165, 93, 0.22);
-        padding-bottom: 10px;
-      }
-
-      #stage-chapter-num {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.76rem;
-        color: var(--crimson-vermilion);
-        letter-spacing: 0.08em;
-      }
-
-      #stage-chapter-title {
-        font-family: 'Cormorant Garamond', serif;
-        font-size: clamp(1.55rem, 2.5vw, 2.2rem);
-        color: var(--parchment-light);
-        text-wrap: balance;
-      }
-
-      .stage-meta-right {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: 4px;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.73rem;
-        color: var(--bronze-bright);
-      }
-
-      #stage-shelter-status.is-sheltered {
-        color: var(--parchment-light);
-        background: var(--crimson-seal);
-        padding: 2px 8px;
-      }
-
-      /* KHUNG PIXEL 320x180 INTEGER-SCALED */
-      .pixel-frame-wrapper {
-        position: relative;
-        width: 100%;
-        aspect-ratio: 16 / 9;
-        max-height: 54vh;
-        background: var(--lacquer-void);
-        border: 2px solid var(--bronze-antique);
-        overflow: hidden;
-      }
-
-      #pixel-canvas {
-        width: 100%;
-        height: 100%;
-        display: block;
-        image-rendering: pixelated;
-        image-rendering: crisp-edges;
-      }
-
-      #stage-toast {
-        position: absolute;
-        top: 12px;
-        left: 50%;
-        transform: translateX(-50%) translateY(-10px);
-        background: rgba(17, 14, 11, 0.92);
-        color: var(--bronze-bright);
-        border: 1px solid var(--bronze-bright);
-        padding: 6px 14px;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.76rem;
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1),
-          transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-      }
-
-      #stage-toast.is-visible {
-        opacity: 1;
-        transform: translateX(-50%) translateY(0);
-      }
-
-      /* THANH ĐIỀU KHIỂN & HỘP THOẠI GIẤY DÓ */
-      .controls-bar {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 10px;
-      }
-
-      .touch-controls {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-      }
-
-      .ctrl-btn {
-        min-height: 44px;
-        padding: 8px 16px;
-        background: var(--lacquer-elevated);
-        color: var(--parchment-light);
-        border: 1px solid var(--bronze-antique);
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.78rem;
-        cursor: pointer;
-      }
-
-      .ctrl-btn.is-primary {
-        background: var(--crimson-seal);
-        border-color: var(--bronze-bright);
-      }
-
-      #stage-mechanic-hint {
-        font-size: 0.92rem;
-        color: var(--parchment-warm);
-        max-width: 65ch;
-      }
-
-      /* HỘP THOẠI SỬ LIỆU GIẤY DÓ (#E6E5DC, measure 60ch) */
-      #dialogue-parchment-card {
-        background: var(--parchment-warm);
-        color: var(--ink-primary);
-        border: 2px solid var(--bronze-antique);
-        padding: 18px 22px;
+      /* TÚI TƯ LIỆU (#inventory-modal) */
+      .inventory-body-grid {
         display: grid;
-        grid-template-columns: 1fr;
-        gap: 8px;
-      }
-
-      .dialogue-top-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: baseline;
-        flex-wrap: wrap;
-        gap: 8px;
-        border-bottom: 1px solid rgba(35, 33, 22, 0.2);
-        padding-bottom: 6px;
-      }
-
-      #dialogue-speaker {
-        font-family: 'Cormorant Garamond', serif;
-        font-size: 1.25rem;
-        font-weight: 700;
-        color: var(--crimson-seal);
-      }
-
-      #dialogue-role {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.75rem;
-        color: var(--ink-secondary);
-      }
-
-      #dialogue-milestone-title {
-        font-family: 'Cormorant Garamond', serif;
-        font-size: 1.15rem;
-        font-weight: 700;
-        color: var(--ink-primary);
-      }
-
-      #dialogue-body-text {
-        font-size: 1.04rem;
-        line-height: 1.75;
-        max-width: 65ch;
-        text-wrap: pretty;
-      }
-
-      #dialogue-significance {
-        font-size: 0.96rem;
-        color: var(--ink-secondary);
-        font-style: italic;
-        max-width: 65ch;
-      }
-
-      #dialogue-citation {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.78rem;
-        color: var(--crimson-seal);
-        font-weight: 600;
-        margin-top: 4px;
-      }
-
-      /* MODAL CLIMAX CUỐI CHƯƠNG (BƯỚC A + BƯỚC B) */
-      #climax-modal {
-        position: fixed;
-        inset: 0;
-        z-index: 300;
-        background: rgba(17, 14, 11, 0.86);
-        display: none;
-        align-items: center;
-        justify-content: center;
-        padding: 20px;
-      }
-
-      #climax-modal.is-open {
-        display: flex;
-      }
-
-      .climax-dialog {
-        background: var(--parchment-warm);
-        color: var(--ink-primary);
-        border: 2px solid var(--bronze-bright);
-        max-width: 680px;
-        width: 100%;
-        max-height: 90vh;
-        overflow-y: auto;
-        padding: 24px;
-        display: flex;
-        flex-direction: column;
+        grid-template-columns: 1fr 1.15fr;
         gap: 14px;
       }
 
-      .climax-dialog h3 {
-        font-family: 'Cormorant Garamond', serif;
-        font-size: 1.45rem;
-        color: var(--crimson-seal);
-      }
-
-      .climax-options-list {
+      #inventory-item-list {
         display: flex;
         flex-direction: column;
-        gap: 10px;
-        margin-top: 8px;
+        gap: 8px;
       }
 
-      .climax-option-btn {
+      .inventory-item-card {
         text-align: left;
         padding: 12px 14px;
-        background: var(--parchment-light);
-        color: var(--ink-primary);
-        border: 1px solid var(--bronze-antique);
-        font-family: 'Newsreader', serif;
-        font-size: 1rem;
-        line-height: 1.5;
-        cursor: pointer;
-      }
-
-      .climax-option-btn:hover {
-        border-color: var(--crimson-seal);
-        background: #ffffff;
-      }
-
-      .climax-feedback {
-        font-size: 0.95rem;
-        padding: 10px;
-        font-weight: 600;
-      }
-
-      .climax-feedback.is-correct {
-        background: rgba(212, 165, 93, 0.25);
-        color: var(--ink-primary);
-        border: 1px solid var(--bronze-antique);
-      }
-
-      .climax-feedback.is-retry {
-        background: rgba(158, 51, 33, 0.12);
-        color: var(--crimson-seal);
-        border: 1px solid var(--crimson-seal);
-      }
-
-      #climax-step-b {
-        border-top: 2px solid var(--bronze-antique);
-        padding-top: 14px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-      }
-
-      [hidden],
-      #climax-step-b[hidden] {
-        display: none !important;
-      }
-
-      .climax-top {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 12px;
-      }
-
-      /* BÀN TRA CỨU CỐ VẤN SỬ HỌC AI (#lookup-drawer) */
-      #lookup-drawer {
-        position: fixed;
-        top: 50px;
-        right: 0;
-        bottom: 0;
-        width: min(460px, 92vw);
-        background: var(--parchment-warm);
-        color: var(--ink-primary);
-        border-left: 2px solid var(--bronze-antique);
-        z-index: 250;
-        padding: 20px;
-        transform: translateX(100%);
-        transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-      }
-
-      #lookup-drawer.is-open {
-        transform: translateX(0);
-      }
-
-      .lookup-top {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      .lookup-top h3 {
-        font-family: 'Cormorant Garamond', serif;
-        font-size: 1.35rem;
-        color: var(--crimson-seal);
-      }
-
-      #lookup-search-input {
-        width: 100%;
-        min-height: 44px;
-        padding: 8px 12px;
-        background: var(--parchment-light);
-        border: 1px solid var(--bronze-antique);
-        font-family: 'Newsreader', serif;
-        font-size: 1rem;
-      }
-
-      .lookup-chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-      }
-
-      .lookup-chip-btn {
         background: var(--lacquer-elevated);
         color: var(--parchment-light);
-        border: none;
-        padding: 5px 10px;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.72rem;
+        border: 1px solid var(--bronze-muted);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 1rem;
         cursor: pointer;
       }
 
-      #lookup-results-list {
-        flex: 1;
-        overflow-y: auto;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
+      .inventory-item-card.is-collected {
+        background: var(--parchment-warm);
+        color: var(--ink-primary);
+        border-color: var(--bronze-antique);
       }
 
-      .lookup-entry-card {
-        background: var(--parchment-light);
-        border: 1px solid rgba(138, 90, 43, 0.4);
-        padding: 12px;
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
+      .inventory-item-card.is-selected {
+        border: 2px solid var(--crimson-seal);
+        outline: 1px solid var(--bronze-bright);
       }
 
-      .lookup-milestone-badge {
-        background: var(--crimson-seal);
-        color: var(--parchment-light);
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.68rem;
-        padding: 2px 6px;
-        margin-right: 6px;
-      }
-
-      .lookup-entry-answer {
-        font-size: 0.95rem;
-        line-height: 1.65;
-      }
-
-      .lookup-entry-cite {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.74rem;
-        color: var(--crimson-seal);
+      .inv-card-cat {
+        font-family: var(--font-mono);
+        font-size: 0.82rem;
         font-weight: 600;
       }
 
-      /* SƠ ĐỒ LIÊN THÔNG KHU VỰC (#world-map-modal — PHÍM M) */
-      #world-map-modal {
-        position: fixed;
-        inset: 0;
-        z-index: 320;
-        background: rgba(17, 14, 11, 0.88);
-        display: none;
-        align-items: center;
-        justify-content: center;
-        padding: 20px;
-      }
-
-      #world-map-modal.is-open {
-        display: flex;
-      }
-
-      .world-map-dialog {
-        background: var(--lacquer-deep);
-        color: var(--parchment-light);
-        border: 2px solid var(--bronze-bright);
-        max-width: 960px;
-        width: 100%;
-        max-height: 88vh;
-        padding: 20px 24px;
+      #inventory-item-detail {
+        background: var(--parchment-light);
+        color: var(--ink-primary);
+        border: 1px solid var(--bronze-antique);
+        padding: 18px;
         display: flex;
         flex-direction: column;
-        gap: 14px;
-        overflow-y: auto;
+        gap: 10px;
+        font-size: 1rem;
+        line-height: 1.6;
       }
 
-      .world-map-header {
+      .inv-detail-header {
         display: flex;
         justify-content: space-between;
-        align-items: flex-start;
-        gap: 12px;
-        border-bottom: 1px solid rgba(212, 165, 93, 0.28);
-        padding-bottom: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
       }
 
-      .world-map-header h3 {
-        font-family: 'Cormorant Garamond', serif;
-        font-size: 1.45rem;
-        color: var(--bronze-bright);
+      .inv-detail-title {
+        font-family: var(--font-display);
+        font-size: 1.42rem;
+        color: var(--crimson-seal);
       }
 
+      .inv-detail-quote {
+        font-family: var(--font-serif);
+        font-size: 1.08rem;
+        font-style: italic;
+        padding-left: 12px;
+        border-left: 3px solid var(--bronze-antique);
+      }
+
+      .inv-detail-cite {
+        font-weight: 600;
+        color: var(--crimson-seal);
+      }
+
+      /* BẢN ĐỒ KHU VỰC (#world-map-modal) */
       #world-map-summary {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.74rem;
+        font-size: 1rem;
         color: var(--parchment-warm);
         margin-top: 4px;
       }
 
       #world-map-graph {
         display: grid;
-        grid-template-columns: repeat(3, minmax(180px, 1fr));
+        grid-template-columns: repeat(3, minmax(190px, 1fr));
         gap: 10px;
       }
 
       .world-map-node {
-        padding: 10px 12px;
+        padding: 12px 14px;
         border: 1px solid var(--bronze-muted);
         background: var(--lacquer-elevated);
         display: flex;
         flex-direction: column;
-        gap: 5px;
+        gap: 6px;
+        font-size: 0.96rem;
       }
 
       .world-map-node.is-discovered {
@@ -774,7 +1504,7 @@
 
       .world-map-node.is-locked {
         background: var(--lacquer-void);
-        color: rgba(230, 229, 220, 0.55);
+        color: rgba(230, 229, 220, 0.65);
         border-style: dashed;
       }
 
@@ -783,41 +1513,40 @@
         justify-content: space-between;
         align-items: center;
         gap: 6px;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.68rem;
+        font-family: var(--font-mono);
+        font-size: 0.76rem;
       }
 
       .wm-district-badge {
         background: var(--lacquer-elevated);
         color: var(--bronze-bright);
-        padding: 2px 6px;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.66rem;
+        padding: 2px 7px;
+        font-family: var(--font-mono);
+        font-size: 0.74rem;
       }
 
       .wm-current-seal {
         background: var(--crimson-seal);
         color: var(--parchment-light);
-        padding: 2px 6px;
+        padding: 2px 7px;
         font-weight: 600;
       }
 
       .wm-node-title {
-        font-family: 'Cormorant Garamond', serif;
-        font-size: 1.05rem;
+        font-family: var(--font-display);
+        font-size: 1.18rem;
       }
 
       .wm-node-links,
       .wm-node-cp {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.68rem;
+        font-size: 0.88rem;
       }
 
       #world-map-zone-detail {
         display: flex;
         flex-direction: column;
         gap: 8px;
-        border-top: 1px solid rgba(212, 165, 93, 0.25);
+        border-top: 1px solid rgba(212, 165, 93, 0.28);
         padding-top: 12px;
       }
 
@@ -825,10 +1554,12 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
+        flex-wrap: wrap;
         gap: 12px;
-        padding: 10px 14px;
+        padding: 12px 16px;
         border: 1px solid var(--bronze-muted);
         background: var(--lacquer-elevated);
+        font-size: 1rem;
       }
 
       .wm-zone-card.is-discovered {
@@ -845,253 +1576,106 @@
       }
 
       .wm-zone-desc {
-        font-size: 0.9rem;
+        font-size: 0.96rem;
         margin-top: 3px;
       }
 
       .wm-lock-reason {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.72rem;
+        font-size: 0.9rem;
+        font-weight: 600;
         color: var(--crimson-seal);
       }
 
-      /* HUD OBJECTIVE TRACKER & PROVENANCE BADGES */
-      #hud-objective-tracker {
-        background: var(--lacquer-elevated);
-        border: 1px solid var(--bronze-antique);
-        padding: 6px 12px;
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-        max-width: 460px;
-      }
-
-      #hud-active-quest-title {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.72rem;
-        color: var(--bronze-bright);
+      /* TẠM DỪNG (#pause-modal) */
+      .pause-section-title {
+        font-family: var(--font-mono);
+        font-size: 0.82rem;
         font-weight: 600;
-      }
-
-      #hud-active-objective-text {
-        font-size: 0.86rem;
-        color: var(--parchment-light);
-      }
-
-      #hud-active-objective-hint {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.7rem;
-        color: var(--crimson-vermilion);
-      }
-
-      .provenance-badge {
-        display: inline-block;
-        padding: 2px 8px;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.68rem;
-        font-weight: 600;
-      }
-
-      .provenance-badge.is-historical_fact {
-        background: var(--crimson-seal);
-        color: var(--parchment-light);
-        border: 1px solid var(--bronze-bright);
-      }
-
-      .provenance-badge.is-fictional_npc {
-        background: var(--parchment-warm);
-        color: var(--ink-primary);
-        border: 1px solid var(--bronze-antique);
-      }
-
-      .provenance-badge.is-speculative_2045 {
-        background: var(--lacquer-elevated);
+        letter-spacing: 0.06em;
         color: var(--bronze-bright);
-        border: 1px solid var(--bronze-bright);
+        text-transform: uppercase;
       }
 
-      #dialogue-choices {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        margin-top: 8px;
+      .pause-quick-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
       }
 
-      .dialogue-choice-btn {
-        text-align: left;
+      .pause-actions-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .pause-actions-list .is-full-span {
+        grid-column: 1 / -1;
+      }
+
+      /* CÀI ĐẶT HỆ THỐNG (#settings-modal) */
+      .settings-group {
         background: var(--lacquer-elevated);
-        color: var(--parchment-light);
-        border: 1px solid var(--bronze-antique);
-      }
-
-      .dialogue-choice-btn:hover {
-        background: var(--crimson-seal);
-        border-color: var(--bronze-bright);
-      }
-
-      .modal-footer {
-        display: flex;
-        justify-content: flex-end;
-        margin-top: 6px;
-      }
-
-      /* MODALS NHẬT KÝ (#journal-modal), TƯ LIỆU (#inventory-modal), TẠM DỪNG (#pause-modal) */
-      #journal-modal,
-      #inventory-modal,
-      #pause-modal,
-      #dossier-puzzle-modal {
-        position: fixed;
-        inset: 0;
-        z-index: 330;
-        background: rgba(17, 14, 11, 0.88);
-        display: none;
-        align-items: center;
-        justify-content: center;
-        padding: 20px;
-      }
-
-      #journal-modal.is-open,
-      #inventory-modal.is-open,
-      #pause-modal.is-open,
-      #dossier-puzzle-modal.is-open {
-        display: flex;
-      }
-
-      .rpg-modal-dialog {
-        background: var(--lacquer-deep);
-        color: var(--parchment-light);
-        border: 2px solid var(--bronze-bright);
-        max-width: 920px;
-        width: 100%;
-        max-height: 90vh;
-        padding: 18px 22px;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        overflow-y: auto;
-      }
-
-      .rpg-modal-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 12px;
-        border-bottom: 1px solid rgba(212, 165, 93, 0.28);
-        padding-bottom: 10px;
-      }
-
-      .rpg-modal-header h3 {
-        font-family: 'Cormorant Garamond', serif;
-        font-size: 1.45rem;
-        color: var(--bronze-bright);
-      }
-
-      #journal-active-banner {
-        background: var(--lacquer-elevated);
-        border: 1px solid var(--bronze-bright);
-        padding: 12px 14px;
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-      }
-
-      #journal-quest-list {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-      }
-
-      .journal-quest-card {
-        background: var(--parchment-warm);
-        color: var(--ink-primary);
-        border: 1px solid var(--bronze-antique);
+        border: 1px solid rgba(212, 165, 93, 0.28);
         padding: 14px 16px;
         display: flex;
         flex-direction: column;
-        gap: 8px;
-      }
-
-      .journal-quest-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
         gap: 10px;
       }
 
-      .journal-objective-list {
-        list-style: none;
+      .settings-group-title {
+        font-family: var(--font-mono);
+        font-size: 0.82rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        color: var(--bronze-bright);
+        text-transform: uppercase;
+      }
+
+      .settings-row {
         display: flex;
-        flex-direction: column;
-        gap: 6px;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
       }
 
-      .journal-objective-row {
-        padding: 8px 10px;
-        background: var(--parchment-light);
-        border-left: 3px solid var(--bronze-muted);
-      }
-
-      .journal-objective-row.is-completed {
-        border-left-color: var(--crimson-seal);
-      }
-
-      .journal-objective-row.is-active {
-        border-left-color: var(--bronze-bright);
-      }
-
-      .inventory-body-grid {
-        display: grid;
-        grid-template-columns: 1fr 1.1fr;
-        gap: 14px;
-      }
-
-      #inventory-item-list {
+      .settings-volume-wrap {
         display: flex;
-        flex-direction: column;
-        gap: 8px;
+        align-items: center;
+        gap: 12px;
+        flex: 1;
+        min-width: 220px;
       }
 
-      .inventory-item-card {
-        text-align: left;
-        padding: 10px 12px;
-        background: var(--lacquer-elevated);
-        color: var(--parchment-light);
-        border: 1px solid var(--bronze-muted);
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
+      #settings-volume-slider {
+        flex: 1;
+        accent-color: var(--crimson-seal);
+        height: 8px;
         cursor: pointer;
       }
 
-      .inventory-item-card.is-collected {
-        background: var(--parchment-warm);
-        color: var(--ink-primary);
-        border-color: var(--bronze-antique);
+      #settings-volume-value {
+        font-family: var(--font-mono);
+        font-size: 0.94rem;
+        min-width: 78px;
+        text-align: right;
+        color: var(--parchment-light);
       }
 
-      .inventory-item-card.is-selected {
-        border: 2px solid var(--crimson-seal);
-        outline: 1px solid var(--bronze-bright);
+      .zoom-preset-group {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        width: 100%;
       }
 
-      #inventory-item-detail {
-        background: var(--parchment-light);
-        color: var(--ink-primary);
-        border: 1px solid var(--bronze-antique);
-        padding: 16px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
+      .settings-hint-note {
+        font-size: 0.94rem;
+        line-height: 1.5;
+        color: var(--parchment-warm);
       }
 
-      .pause-settings-list,
-      .pause-actions-list {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-      }
-
-      /* BÀN KIỂM ĐỊNH HỒ SƠ LỊCH SỬ (#dossier-puzzle-modal) */
+      /* BÀN KIỂM ĐỊNH HỒ SƠ (#dossier-puzzle-modal) */
       #dossier-slots-container {
         display: flex;
         flex-direction: column;
@@ -1109,30 +1693,31 @@
       }
 
       .dossier-slot-label {
-        font-family: 'Cormorant Garamond', serif;
-        font-size: 1.15rem;
+        font-family: var(--font-display);
+        font-size: 1.28rem;
         color: var(--crimson-seal);
       }
 
       .dossier-slot-prompt {
-        font-size: 0.94rem;
+        font-size: 1rem;
         color: var(--ink-secondary);
       }
 
       .dossier-options-group {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 7px;
       }
 
       .dossier-option-btn {
         text-align: left;
-        padding: 10px 12px;
+        padding: 11px 14px;
         background: var(--parchment-light);
         color: var(--ink-primary);
         border: 1px solid var(--bronze-antique);
-        font-family: 'Newsreader', serif;
-        font-size: 0.95rem;
+        font-family: var(--font-serif);
+        font-size: 1.02rem;
+        line-height: 1.5;
         cursor: pointer;
       }
 
@@ -1147,14 +1732,14 @@
         background: var(--lacquer-elevated);
         color: var(--bronze-bright);
         border: 1px solid var(--bronze-bright);
-        padding: 10px 14px;
-        font-size: 0.92rem;
+        padding: 12px 14px;
+        font-size: 1rem;
       }
 
       .dossier-feedback-banner {
-        padding: 10px 14px;
+        padding: 12px 14px;
         font-weight: 600;
-        font-size: 0.95rem;
+        font-size: 1rem;
       }
 
       .dossier-feedback-banner.is-success {
@@ -1164,448 +1749,1131 @@
       }
 
       .dossier-feedback-banner.is-error {
-        background: rgba(158, 51, 33, 0.25);
+        background: rgba(158, 51, 33, 0.28);
         color: var(--crimson-vermilion);
         border: 1px solid var(--crimson-seal);
       }
 
-      body.text-scale-large {
-        font-size: 112%;
+      /* CLIMAX MODAL (#climax-modal) */
+      .climax-dialog {
+        background: var(--parchment-warm);
+        color: var(--ink-primary);
+        border: 2px solid var(--bronze-bright);
+        max-width: 720px;
+        width: 100%;
+        max-height: min(90dvh, 840px);
+        overflow-y: auto;
+        padding: 24px 26px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        font-size: 1rem;
       }
 
-      body.reduced-motion * {
-        animation-duration: 0.001ms !important;
-        transition-duration: 0.001ms !important;
+      .climax-dialog h3 {
+        font-family: var(--font-display);
+        font-size: 1.55rem;
+        color: var(--crimson-seal);
       }
 
-      .lacquer-button:focus-visible,
-      .utility-btn:focus-visible,
-      .ctrl-btn:focus-visible,
-      .era-tab-btn:focus-visible,
-      .codex-item:focus-visible,
-      .dialogue-choice-btn:focus-visible,
-      .dossier-option-btn:focus-visible,
-      .climax-option-btn:focus-visible,
-      .inventory-item-card:focus-visible {
+      .climax-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .climax-options-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 8px;
+      }
+
+      .climax-option-btn {
+        text-align: left;
+        padding: 12px 15px;
+        background: var(--parchment-light);
+        color: var(--ink-primary);
+        border: 1px solid var(--bronze-antique);
+        font-family: var(--font-serif);
+        font-size: 1.05rem;
+        line-height: 1.55;
+        cursor: pointer;
+      }
+
+      .climax-option-btn:hover {
+        border-color: var(--crimson-seal);
+      }
+
+      .climax-feedback {
+        font-size: 1rem;
+        padding: 10px 12px;
+        font-weight: 600;
+      }
+
+      .climax-feedback.is-correct {
+        background: rgba(212, 165, 93, 0.25);
+        color: var(--ink-primary);
+        border: 1px solid var(--bronze-antique);
+      }
+
+      .climax-feedback.is-retry {
+        background: rgba(158, 51, 33, 0.14);
+        color: var(--crimson-seal);
+        border: 1px solid var(--crimson-seal);
+      }
+
+      #climax-step-b {
+        border-top: 2px solid var(--bronze-antique);
+        padding-top: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      /* NGĂN KÉO CỐ VẤN SỬ HỌC (#lookup-drawer, z-index: 340) & NGĂN GIẢNG VIÊN (#presenter-drawer, z-index: 360) */
+      #lookup-drawer {
+        position: fixed;
+        top: 0;
+        right: 0;
+        height: 100dvh;
+        width: min(480px, 94vw);
+        background: var(--parchment-warm);
+        color: var(--ink-primary);
+        border-left: 2px solid var(--bronze-antique);
+        box-shadow: -14px 0 36px rgba(0, 0, 0, 0.72);
+        z-index: 340;
+        padding: 20px 22px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      #presenter-drawer {
+        position: fixed;
+        top: 0;
+        right: 0;
+        height: 100dvh;
+        width: min(520px, 94vw);
+        background: var(--lacquer-deep);
+        color: var(--parchment-light);
+        border-left: 2px solid var(--bronze-bright);
+        box-shadow: -14px 0 36px rgba(0, 0, 0, 0.82);
+        z-index: 360;
+        padding: 20px 22px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        overflow-y: auto;
+      }
+
+      .lookup-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .lookup-top h3 {
+        font-family: var(--font-display);
+        font-size: 1.5rem;
+        color: var(--crimson-seal);
+      }
+
+      #presenter-drawer .lookup-top h3 {
+        color: var(--bronze-bright);
+      }
+
+      #lookup-search-input {
+        width: 100%;
+        min-height: 44px;
+        padding: 9px 14px;
+        background: var(--parchment-light);
+        color: var(--ink-primary);
+        border: 1px solid var(--bronze-antique);
+        font-family: var(--font-ui);
+        font-size: 1rem;
+        user-select: text;
+        -webkit-user-select: text;
+      }
+
+      .lookup-chips,
+      .era-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .lookup-chip-btn,
+      .era-tab-btn {
+        min-height: 36px;
+        background: var(--lacquer-elevated);
+        color: var(--parchment-light);
+        border: 1px solid var(--bronze-antique);
+        padding: 6px 12px;
+        font-family: var(--font-ui);
+        font-size: 0.92rem;
+        cursor: pointer;
+      }
+
+      .lookup-chip-btn:hover,
+      .era-tab-btn:hover,
+      .era-tab-btn.is-active {
+        background: var(--crimson-seal);
+        border-color: var(--bronze-bright);
+      }
+
+      #lookup-results-list {
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .lookup-entry-card {
+        background: var(--parchment-light);
+        border: 1px solid rgba(138, 90, 43, 0.45);
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 1rem;
+      }
+
+      .lookup-milestone-badge {
+        background: var(--crimson-seal);
+        color: var(--parchment-light);
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        padding: 2px 7px;
+        margin-right: 6px;
+      }
+
+      .lookup-entry-answer {
+        font-size: 1rem;
+        line-height: 1.62;
+      }
+
+      .lookup-entry-cite {
+        font-size: 0.92rem;
+        color: var(--crimson-seal);
+        font-weight: 600;
+      }
+
+      /* HƯỚNG DẪN (#instructions-modal) & MULTIPLAYER (#multiplayer-modal) & XÁC NHẬN (#confirm-modal) */
+      .guide-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        gap: 10px;
+      }
+
+      .guide-card {
+        background: var(--lacquer-elevated);
+        border: 1px solid var(--bronze-muted);
+        padding: 14px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 1rem;
+        line-height: 1.55;
+      }
+
+      .guide-card strong {
+        color: var(--bronze-bright);
+      }
+
+      .soon-banner-seal {
+        display: inline-flex;
+        align-self: flex-start;
+        padding: 4px 12px;
+        background: var(--crimson-seal);
+        color: var(--parchment-light);
+        border: 1px solid var(--bronze-bright);
+        font-family: var(--font-mono);
+        font-size: 0.84rem;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+      }
+
+      /* TRỢ NĂNG TIÊU ĐIỂM BÀN PHÍM */
+      button:focus-visible,
+      input:focus-visible,
+      [tabindex]:focus-visible {
         outline: 2px solid var(--bronze-bright);
         outline-offset: 2px;
       }
 
-      @media (max-width: 900px) {
-        .inventory-body-grid {
+      /* ĐÁP ỨNG ĐA THIẾT BỊ & XOAY NGANG DI ĐỘNG */
+      @media (max-width: 860px) {
+        .inventory-body-grid,
+        #world-map-graph,
+        .pause-quick-grid,
+        .pause-actions-list,
+        .zoom-preset-group {
           grid-template-columns: 1fr;
         }
       }
 
-      @media (max-height: 500px) and (orientation: landscape) {
-        .w26-topbar {
-          min-height: 32px;
-          height: auto;
-          padding: 3px 8px;
-          gap: 4px;
+      @media (max-height: 520px) and (orientation: landscape) {
+        #hud-top-left {
+          top: 8px;
+          left: 10px;
         }
-        .brand-title {
-          display: none;
+        #hud-top-right {
+          top: 8px;
+          right: 10px;
         }
-        .era-tab-btn,
-        .utility-btn {
-          padding: 2px 5px;
-          font-size: 0.6rem;
-        }
-        #codex-sidebar,
-        aside.codex-sidebar {
-          max-height: 30px;
-          padding: 2px 8px;
-          gap: 6px;
-        }
-        #stage-viewport,
-        .main-stage {
-          padding: 4px 10px 8px;
-          gap: 4px;
-        }
-        .stage-banner,
-        .stage-header {
-          display: flex;
-          flex-direction: row;
-          align-items: center;
-          justify-content: space-between;
-          padding: 2px 0;
-          gap: 8px;
-        }
-        #stage-chapter-title {
-          font-size: 1rem;
+        .hud-location-plaque {
+          padding: 4px 10px;
         }
         #hud-objective-tracker {
-          padding: 3px 8px;
-          max-width: 360px;
-        }
-        #hud-active-objective-text {
-          font-size: 0.72rem;
+          padding: 5px 10px;
+          max-width: 320px;
         }
         #hud-active-objective-hint {
           display: none;
         }
-        .pixel-frame-wrapper,
-        .canvas-frame {
-          max-height: 46vh;
+        #dialogue-modal {
+          bottom: 10px;
+          max-height: 62dvh;
         }
-        .ctrl-btn {
-          min-height: 30px;
-          padding: 3px 8px;
-          font-size: 0.64rem;
+        #dialogue-parchment-card {
+          max-height: 62dvh;
+          padding: 12px 16px;
         }
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        #rift-opening-overlay {
-          display: none !important;
+        #main-menu-screen {
+          padding: 10px 16px;
+        }
+        .main-menu-centerpiece {
+          gap: 10px;
+        }
+        .menu-main-title {
+          font-size: 2.15rem;
+        }
+        .menu-command-list {
+          gap: 5px;
+        }
+        .menu-cmd-btn {
+          min-height: 38px;
+          padding: 6px 14px 6px 34px;
         }
       }
     </style>
   </head>
   <body>
-    <!-- 1. LỚP PHỦ MỞ MÀN NỨT VỠ MÀNG ĐEN 16 MẢNH (0.0s -> 4.8s) -->
-    <div id="rift-opening-overlay" data-state="idle" role="presentation">
-      <canvas id="rift-opening-canvas"></canvas>
-      <button id="skip-opening-btn" type="button">⏭ Bỏ Qua Mở Màn (Esc)</button>
-    </div>
-
-    <!-- 2. THANH TOPBAR 50PX -->
-    <header class="w26-topbar">
-      <div class="brand-cluster">
-        <span class="brand-seal">2045 → 1930</span>
-        <span class="brand-title">LỮ KHÁCH KÝ ỨC · SƠN MÀI PIXEL CHRONICLE</span>
-      </div>
-
-      <nav class="era-tabs" aria-label="Chọn Chương Lịch Sử">
-        <button type="button" class="era-tab-btn is-active" data-era-tab="1930">
-          I · 1930
-        </button>
-        <button type="button" class="era-tab-btn" data-era-tab="1945">
-          II · 1945
-        </button>
-        <button type="button" class="era-tab-btn" data-era-tab="1954_1975">
-          III · 1945–1975
-        </button>
-        <button type="button" class="era-tab-btn" data-era-tab="1986_2045">
-          IV · 1986–2045
-        </button>
-      </nav>
-
-      <div class="utility-cluster topbar-actions">
-        <button
-          type="button"
-          id="btn-open-journal"
-          class="utility-btn lacquer-button"
-          title="Nhật Ký Nhiệm Vụ Lịch Sử (Phím J)"
-        >
-          📓 Nhật Ký [J]
-        </button>
-        <button
-          type="button"
-          id="btn-open-inventory"
-          class="utility-btn lacquer-button"
-          title="Túi Tư Liệu & Bằng Chứng (Phím I)"
-        >
-          📜 Tư Liệu [I]
-        </button>
-        <button
-          type="button"
-          id="btn-open-map"
-          class="utility-btn lacquer-button"
-          title="Sơ Đồ Khu Vực Hương Cảng (Phím M)"
-        >
-          🗺️ Bản Đồ [M]
-        </button>
-        <button
-          type="button"
-          id="btn-debug-overlay"
-          class="utility-btn lacquer-button"
-          title="Bật/Tắt Lớp Phủ Kiểm Định Bản Đồ (Phím F3)"
-        >
-          📐 Debug [F3]
-        </button>
-        <button type="button" id="btn-lecturer-unlock" class="utility-btn lacquer-button">
-          ⚡ Mở Khóa 12 Mốc (Giảng Viên)
-        </button>
-        <button type="button" id="btn-open-lookup" class="utility-btn lacquer-button">
-          🔍 Cố Vấn Sử Học (Q)
-        </button>
-        <button type="button" id="btn-audio-toggle" class="utility-btn lacquer-button">
-          🔊 Ngũ Cung 8-Bit
-        </button>
-        <button
-          type="button"
-          id="btn-open-pause"
-          class="utility-btn lacquer-button"
-          title="Tạm Dừng & Thiết Lập (Phím Tab)"
-        >
-          ⚙️ Tạm Dừng [Tab]
-        </button>
-      </div>
-    </header>
-
-    <!-- 3. BỐ CỤC TOÀN MÀN HÌNH + DẢI BIÊN NIÊN SỬ LA MÃ (I - XII) -->
-    <main class="chronicle-layout workspace-grid">
-      <aside id="codex-sidebar" class="codex-sidebar" aria-label="Sổ Tay Biên Niên Sử 12 Cột Mốc">
-        <div class="codex-header">
-          <h2>Biên Niên Sử La Mã</h2>
-          <div class="codex-sub">
-            <span>Bấm để dịch chuyển</span>
-            <strong id="codex-progress-count">0 / 12 CỘT MỐC</strong>
-          </div>
-        </div>
-        <div id="codex-milestone-list"></div>
-      </aside>
-
-      <!-- Sân Khấu Chính 100% Toàn Màn Hình -->
-      <section id="stage-viewport" class="main-stage">
-        <div class="stage-banner stage-header">
-          <div>
-            <div id="stage-chapter-num">CHƯƠNG I (1930 – 1931)</div>
-            <h1 id="stage-chapter-title">Đêm Mưa Cửu Long & Ngọn Đuốc Cương Lĩnh</h1>
-          </div>
-          <div id="hud-objective-tracker" aria-live="polite">
-            <div id="hud-active-quest-title">◆ Đêm Mưa Cửu Long & Ngọn Đuốc Cương Lĩnh</div>
-            <div id="hud-active-objective-text">Gặp Giao Liên Lâm Văn Bính tại Quảng Trường Bến Cảng</div>
-            <div id="hud-active-objective-hint">💡 Gợi ý: Tiến tới đèn lồng cảng và nhấn [E]</div>
-          </div>
-          <div class="stage-meta-right">
-            <span id="stage-location-badge">📍 Cửu Long (Hương Cảng) → Nghệ Tĩnh</span>
-            <span id="stage-shelter-status">🚶 ĐANG DI CHUYỂN TRÊN TUYẾN ĐƯỜNG LỊCH SỬ</span>
-          </div>
-        </div>
-
-        <!-- Khung hình Pixel 320x180 Integer-Scaled -->
+    <div id="game-shell">
+      <!-- 1. KHUNG NHÌN THẾ GIỚI 100VW × 100DVH -->
+      <section id="stage-viewport" class="main-stage" aria-label="Không gian Lịch sử">
         <div class="pixel-frame-wrapper canvas-frame">
-          <canvas id="pixel-canvas" width="320" height="180"></canvas>
-          <div id="stage-toast" role="status" aria-live="polite"></div>
+          <canvas id="pixel-canvas" width="480" height="270"></canvas>
+          <div id="world-interaction-prompt" class="world-interaction-prompt" hidden>
+            <kbd class="prompt-key">E</kbd>
+            <span id="world-interaction-label">Trò chuyện</span>
+          </div>
+        </div>
+        <div id="stage-toast" role="status" aria-live="polite"></div>
+      </section>
+
+      <!-- 2. LỚP HUD NGỮ CẢNH TỐI GIẢN (Ẩn khi ở Menu Chính / Đang tải / Mở màn) -->
+      <div id="hud-layer" hidden>
+        <div id="hud-top-left">
+          <div class="hud-location-plaque">
+            <span id="stage-chapter-num">CHƯƠNG I · 1930</span>
+            <span class="hud-plaque-sep" aria-hidden="true">◆</span>
+            <span id="stage-location-badge">Quảng Trường Bến Cảng</span>
+          </div>
+          <span id="stage-shelter-status" hidden>◆ Ẩn mình trong bóng tối</span>
+          <span id="stage-chapter-title" hidden></span>
+          <span id="stage-mechanic-hint" hidden></span>
         </div>
 
-        <!-- Thanh nút điều khiển & gợi ý cơ chế Mức 1 -->
+        <div id="hud-top-right">
+          <div id="hud-objective-tracker" aria-live="polite">
+            <div id="hud-active-quest-title">◆ Hội Nghị Hợp Nhất Cửu Long</div>
+            <div id="hud-active-objective-text">Bắt liên lạc tại Quảng Trường Bến Cảng</div>
+            <div id="hud-active-objective-hint">
+              ▸ Gợi ý: Tiến tới đèn lồng cảng và nhấn [E]
+            </div>
+          </div>
+
+          <button
+            type="button"
+            id="btn-open-pause"
+            aria-label="Tạm dừng và mở danh mục [Esc]"
+            title="Tạm dừng và mở danh mục [Esc]"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke-width="2"
+              stroke-linecap="square"
+              aria-hidden="true"
+            >
+              <line x1="4" y1="7" x2="20" y2="7" />
+              <line x1="4" y1="12" x2="20" y2="12" />
+              <line x1="4" y1="17" x2="20" y2="17" />
+            </svg>
+            <kbd class="hud-keycap">Esc</kbd>
+          </button>
+        </div>
+
+        <div id="dev-debug-readout" hidden></div>
+
+        <!-- Nút điều khiển cảm ứng chỉ hiển thị trên thiết bị chạm xoay ngang -->
         <div class="controls-bar">
           <div class="touch-controls">
-            <button type="button" id="ctrl-up" class="ctrl-btn">▲ Lên (W)</button>
-            <button type="button" id="ctrl-left" class="ctrl-btn">◀ Trái (A)</button>
-            <button type="button" id="ctrl-down" class="ctrl-btn">▼ Xuống (S)</button>
-            <button type="button" id="ctrl-right" class="ctrl-btn">▶ Phải (D)</button>
-            <button type="button" id="ctrl-shelter" class="ctrl-btn">🛡️ Ẩn Nấp (Shift)</button>
-            <button type="button" id="ctrl-interact" class="ctrl-btn is-primary">
-              ✨ Khôi Phục / Mở Cổng (E)
-            </button>
-          </div>
-          <p id="stage-mechanic-hint"></p>
-        </div>
-
-        <!-- Hộp Thoại Sử Liệu Giấy Dó & Nhánh Lựa Chọn NPC (#dialogue-modal) -->
-        <div id="dialogue-modal" role="region" aria-label="Hộp Thoại Nhân Vật & Tư Liệu">
-          <article id="dialogue-parchment-card" aria-live="polite">
-            <div class="dialogue-top-row">
-              <div>
-                <span id="dialogue-speaker">Lữ Khách Lưu Trữ Quốc Gia 2045</span>
-                <span id="dialogue-role">Viện Lưu Trữ Lịch Sử Đảng (1930 – 2045)</span>
-              </div>
-              <span id="dialogue-provenance-badge" class="provenance-badge is-historical_fact">
-                📜 SỬ LIỆU XÁC THỰC (GIÁO TRÌNH 2021)
-              </span>
-            </div>
-            <h3 id="dialogue-milestone-title">
-              HƯỚNG DẪN: Di chuyển Lữ Khách tới các Cột Mốc La Mã (I – XII) và nhấn [E]
-            </h3>
-            <p id="dialogue-body-text">
-              <span id="dialogue-text">
-                "Từ năm 2045, bạn bước qua Vết Nứt Thời Gian để khôi phục 12 cột mốc lịch sử trọng đại. Hãy ẩn mình dưới Mái Hiên hoặc Bóng Đa khi đèn tuần tra quét qua, thu thập đủ di vật và mở Cổng Thời Gian ở cuối mỗi chương."
-              </span>
-            </p>
-            <p id="dialogue-significance">
-              Mẹo cho Giảng viên / Thuyết trình: Bấm trực tiếp vào bất kỳ mốc La Mã (I – XII) nào trên thanh Biên Niên Sử để xem hoặc dịch chuyển.
-            </p>
-            <div id="dialogue-citation">
-              📖 Đối chiếu toàn văn: Giáo trình Lịch sử Đảng Cộng sản Việt Nam (Bộ GD&ĐT, NXB Chính trị quốc gia Sự thật, 2021 — 440 trang)
-            </div>
-            <div id="dialogue-choices" hidden></div>
-            <div class="modal-footer">
-              <button type="button" id="btn-close-dialogue" class="ctrl-btn">
-                ✕ Đóng Hội Thoại [Esc]
+            <div class="touch-dpad" role="group" aria-label="Điều hướng di chuyển">
+              <button type="button" id="ctrl-up" class="ctrl-btn" aria-label="Đi lên">▲</button>
+              <button type="button" id="ctrl-left" class="ctrl-btn" aria-label="Sang trái">
+                ◀
+              </button>
+              <button type="button" id="ctrl-down" class="ctrl-btn" aria-label="Đi xuống">
+                ▼
+              </button>
+              <button type="button" id="ctrl-right" class="ctrl-btn" aria-label="Sang phải">
+                ▶
               </button>
             </div>
-          </article>
-        </div>
-      </section>
-    </main>
-
-    <!-- 4. MODAL CLIMAX CUỐI CHƯƠNG (BƯỚC A: QUYẾT SÁCH + BƯỚC B: ĐẠI CẢNH) -->
-    <div id="climax-modal" role="dialog" aria-modal="true">
-      <div class="climax-dialog">
-        <div id="climax-step-a">
-          <div class="climax-top">
-            <h3 id="climax-a-title">BƯỚC A · KHÔI PHỤC QUYẾT SÁCH LỊCH SỬ</h3>
-            <button type="button" id="btn-close-climax" class="ctrl-btn">Đóng (Esc)</button>
+            <div class="touch-actions" role="group" aria-label="Thao tác tương tác">
+              <button type="button" id="ctrl-shelter" class="ctrl-btn">Ẩn nấp</button>
+              <button type="button" id="ctrl-interact" class="ctrl-btn is-primary">
+                Tương tác [E]
+              </button>
+            </div>
           </div>
-          <p id="climax-a-prompt" style="margin-top: 6px; line-height: 1.6"></p>
-          <div
-            id="climax-a-cite"
-            style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: var(--crimson-seal); margin-top: 4px"
-          ></div>
-          <div id="climax-a-options" class="climax-options-list"></div>
-          <div id="climax-a-feedback" class="climax-feedback"></div>
-        </div>
-
-        <div id="climax-step-b" hidden>
-          <h3 id="climax-b-title">BƯỚC B · ĐẠI CẢNH BÙNG NỔ</h3>
-          <p id="climax-b-subtitle" style="line-height: 1.6"></p>
-          <div
-            id="climax-b-cite"
-            style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: var(--crimson-seal)"
-          ></div>
-          <button type="button" id="climax-b-action-btn" class="ctrl-btn is-primary">
-            🔥 Kích Hoạt Đại Cảnh Lịch Sử
-          </button>
         </div>
       </div>
-    </div>
 
-    <!-- 5. NGĂN KÉO CỐ VẤN SỬ HỌC AI (PHÍM Q) -->
-    <aside id="lookup-drawer" aria-label="Bàn Tra Cứu Cố Vấn Sử Học">
-      <div class="lookup-top">
-        <h3>Cố Vấn Sử Học (Giáo Trình 2021)</h3>
-        <button type="button" id="btn-close-lookup" class="ctrl-btn">Đóng (Esc)</button>
-      </div>
-      <input
-        type="search"
-        id="lookup-search-input"
-        placeholder="Nhập từ khóa (VD: Cương lĩnh 1930, Tân Trào, Điện Biên, 2045)..."
-      />
-      <div class="lookup-chips">
-        <button type="button" class="lookup-chip-btn" data-lookup-chip="1930">Cương lĩnh 2/1930</button>
-        <button type="button" class="lookup-chip-btn" data-lookup-chip="1941">Hội nghị TW 8 (1941)</button>
-        <button type="button" class="lookup-chip-btn" data-lookup-chip="1945">Thời cơ Tháng 8/1945</button>
-        <button type="button" class="lookup-chip-btn" data-lookup-chip="1954">Điện Biên Phủ 1954</button>
-        <button type="button" class="lookup-chip-btn" data-lookup-chip="1986">Đổi Mới 1986 & 2045</button>
-      </div>
-      <div id="lookup-results-list"></div>
-    </aside>
-
-    <!-- 6. SƠ ĐỒ LIÊN THÔNG KHU VỰC (PHÍM M) -->
-    <div id="world-map-modal" role="dialog" aria-modal="true" aria-labelledby="world-map-title" hidden>
-      <div class="world-map-dialog">
-        <div class="world-map-header">
-          <div>
-            <h3 id="world-map-title">SƠ ĐỒ LIÊN THÔNG KHU VỰC — HƯƠNG CẢNG 1930</h3>
-            <p id="world-map-summary">Đã khám phá 1/8 khu vực · 1/8 Đèn Báo An Toàn</p>
-          </div>
-          <button type="button" id="btn-close-world-map" class="ctrl-btn">✕ Đóng [M/Esc]</button>
-        </div>
-        <div id="world-map-graph" aria-label="Sơ đồ lưới các khu vực Chương I"></div>
-        <div id="world-map-zone-detail" aria-label="Danh sách khu vực và Dịch chuyển nhanh"></div>
-      </div>
-    </div>
-
-    <!-- 7. NHẬT KÝ HÀNH TRÌNH & NHIỆM VỤ LỊCH SỬ (PHÍM J) -->
-    <div id="journal-modal" role="dialog" aria-modal="true" aria-labelledby="journal-modal-title" hidden>
-      <div class="rpg-modal-dialog">
-        <div class="rpg-modal-header">
-          <div>
-            <h3 id="journal-modal-title">NHẬT KÝ HÀNH TRÌNH & NHIỆM VỤ LỊCH SỬ</h3>
-            <p id="journal-summary">Tiến độ nhiệm vụ: 0 / 0 mục tiêu hoàn thành</p>
-          </div>
-          <button type="button" id="btn-close-journal" class="ctrl-btn">✕ Đóng [J/Esc]</button>
-        </div>
-        <div id="journal-active-banner" aria-live="polite"></div>
-        <div id="journal-quest-list"></div>
-      </div>
-    </div>
-
-    <!-- 8. TÚI TƯ LIỆU & BẰNG CHỨNG LỊCH SỬ (PHÍM I) -->
-    <div id="inventory-modal" role="dialog" aria-modal="true" aria-labelledby="inventory-modal-title" hidden>
-      <div class="rpg-modal-dialog">
-        <div class="rpg-modal-header">
-          <div>
-            <h3 id="inventory-modal-title">TÚI TƯ LIỆU & BẰNG CHỨNG LỊCH SỬ</h3>
-            <p id="inventory-summary">Đã thu thập 0 / 6 tư liệu</p>
-          </div>
-          <button type="button" id="btn-close-inventory" class="ctrl-btn">✕ Đóng [I/Esc]</button>
-        </div>
-        <div class="inventory-body-grid">
-          <div id="inventory-item-list" aria-label="Danh sách tư liệu"></div>
-          <div id="inventory-item-detail" aria-live="polite"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 9. TẠM DỪNG & THIẾT LẬP HỆ THỐNG (PHÍM TAB) -->
-    <div id="pause-modal" role="dialog" aria-modal="true" aria-labelledby="pause-modal-title" hidden>
-      <div class="rpg-modal-dialog">
-        <div class="rpg-modal-header">
-          <div>
-            <h3 id="pause-modal-title">TẠM DỪNG & THIẾT LẬP HỆ THỐNG</h3>
-            <p style="font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; color: var(--parchment-warm)">
-              Cấu hình âm thanh, trợ năng và quản lý tiến trình lưu trữ
-            </p>
-          </div>
-          <button type="button" id="btn-close-pause" class="ctrl-btn is-primary">
-            ▶ Tiếp Tục Hành Trình [Tab/Esc]
-          </button>
-        </div>
-        <div class="pause-settings-list">
-          <button type="button" id="toggle-mute-audio" class="ctrl-btn">
-            🔊 Âm thanh Ngũ Cung 8-Bit: BẬT
-          </button>
-          <button type="button" id="toggle-reduced-motion" class="ctrl-btn">
-            ○ Giảm chuyển động / Hiệu ứng mưa & rung: TẮT
-          </button>
-          <button type="button" id="toggle-text-scale" class="ctrl-btn">
-            ○ Cỡ chữ lớn dễ đọc: MẶC ĐỊNH
-          </button>
-          <button type="button" id="toggle-show-hints" class="ctrl-btn">
-            ✓ Hiển thị gợi ý nhiệm vụ trên HUD: BẬT
-          </button>
-        </div>
-        <div class="pause-actions-list">
-          <button type="button" id="btn-manual-save" class="ctrl-btn is-primary">
-            💾 Lưu Tiến Trình Ngay
-          </button>
-          <button type="button" id="btn-reset-save" class="ctrl-btn">
-            🗑️ Xóa Lưu Trữ & Chơi Lại Từ Đầu
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 10. BÀN KIỂM ĐỊNH & ĐỐI CHIẾU HỒ SƠ LỊCH SỬ (#dossier-puzzle-modal) -->
-    <div
-      id="dossier-puzzle-modal"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="dossier-puzzle-title"
-      hidden
-    >
-      <div class="rpg-modal-dialog">
-        <div class="rpg-modal-header">
-          <div>
-            <h3 id="dossier-puzzle-title">BÀN KIỂM ĐỊNH LUẬN CƯƠNG & CƯƠNG LĨNH 2/1930</h3>
-            <p
-              id="dossier-puzzle-subtitle"
-              style="font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; color: var(--parchment-warm)"
-            ></p>
-          </div>
-          <div style="display: flex; align-items: center; gap: 8px">
-            <span id="dossier-provenance-badge" class="provenance-badge is-historical_fact">
-              📜 SỬ LIỆU XÁC THỰC
+      <!-- 3. HỘP THOẠI GIẤY DÓ NEO ĐÁY MÀN HÌNH (Ẩn mặc định, chỉ mở khi đối thoại) -->
+      <div
+        id="dialogue-modal"
+        role="dialog"
+        aria-modal="false"
+        aria-label="Hộp thoại nhân vật và sử liệu"
+        hidden
+      >
+        <article id="dialogue-parchment-card" aria-live="polite">
+          <div class="dialogue-top-row">
+            <div class="dialogue-speaker-cluster">
+              <span id="dialogue-speaker">Giao Liên Cửu Long</span>
+              <span id="dialogue-role">Cơ sở liên lạc Hương Cảng</span>
+            </div>
+            <span id="dialogue-provenance-badge" class="provenance-badge is-historical_fact">
+              ◆ Sử liệu xác thực (Giáo trình 2021)
             </span>
-            <button type="button" id="btn-close-dossier" class="ctrl-btn">✕ Đóng [Esc]</button>
           </div>
+          <h3 id="dialogue-milestone-title" hidden></h3>
+          <p id="dialogue-body-text">
+            <span id="dialogue-text"></span>
+          </p>
+          <p id="dialogue-significance" hidden></p>
+          <div id="dialogue-citation" hidden></div>
+          <div id="dialogue-choices" hidden></div>
+          <div class="modal-footer">
+            <button type="button" id="btn-close-dialogue" class="ctrl-btn">
+              ✕ Đóng [Esc]
+            </button>
+          </div>
+        </article>
+      </div>
+
+      <!-- 4. MENU CHÍNH ĐIỆN ẢNH (Hiển thị ngay khi khởi động) -->
+      <section id="main-menu-screen" class="is-open" aria-label="Menu Chính Lữ Khách Ký Ức">
+        <canvas id="main-menu-bg-canvas" aria-hidden="true"></canvas>
+        <div class="main-menu-vignette" aria-hidden="true"></div>
+
+        <div aria-hidden="true"></div>
+
+        <div class="main-menu-centerpiece">
+          <header class="menu-title-block">
+            <span class="menu-seal-emblem">NIÊN BIỂU KÝ ỨC · 1930 – 2045</span>
+            <h1 class="menu-main-title">LỮ KHÁCH KÝ ỨC</h1>
+            <div class="menu-title-rule" aria-hidden="true"></div>
+            <p class="menu-subtitle">Hành Trình Khám Phá Lịch Sử Sơn Mài &amp; Giấy Dó</p>
+          </header>
+
+          <nav class="menu-command-list" role="menu" aria-label="Danh mục khởi hành">
+            <button
+              type="button"
+              id="btn-menu-start"
+              class="menu-cmd-btn is-focused"
+              role="menuitem"
+            >
+              <span class="menu-cmd-indicator" aria-hidden="true">◆</span>
+              <span class="menu-cmd-row">
+                <span class="menu-cmd-label">BẮT ĐẦU</span>
+              </span>
+            </button>
+
+            <button
+              type="button"
+              id="btn-menu-continue"
+              class="menu-cmd-btn is-disabled"
+              role="menuitem"
+              disabled
+              aria-disabled="true"
+            >
+              <span class="menu-cmd-indicator" aria-hidden="true">◆</span>
+              <span class="menu-cmd-row">
+                <span class="menu-cmd-label">TIẾP TỤC</span>
+              </span>
+              <span id="menu-save-summary">Chưa có hồ sơ lưu</span>
+            </button>
+
+            <button
+              type="button"
+              id="btn-menu-multiplayer"
+              class="menu-cmd-btn"
+              role="menuitem"
+            >
+              <span class="menu-cmd-indicator" aria-hidden="true">◆</span>
+              <span class="menu-cmd-row">
+                <span class="menu-cmd-label">MULTIPLAYER</span>
+                <span class="menu-soon-tag">Sắp ra mắt</span>
+              </span>
+            </button>
+
+            <button
+              type="button"
+              id="btn-menu-instructions"
+              class="menu-cmd-btn"
+              role="menuitem"
+            >
+              <span class="menu-cmd-indicator" aria-hidden="true">◆</span>
+              <span class="menu-cmd-row">
+                <span class="menu-cmd-label">HƯỚNG DẪN</span>
+              </span>
+            </button>
+
+            <button
+              type="button"
+              id="btn-menu-settings"
+              class="menu-cmd-btn"
+              role="menuitem"
+            >
+              <span class="menu-cmd-indicator" aria-hidden="true">◆</span>
+              <span class="menu-cmd-row">
+                <span class="menu-cmd-label">CÀI ĐẶT</span>
+              </span>
+            </button>
+          </nav>
         </div>
-        <p id="dossier-puzzle-instruction" style="line-height: 1.6"></p>
-        <div id="dossier-slots-container"></div>
-        <div id="dossier-progressive-hint" hidden></div>
-        <div id="dossier-feedback-banner" class="dossier-feedback-banner" hidden></div>
-        <div class="modal-footer">
-          <button type="button" id="btn-submit-dossier" class="ctrl-btn is-primary">
-            🔍 Đối Chiếu & Đóng Dấu Xác Thực
-          </button>
+
+        <footer class="main-menu-keybind-bar">
+          ↑/↓ Chọn mục &nbsp;·&nbsp; Enter Xác nhận &nbsp;·&nbsp; F Toàn màn hình (F11)
+        </footer>
+      </section>
+
+      <!-- 5. MÀN HÌNH NẠP DỮ LIỆU THEO GIAI ĐOẠN (#loading-screen) -->
+      <div id="loading-screen" role="status" aria-live="polite" hidden>
+        <div class="loading-card">
+          <span class="loading-crest">NIÊN BIỂU KÝ ỨC · 1930 – 2045</span>
+          <p id="loading-stage-label">Đang nạp bản đồ Tiled &amp; không gian Cửu Long...</p>
+          <div
+            id="loading-progress-bar"
+            role="progressbar"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+          >
+            <div id="loading-progress-fill"></div>
+          </div>
+          <span id="loading-progress-pct">0%</span>
         </div>
       </div>
+
+      <!-- 6. HOẠT CẢNH VẾT NỨT THỜI GIAN (#rift-opening-overlay) -->
+      <div id="rift-opening-overlay" data-state="idle" role="presentation" hidden>
+        <canvas id="rift-opening-canvas"></canvas>
+        <button id="skip-opening-btn" type="button">Bỏ qua Mở màn [Esc]</button>
+      </div>
+
+      <!-- 7A. NHẬT KÝ NHIỆM VỤ & BIÊN NIÊN SỬ LA MÃ I–XII (#journal-modal — Phím J) -->
+      <div
+        id="journal-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="journal-modal-title"
+        hidden
+      >
+        <div class="rpg-modal-dialog">
+          <div class="rpg-modal-header">
+            <div>
+              <h3 id="journal-modal-title">NHẬT KÝ HÀNH TRÌNH &amp; BIÊN NIÊN SỬ</h3>
+              <p id="journal-summary" class="modal-subtitle">
+                Tiến độ nhiệm vụ: 0 / 0 mục tiêu hoàn thành
+              </p>
+            </div>
+            <button type="button" id="btn-close-journal" class="ctrl-btn">✕ Đóng [J/Esc]</button>
+          </div>
+
+          <div class="rpg-tab-bar" role="tablist" aria-label="Chuyển ngăn Nhật ký">
+            <button
+              type="button"
+              id="tab-journal-quests"
+              class="rpg-tab-btn is-active"
+              role="tab"
+              aria-selected="true"
+              aria-controls="journal-quests-panel"
+            >
+              ◆ Nhiệm Vụ
+            </button>
+            <button
+              type="button"
+              id="tab-journal-codex"
+              class="rpg-tab-btn"
+              role="tab"
+              aria-selected="false"
+              aria-controls="journal-codex-panel"
+            >
+              ▸ Biên Niên Sử I–XII
+            </button>
+          </div>
+
+          <div id="journal-quests-panel" role="tabpanel" aria-labelledby="tab-journal-quests">
+            <div id="journal-active-banner" aria-live="polite"></div>
+            <div id="journal-quest-list"></div>
+          </div>
+
+          <div
+            id="journal-codex-panel"
+            role="tabpanel"
+            aria-labelledby="tab-journal-codex"
+            hidden
+          >
+            <div class="codex-panel-banner">
+              <div class="codex-sub">
+                <span>Bấm cột mốc đã khôi phục để đối chiếu sử liệu</span>
+                <strong id="codex-progress-count">0 / 12 CỘT MỐC</strong>
+              </div>
+            </div>
+            <div id="codex-milestone-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 7B. TÚI TƯ LIỆU & BẰNG CHỨNG LỊCH SỬ (#inventory-modal — Phím I) -->
+      <div
+        id="inventory-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="inventory-modal-title"
+        hidden
+      >
+        <div class="rpg-modal-dialog">
+          <div class="rpg-modal-header">
+            <div>
+              <h3 id="inventory-modal-title">TÚI TƯ LIỆU &amp; BẰNG CHỨNG LỊCH SỬ</h3>
+              <p id="inventory-summary" class="modal-subtitle">Đã thu thập 0 / 6 tư liệu</p>
+            </div>
+            <button type="button" id="btn-close-inventory" class="ctrl-btn">
+              ✕ Đóng [I/Esc]
+            </button>
+          </div>
+          <div class="inventory-body-grid">
+            <div id="inventory-item-list" aria-label="Danh sách tư liệu"></div>
+            <div id="inventory-item-detail" aria-live="polite"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 7C. SƠ ĐỒ LIÊN THÔNG KHU VỰC (#world-map-modal — Phím M) -->
+      <div
+        id="world-map-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="world-map-title"
+        hidden
+      >
+        <div class="world-map-dialog">
+          <div class="world-map-header">
+            <div>
+              <h3 id="world-map-title">SƠ ĐỒ LIÊN THÔNG KHU VỰC — HƯƠNG CẢNG 1930</h3>
+              <p id="world-map-summary">Đã khám phá 1/8 khu vực · 1/8 Đèn Báo An Toàn</p>
+            </div>
+            <button type="button" id="btn-close-world-map" class="ctrl-btn">
+              ✕ Đóng [M/Esc]
+            </button>
+          </div>
+          <div id="world-map-graph" aria-label="Sơ đồ lưới các khu vực"></div>
+          <div id="world-map-zone-detail" aria-label="Danh sách khu vực và Dịch chuyển nhanh"></div>
+        </div>
+      </div>
+
+      <!-- 7D. BÀN KIỂM ĐỊNH HỒ SƠ LỊCH SỬ (#dossier-puzzle-modal) -->
+      <div
+        id="dossier-puzzle-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dossier-puzzle-title"
+        hidden
+      >
+        <div class="rpg-modal-dialog">
+          <div class="rpg-modal-header">
+            <div>
+              <h3 id="dossier-puzzle-title">BÀN KIỂM ĐỊNH LUẬN CƯƠNG &amp; CƯƠNG LĨNH 2/1930</h3>
+              <p id="dossier-puzzle-subtitle" class="modal-subtitle"></p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+              <span id="dossier-provenance-badge" class="provenance-badge is-historical_fact">
+                ◆ Sử liệu xác thực
+              </span>
+              <button type="button" id="btn-close-dossier" class="ctrl-btn">✕ Đóng [Esc]</button>
+            </div>
+          </div>
+          <p id="dossier-puzzle-instruction" style="font-size: 1.04rem; line-height: 1.6"></p>
+          <div id="dossier-slots-container"></div>
+          <div id="dossier-progressive-hint" hidden></div>
+          <div id="dossier-feedback-banner" class="dossier-feedback-banner" hidden></div>
+          <div class="modal-footer">
+            <button type="button" id="btn-submit-dossier" class="ctrl-btn is-primary">
+              ◆ Đối Chiếu &amp; Đóng Dấu Xác Thực
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 7E. ĐỈNH ĐIỂM CUỐI CHƯƠNG (#climax-modal) -->
+      <div id="climax-modal" role="dialog" aria-modal="true" hidden>
+        <div class="climax-dialog">
+          <div id="climax-step-a">
+            <div class="climax-top">
+              <h3 id="climax-a-title">BƯỚC A · KHÔI PHỤC QUYẾT SÁCH LỊCH SỬ</h3>
+              <button type="button" id="btn-close-climax" class="ctrl-btn">✕ Đóng [Esc]</button>
+            </div>
+            <p id="climax-a-prompt" style="margin-top: 6px; line-height: 1.6"></p>
+            <div
+              id="climax-a-cite"
+              style="font-size: 0.94rem; font-weight: 600; color: var(--crimson-seal); margin-top: 6px"
+            ></div>
+            <div id="climax-a-options" class="climax-options-list"></div>
+            <div id="climax-a-feedback" class="climax-feedback"></div>
+          </div>
+
+          <div id="climax-step-b" hidden>
+            <h3 id="climax-b-title">BƯỚC B · ĐẠI CẢNH LỊCH SỬ</h3>
+            <p id="climax-b-subtitle" style="line-height: 1.6"></p>
+            <div
+              id="climax-b-cite"
+              style="font-size: 0.94rem; font-weight: 600; color: var(--crimson-seal)"
+            ></div>
+            <button type="button" id="climax-b-action-btn" class="ctrl-btn is-primary">
+              ◆ Kích Hoạt Đại Cảnh Lịch Sử
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 7F. NGĂN KÉO CỐ VẤN SỬ HỌC (#lookup-drawer — Phím Q) -->
+      <aside id="lookup-drawer" aria-label="Bàn Tra Cứu Cố Vấn Sử Học" hidden>
+        <div class="lookup-top">
+          <h3>Cố Vấn Sử Học (Giáo Trình 2021)</h3>
+          <button type="button" id="btn-close-lookup" class="ctrl-btn">✕ Đóng [Esc]</button>
+        </div>
+        <input
+          type="search"
+          id="lookup-search-input"
+          placeholder="Nhập từ khóa (VD: Cương lĩnh 1930, Tân Trào, Điện Biên, 2045)..."
+        />
+        <div class="lookup-chips">
+          <button type="button" class="lookup-chip-btn" data-lookup-chip="1930">
+            Cương lĩnh 2/1930
+          </button>
+          <button type="button" class="lookup-chip-btn" data-lookup-chip="1941">
+            Hội nghị TW 8 (1941)
+          </button>
+          <button type="button" class="lookup-chip-btn" data-lookup-chip="1945">
+            Thời cơ Tháng 8/1945
+          </button>
+          <button type="button" class="lookup-chip-btn" data-lookup-chip="1954">
+            Điện Biên Phủ 1954
+          </button>
+          <button type="button" class="lookup-chip-btn" data-lookup-chip="1986">
+            Đổi Mới 1986 &amp; 2045
+          </button>
+        </div>
+        <div id="lookup-results-list"></div>
+      </aside>
+
+      <!-- 7G. DANH MỤC TẠM DỪNG (#pause-modal — Phím Esc / Tab) -->
+      <div
+        id="pause-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pause-modal-title"
+        hidden
+      >
+        <div class="rpg-modal-dialog is-compact">
+          <div class="rpg-modal-header">
+            <div>
+              <h3 id="pause-modal-title">TẠM DỪNG HÀNH TRÌNH</h3>
+              <p class="modal-subtitle">Tra cứu sổ tay sử liệu, thiết lập hoặc lưu tiến trình</p>
+            </div>
+            <button type="button" id="btn-close-pause" class="ctrl-btn is-primary">
+              ▸ Tiếp tục hành trình [Esc]
+            </button>
+          </div>
+
+          <div class="pause-section-title">◆ Sổ tay &amp; Tra cứu nhanh</div>
+          <div class="pause-quick-grid">
+            <button type="button" id="btn-open-journal" class="ctrl-btn lacquer-button">
+              ◆ Nhật ký &amp; Biên niên sử [J]
+            </button>
+            <button type="button" id="btn-open-inventory" class="ctrl-btn lacquer-button">
+              ◆ Túi tư liệu [I]
+            </button>
+            <button type="button" id="btn-open-map" class="ctrl-btn lacquer-button">
+              ◆ Bản đồ khu vực [M]
+            </button>
+            <button type="button" id="btn-open-lookup" class="ctrl-btn lacquer-button">
+              ◆ Cố vấn sử học [Q]
+            </button>
+          </div>
+
+          <div class="pause-section-title">◆ Hệ thống &amp; Lưu trữ</div>
+          <div class="pause-actions-list">
+            <button type="button" id="pause-open-settings" class="ctrl-btn">
+              ▸ Cài đặt hệ thống
+            </button>
+            <button type="button" id="pause-toggle-fullscreen" class="ctrl-btn">
+              ▸ Toàn màn hình [F]
+            </button>
+            <button type="button" id="btn-manual-save" class="ctrl-btn is-primary">
+              ◆ Lưu tiến trình
+            </button>
+            <button type="button" id="btn-return-main-menu" class="ctrl-btn">
+              ▸ Về Menu Chính
+            </button>
+            <button
+              type="button"
+              id="pause-open-presenter"
+              class="ctrl-btn is-full-span"
+              hidden
+            >
+              ✦ Bảng điều khiển Giảng viên
+            </button>
+            <button type="button" id="btn-reset-save" class="ctrl-btn is-danger is-full-span">
+              ✕ Xóa lưu trữ &amp; Chơi lại
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 7H. CÀI ĐẶT HỆ THỐNG CHUYÊN BIỆT (#settings-modal) -->
+      <div
+        id="settings-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-modal-title"
+        hidden
+      >
+        <div class="rpg-modal-dialog is-compact">
+          <div class="rpg-modal-header">
+            <div>
+              <h3 id="settings-modal-title">CÀI ĐẶT HỆ THỐNG</h3>
+              <p class="modal-subtitle">
+                Âm thanh Ngũ cung, hiển thị khung nhìn, cỡ chữ và trợ năng
+              </p>
+            </div>
+            <button type="button" id="btn-close-settings" class="ctrl-btn">✕ Đóng [Esc]</button>
+          </div>
+
+          <section class="settings-group" aria-label="Cài đặt âm thanh">
+            <div class="settings-group-title">◆ Âm thanh Ngũ cung</div>
+            <div class="settings-row">
+              <button type="button" id="toggle-mute-audio" class="ctrl-btn">
+                ◆ Âm thanh Ngũ cung: Đang bật
+              </button>
+              <div class="settings-volume-wrap">
+                <label for="settings-volume-slider">Âm lượng</label>
+                <input
+                  type="range"
+                  id="settings-volume-slider"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value="85"
+                  aria-label="Âm lượng tổng (0 đến 100 phần trăm)"
+                />
+                <span id="settings-volume-value">85%</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-group" aria-label="Hiển thị và tỷ lệ">
+            <div class="settings-group-title">◆ Hiển thị &amp; Tỷ lệ khung nhìn</div>
+            <div class="zoom-preset-group" role="group" aria-label="Tỷ lệ ống kính Camera">
+              <button type="button" class="ctrl-btn" data-zoom-preset="wide">
+                Rộng 0.8×
+              </button>
+              <button type="button" class="ctrl-btn is-active" data-zoom-preset="normal">
+                Chuẩn 1.0×
+              </button>
+              <button type="button" class="ctrl-btn" data-zoom-preset="close">
+                Cận cảnh 1.25×
+              </button>
+            </div>
+            <div class="settings-row">
+              <button type="button" id="toggle-text-scale" class="ctrl-btn">
+                ○ Cỡ chữ giao diện: Chuẩn (100%)
+              </button>
+              <button type="button" id="btn-toggle-fullscreen" class="ctrl-btn">
+                ○ Toàn màn hình: Cửa sổ [F]
+              </button>
+            </div>
+            <p class="settings-hint-note">
+              Mẹo trình duyệt: Nhấn phím <strong>F</strong> trong trò chơi hoặc
+              <strong>F11</strong> của trình duyệt để trải nghiệm không gian toàn màn hình trọn vẹn.
+            </p>
+          </section>
+
+          <section class="settings-group" aria-label="Hiệu ứng và trợ năng">
+            <div class="settings-group-title">◆ Hiệu ứng &amp; Trợ năng</div>
+            <div class="settings-row">
+              <button type="button" id="toggle-reduced-motion" class="ctrl-btn">
+                ○ Giảm chuyển động: Đang tắt
+              </button>
+              <button type="button" id="toggle-effects-quality" class="ctrl-btn">
+                ◆ Hiệu ứng thời tiết: Đầy đủ
+              </button>
+            </div>
+            <div class="settings-row">
+              <button type="button" id="toggle-show-hints" class="ctrl-btn">
+                ◆ Gợi ý nhiệm vụ trên HUD [H]: Đang bật
+              </button>
+            </div>
+          </section>
+
+          <section class="settings-group" aria-label="Cách ly chế độ giảng viên">
+            <div class="settings-group-title">◆ Chế độ Thuyết trình Học thuật (Cách ly tiến trình)</div>
+            <div class="settings-row">
+              <button type="button" id="toggle-presenter-unlock" class="ctrl-btn">
+                ○ Chế độ Giảng viên / Kiểm thử: Đang khóa
+              </button>
+            </div>
+            <p class="settings-hint-note">
+              Khi bật công tắc này, mục <em>Bảng điều khiển Giảng viên</em> sẽ xuất hiện trong Menu
+              Tạm Dừng với kho lưu trữ cách ly hoàn toàn, không ghi đè tiến trình chơi thực tế.
+            </p>
+          </section>
+        </div>
+      </div>
+
+      <!-- 7I. CẨM NANG HƯỚNG DẪN (#instructions-modal) -->
+      <div
+        id="instructions-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="instructions-modal-title"
+        hidden
+      >
+        <div class="rpg-modal-dialog is-compact">
+          <div class="rpg-modal-header">
+            <div>
+              <h3 id="instructions-modal-title">HƯỚNG DẪN LỮ KHÁCH</h3>
+              <p class="modal-subtitle">
+                Thao tác điều khiển, quy tắc ẩn nấp và phân định nguồn sử liệu
+              </p>
+            </div>
+            <button type="button" id="btn-close-instructions" class="ctrl-btn">
+              ✕ Đóng [Esc]
+            </button>
+          </div>
+
+          <div class="rpg-tab-bar" role="tablist" aria-label="Chuyên mục hướng dẫn">
+            <button
+              type="button"
+              class="rpg-tab-btn is-active"
+              role="tab"
+              aria-selected="true"
+              data-guide-tab="controls"
+            >
+              ◆ Điều khiển
+            </button>
+            <button
+              type="button"
+              class="rpg-tab-btn"
+              role="tab"
+              aria-selected="false"
+              data-guide-tab="stealth"
+            >
+              ▸ Ẩn nấp &amp; Điểm lưu
+            </button>
+            <button
+              type="button"
+              class="rpg-tab-btn"
+              role="tab"
+              aria-selected="false"
+              data-guide-tab="provenance"
+            >
+              ✦ Nhãn sử liệu
+            </button>
+          </div>
+
+          <div data-guide-panel="controls">
+            <div class="guide-grid">
+              <div class="guide-card">
+                <strong>WASD / Phím Mũi tên</strong>
+                <span>Di chuyển Lữ Khách 8 hướng trong không gian bản đồ lịch sử.</span>
+              </div>
+              <div class="guide-card">
+                <strong>Phím [E] / Khoảng trắng</strong>
+                <span>Trò chuyện với nhân vật, thu thập tư liệu, mở cửa và kích hoạt Đèn An Toàn.</span>
+              </div>
+              <div class="guide-card">
+                <strong>Phím [Shift] / Đi nép bóng</strong>
+                <span>Hạ thấp tầm nhìn khi băng qua mái hiên hoặc tán cây để tránh đèn tuần tra.</span>
+              </div>
+              <div class="guide-card">
+                <strong>Phím [J] · [I] · [M] · [Q]</strong>
+                <span>Mở Nhật ký &amp; Biên niên sử (J), Túi tư liệu (I), Bản đồ (M), Cố vấn sử học (Q).</span>
+              </div>
+              <div class="guide-card">
+                <strong>Phím số [1] – [4] &amp; [H]</strong>
+                <span>Chọn nhanh nhánh hội thoại [1–4]; bật/tắt gợi ý nhiệm vụ trên HUD [H].</span>
+              </div>
+              <div class="guide-card">
+                <strong>Phím [F] &amp; [Esc]</strong>
+                <span>Chuyển đổi Toàn màn hình [F]; đóng cửa sổ hoặc mở Menu Tạm Dừng [Esc].</span>
+              </div>
+            </div>
+          </div>
+
+          <div data-guide-panel="stealth" hidden>
+            <div class="guide-grid">
+              <div class="guide-card">
+                <strong>Mái hiên &amp; Vùng bóng tối</strong>
+                <span>Khi nón sáng lính tuần tra quét qua, hãy nép dưới mái hiên hoặc bóng cây đa để giữ an toàn.</span>
+              </div>
+              <div class="guide-card">
+                <strong>Đèn Báo An Toàn (Checkpoint)</strong>
+                <span>Kích hoạt đèn lồng an toàn bằng phím [E] để lưu vị trí hồi phục và mở Dịch chuyển nhanh trên Bản đồ [M].</span>
+              </div>
+              <div class="guide-card">
+                <strong>Bảo toàn tư liệu</strong>
+                <span>Nếu bị phát hiện, Lữ Khách chỉ rút lui về Đèn Báo An Toàn gần nhất — mọi tư liệu đã thu thập đều được giữ nguyên.</span>
+              </div>
+            </div>
+          </div>
+
+          <div data-guide-panel="provenance" hidden>
+            <div class="guide-grid">
+              <div class="guide-card">
+                <span class="provenance-badge is-historical_fact">◆ Sử liệu xác thực</span>
+                <span>Sự kiện, văn kiện, mốc thời gian đối chiếu trực tiếp từ Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021).</span>
+              </div>
+              <div class="guide-card">
+                <span class="provenance-badge is-fictional_npc">▸ Nhân vật hư cấu</span>
+                <span>Giao liên và người dân đại diện bối cảnh xã hội đương thời nhằm dẫn dắt mạch khám phá nhập vai.</span>
+              </div>
+              <div class="guide-card">
+                <span class="provenance-badge is-speculative_2045">✦ Viễn tưởng 2045</span>
+                <span>Không gian Lưu trữ Quốc gia kỷ niệm 100 năm lập nước (2045) mang cảm hứng khát vọng tương lai.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 7J. THÔNG BÁO MULTIPLAYER TRUNG THỰC (#multiplayer-modal) -->
+      <div
+        id="multiplayer-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="multiplayer-modal-title"
+        hidden
+      >
+        <div class="rpg-modal-dialog is-narrow">
+          <div class="rpg-modal-header">
+            <div>
+              <h3 id="multiplayer-modal-title">ĐỒNG HÀNH NHIỀU NGƯỜI CHƠI</h3>
+            </div>
+            <button type="button" id="btn-close-multiplayer" class="ctrl-btn">
+              ✕ Đóng [Esc]
+            </button>
+          </div>
+          <span class="soon-banner-seal">SẮP RA MẮT · KIẾN TRÚC TƯƠNG LAI</span>
+          <p style="font-size: 1.04rem; line-height: 1.65; color: var(--parchment-warm)">
+            <strong>Lữ Khách Ký Ức (1930 – 2045)</strong> hiện vận hành trọn vẹn theo kiến trúc
+            nhập vai lịch sử một người chơi cục bộ (<em>single-player local-first RPG</em>), không
+            phụ thuộc máy chủ trực tuyến.
+          </p>
+          <p style="font-size: 1rem; line-height: 1.6; color: var(--parchment-warm)">
+            Tính năng khám phá tổ đội và phòng học tương tác đồng bộ được dành riêng cho cột mốc
+            kiến trúc tiếp theo — cam kết không hiển thị sảnh ghép trận giả lập.
+          </p>
+        </div>
+      </div>
+
+      <!-- 7K. HỘP THOẠI XÁC NHẬN DÙNG CHUNG (#confirm-modal) -->
+      <div
+        id="confirm-modal"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-modal-title"
+        aria-describedby="confirm-modal-body"
+        hidden
+      >
+        <div class="rpg-modal-dialog is-narrow">
+          <div class="rpg-modal-header">
+            <h3 id="confirm-modal-title">XÁC NHẬN THAO TÁC</h3>
+          </div>
+          <p id="confirm-modal-body" style="font-size: 1.04rem; line-height: 1.6"></p>
+          <div class="modal-footer">
+            <button type="button" id="btn-confirm-no" class="ctrl-btn">Hủy bỏ [Esc]</button>
+            <button type="button" id="btn-confirm-yes" class="ctrl-btn is-primary">
+              Xác nhận
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 7L. NGĂN ĐIỀU KHIỂN GIẢNG VIÊN CÁCH LY (#presenter-drawer) -->
+      <aside
+        id="presenter-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Bảng điều khiển Giảng viên"
+        hidden
+      >
+        <div class="lookup-top">
+          <h3>Bảng Điều Khiển Giảng Viên</h3>
+          <button type="button" id="btn-close-presenter" class="ctrl-btn">✕ Đóng [Esc]</button>
+        </div>
+        <p class="settings-hint-note">
+          Môi trường thuyết trình độc lập: Chuyển chương và dịch chuyển cột mốc không làm thay đổi
+          tệp lưu tiến trình người chơi.
+        </p>
+
+        <div class="pause-section-title">◆ Chuyển nhanh Giai đoạn Lịch sử</div>
+        <nav class="era-tabs" aria-label="Chọn chương lịch sử">
+          <button type="button" class="era-tab-btn is-active" data-era-tab="1930">
+            I · 1930
+          </button>
+          <button type="button" class="era-tab-btn" data-era-tab="1945">II · 1945</button>
+          <button type="button" class="era-tab-btn" data-era-tab="1954_1975">
+            III · 1945–1975
+          </button>
+          <button type="button" class="era-tab-btn" data-era-tab="1986_2045">
+            IV · 1986–2045
+          </button>
+        </nav>
+
+        <div class="pause-section-title">◆ Công cụ Kiểm thử &amp; Mở khóa Học thuật</div>
+        <div class="settings-row">
+          <button type="button" id="btn-lecturer-unlock" class="ctrl-btn lacquer-button">
+            ○ Mở khóa 12 mốc (Giảng viên): Đang tắt
+          </button>
+          <button type="button" id="btn-debug-overlay" class="ctrl-btn lacquer-button">
+            ▸ Lớp kiểm định va chạm [F3]
+          </button>
+        </div>
+
+        <div class="pause-section-title">◆ Danh mục 12 Cột mốc La Mã (I – XII)</div>
+        <div id="presenter-codex-list"></div>
+      </aside>
     </div>
 
     <script type="module" src="/src/main.ts"></script>
