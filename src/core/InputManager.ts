@@ -17,6 +17,8 @@ export interface InputCallbacks {
   onTogglePause?: () => void;
   onToggleDebugOverlay?: () => void;
   onToggleHints?: () => void;
+  onToggleFullscreen?: () => void;
+  onTogglePresenterShortcut?: () => void;
   onNumberKey?: (num: 1 | 2 | 3 | 4) => void;
   onActionKey?: (key: string) => void;
 }
@@ -40,6 +42,7 @@ const ACTION_KEYS = new Set<string>([
   'm',
   'i',
   'h',
+  'f',
   'escape',
   'tab',
   'f3',
@@ -60,6 +63,7 @@ const VIRTUAL_HOLD_BUTTONS: ReadonlyArray<{ id: string; key: string }> = [
 export class InputManager {
   public readonly keysPressed = new Set<string>();
   public readonly consumedActionKeys = new Set<string>();
+  private readonly boundTouchElements = new WeakSet<HTMLElement>();
   private callbacks: InputCallbacks;
 
   constructor(callbacks: InputCallbacks = {}) {
@@ -89,7 +93,8 @@ export class InputManager {
 
     for (const { id, key } of VIRTUAL_HOLD_BUTTONS) {
       const el = document.getElementById(id);
-      if (!el) continue;
+      if (!el || this.boundTouchElements.has(el)) continue;
+      this.boundTouchElements.add(el);
 
       const press = (e: Event) => {
         e.preventDefault?.();
@@ -107,13 +112,30 @@ export class InputManager {
     }
 
     const interactBtn = document.getElementById('ctrl-interact');
-    interactBtn?.addEventListener('click', () => {
-      this.callbacks.onInteract?.();
-    });
+    if (interactBtn && !this.boundTouchElements.has(interactBtn)) {
+      this.boundTouchElements.add(interactBtn);
+      interactBtn.addEventListener('click', () => {
+        this.callbacks.onInteract?.();
+      });
+    }
+  }
+
+  public rebindTouchControls(): void {
+    this.bindTouchControls();
   }
 
   private readonly handleKeyDown = (e: KeyboardEvent): void => {
     const key = e.key === ' ' ? ' ' : e.key.toLowerCase();
+
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'p') {
+      e.preventDefault();
+      if (e.repeat || this.consumedActionKeys.has('presenter_shortcut')) {
+        return;
+      }
+      this.consumedActionKeys.add('presenter_shortcut');
+      this.callbacks.onTogglePresenterShortcut?.();
+      return;
+    }
 
     const target = e.target as HTMLElement | null;
     const tag = target?.tagName;
@@ -126,6 +148,9 @@ export class InputManager {
     }
 
     if (ACTION_KEYS.has(key)) {
+      if (key === 'f' && (e.ctrlKey || e.metaKey || e.altKey)) {
+        return;
+      }
       if (e.repeat || this.consumedActionKeys.has(key)) {
         return;
       }
@@ -151,6 +176,9 @@ export class InputManager {
       } else if (key === 'h') {
         e.preventDefault();
         this.callbacks.onToggleHints?.();
+      } else if (key === 'f') {
+        e.preventDefault();
+        this.callbacks.onToggleFullscreen?.();
       } else if (key === 'tab') {
         e.preventDefault();
         this.callbacks.onTogglePause?.();
@@ -174,6 +202,9 @@ export class InputManager {
     const key = e.key === ' ' ? ' ' : e.key.toLowerCase();
     this.keysPressed.delete(key);
     this.consumedActionKeys.delete(key);
+    if (key === 'p' || key === 'control' || key === 'meta' || key === 'shift') {
+      this.consumedActionKeys.delete('presenter_shortcut');
+    }
   };
 
   private readonly handleWindowBlur = (): void => {

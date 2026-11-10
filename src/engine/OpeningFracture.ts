@@ -13,6 +13,16 @@ export type FractureLifecycleState =
   | 'revealed'
   | 'disposed';
 
+export type FracturePacingMode = 'full' | 'continue';
+
+export interface OpeningFractureOptions {
+  mode?: FracturePacingMode;
+  durationSec?: number;
+  reducedMotion?: boolean;
+  removeFromDomOnDispose?: boolean;
+  onComplete?: () => void;
+}
+
 interface Point2D {
   x: number;
   y: number;
@@ -40,39 +50,109 @@ function mulberry32(seed: number): () => number {
 }
 
 export class OpeningFractureController {
+  private readonly overlaySelector: string;
+  private readonly canvasSelector: string;
+  private readonly defaultOptions: OpeningFractureOptions;
+
   private overlayEl: HTMLElement | null;
   private canvasEl: HTMLCanvasElement | null;
+  private skipBtnEl: HTMLButtonElement | null = null;
   private ctx: CanvasRenderingContext2D | null = null;
   private state: FractureLifecycleState = 'idle';
   private rafId: number | null = null;
   private startTimeMs = 0;
   private isDisposed = false;
-  private onComplete?: () => void;
+  private defaultOnComplete?: () => void;
+  private activeOnComplete?: () => void;
+  private activeMode: FracturePacingMode = 'full';
+  private activeDurationSec = 4.8;
+  private removeFromDomOnDispose = false;
 
   private mainCrack: Point2D[] = [];
   private branches: Point2D[][] = [];
   private shards: ShardPolygon[] = [];
 
-  constructor(overlaySelector: string, canvasSelector: string, onComplete?: () => void) {
-    this.overlayEl = document.querySelector<HTMLElement>(overlaySelector);
-    this.canvasEl = document.querySelector<HTMLCanvasElement>(canvasSelector);
-    this.onComplete = onComplete;
+  constructor(
+    overlaySelector: string,
+    canvasSelector: string,
+    onComplete?: () => void,
+    options: OpeningFractureOptions = {}
+  ) {
+    this.overlaySelector = overlaySelector;
+    this.canvasSelector = canvasSelector;
+    this.defaultOptions = options;
+    this.defaultOnComplete = onComplete ?? options.onComplete;
+    this.removeFromDomOnDispose = Boolean(options.removeFromDomOnDispose);
+    this.overlayEl =
+      typeof document !== 'undefined'
+        ? document.querySelector<HTMLElement>(overlaySelector)
+        : null;
+    this.canvasEl =
+      typeof document !== 'undefined'
+        ? document.querySelector<HTMLCanvasElement>(canvasSelector)
+        : null;
   }
 
-  public start(): void {
+  public getState(): FractureLifecycleState {
+    return this.state;
+  }
+
+  public isRunning(): boolean {
+    return this.rafId !== null && !this.isDisposed;
+  }
+
+  public start(options: OpeningFractureOptions = {}): void {
+    this.cleanupActiveListenersAndRaf();
+
+    this.activeMode = options.mode ?? this.defaultOptions.mode ?? 'full';
+    const fallbackDuration = this.activeMode === 'continue' ? 1.8 : 4.8;
+    this.activeDurationSec =
+      typeof options.durationSec === 'number' && options.durationSec > 0
+        ? options.durationSec
+        : typeof this.defaultOptions.durationSec === 'number' &&
+            this.defaultOptions.durationSec > 0
+          ? this.defaultOptions.durationSec
+          : fallbackDuration;
+    this.removeFromDomOnDispose =
+      options.removeFromDomOnDispose ??
+      this.defaultOptions.removeFromDomOnDispose ??
+      false;
+    this.activeOnComplete = options.onComplete ?? this.defaultOnComplete;
+
+    this.isDisposed = false;
+    this.state = 'idle';
+
+    if (typeof document !== 'undefined') {
+      if (!this.overlayEl || !this.overlayEl.isConnected) {
+        this.overlayEl = document.querySelector<HTMLElement>(this.overlaySelector);
+      }
+      if (!this.canvasEl || !this.canvasEl.isConnected) {
+        this.canvasEl = document.querySelector<HTMLCanvasElement>(this.canvasSelector);
+      }
+    }
+
     if (!this.overlayEl || !this.canvasEl) {
       this.dispose();
       return;
     }
 
-    if (
-      typeof window !== 'undefined' &&
-      window.matchMedia &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    ) {
+    const reducedMotion =
+      Boolean(options.reducedMotion) ||
+      Boolean(this.defaultOptions.reducedMotion) ||
+      (typeof document !== 'undefined' &&
+        Boolean(document.body?.classList.contains('reduced-motion'))) ||
+      (typeof window !== 'undefined' &&
+        Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches));
+
+    if (reducedMotion) {
       this.dispose();
       return;
     }
+
+    this.overlayEl.hidden = false;
+    this.overlayEl.removeAttribute('hidden');
+    this.overlayEl.style.display = 'flex';
+    this.overlayEl.dataset.mode = this.activeMode;
 
     this.ctx = this.canvasEl.getContext('2d');
     if (!this.ctx) {
@@ -82,15 +162,18 @@ export class OpeningFractureController {
 
     this.resize();
     this.buildDeterministicGeometry();
-    window.addEventListener('resize', this.handleResize);
 
-    const skipBtn = this.overlayEl.querySelector<HTMLButtonElement>('#skip-opening-btn');
-    if (skipBtn) {
-      skipBtn.addEventListener('click', this.handleSkip);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', this.handleResize);
+      window.addEventListener('keydown', this.handleKeyDown);
     }
-    window.addEventListener('keydown', this.handleKeyDown);
 
-    this.setState('initializing');
+    this.skipBtnEl = this.overlayEl.querySelector<HTMLButtonElement>('#skip-opening-btn');
+    if (this.skipBtnEl) {
+      this.skipBtnEl.addEventListener('click', this.handleSkip);
+    }
+
+    this.setState(this.activeMode === 'continue' ? 'cracking' : 'initializing');
     this.startTimeMs = performance.now();
     this.renderFrame(0);
     this.rafId = requestAnimationFrame(this.tick);
@@ -112,10 +195,10 @@ export class OpeningFractureController {
   };
 
   private resize(): void {
-    if (!this.canvasEl) return;
+    if (!this.canvasEl || typeof window === 'undefined') return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    this.canvasEl.width = Math.floor(window.innerWidth * dpr);
-    this.canvasEl.height = Math.floor(window.innerHeight * dpr);
+    this.canvasEl.width = Math.max(1, Math.floor(window.innerWidth * dpr));
+    this.canvasEl.height = Math.max(1, Math.floor(window.innerHeight * dpr));
   }
 
   private buildDeterministicGeometry(): void {
@@ -212,29 +295,51 @@ export class OpeningFractureController {
     if (this.isDisposed || !this.ctx || !this.canvasEl) return;
 
     const elapsedSec = (nowMs - this.startTimeMs) * 0.001;
-
-    if (elapsedSec >= 4.8) {
+    if (elapsedSec >= this.activeDurationSec) {
       this.dispose();
       return;
     }
 
-    if (elapsedSec < 0.6) {
-      this.setState('initializing');
-    } else if (elapsedSec < 1.5) {
-      this.setState('cracking');
-    } else if (elapsedSec < 2.9) {
-      this.setState('propagating');
-    } else if (elapsedSec < 4.4) {
-      this.setState('tearing');
+    if (this.activeMode === 'continue') {
+      const canonicalT = (elapsedSec / this.activeDurationSec) * 1.8;
+      if (canonicalT < 0.15) {
+        this.setState('cracking');
+      } else if (canonicalT < 0.35) {
+        this.setState('propagating');
+      } else if (canonicalT < 1.55) {
+        this.setState('tearing');
+      } else {
+        this.setState('revealed');
+      }
+      this.renderContinueFrame(canonicalT);
     } else {
-      this.setState('revealed');
+      const canonicalT = (elapsedSec / this.activeDurationSec) * 4.8;
+      if (canonicalT < 0.6) {
+        this.setState('initializing');
+      } else if (canonicalT < 1.5) {
+        this.setState('cracking');
+      } else if (canonicalT < 2.9) {
+        this.setState('propagating');
+      } else if (canonicalT < 4.4) {
+        this.setState('tearing');
+      } else {
+        this.setState('revealed');
+      }
+      this.renderFullFrame(canonicalT);
     }
 
-    this.renderFrame(elapsedSec);
     this.rafId = requestAnimationFrame(this.tick);
   };
 
   private renderFrame(t: number): void {
+    if (this.activeMode === 'continue') {
+      this.renderContinueFrame(t);
+    } else {
+      this.renderFullFrame(t);
+    }
+  }
+
+  private renderFullFrame(t: number): void {
     if (!this.ctx || !this.canvasEl) return;
     const ctx = this.ctx;
     const w = this.canvasEl.width;
@@ -261,41 +366,78 @@ export class OpeningFractureController {
         }
       }
     } else {
-      // Pha D & E: 16 mảnh đa giác văng ra 4 phía để lộ trực tiếp Pixel Canvas bên dưới
+      // Pha D & E (2.9s – 4.8s): 16 mảnh đa giác văng ra 4 phía để lộ trực tiếp Pixel Canvas bên dưới
       const tearNorm = Math.min(1, (t - 2.9) / 1.5);
       const fadeOut = t >= 4.4 ? Math.max(0, 1 - (t - 4.4) / 0.4) : 1;
+      this.renderShards(ctx, tearNorm, fadeOut);
+    }
+  }
+
+  private renderContinueFrame(t: number): void {
+    if (!this.ctx || !this.canvasEl) return;
+    const ctx = this.ctx;
+    const w = this.canvasEl.width;
+    const h = this.canvasEl.height;
+
+    ctx.clearRect(0, 0, w, h);
+
+    if (t < 0.35) {
+      // Brisk Crack + Branches (0.0s – 0.35s)
+      ctx.fillStyle = '#0D0A08';
+      ctx.fillRect(0, 0, w, h);
+
+      const crackProgress = Math.min(1, t / 0.22);
+      this.strokePolylinePartial(ctx, this.mainCrack, crackProgress, 3.2);
+
+      if (t >= 0.08) {
+        const branchProgress = Math.min(1, (t - 0.08) / 0.27);
+        for (const br of this.branches) {
+          this.strokePolylinePartial(ctx, br, branchProgress, 1.8);
+        }
+      }
+    } else {
+      // 16-Shard Tear (0.35s – 1.55s) + Reveal (1.55s – 1.8s)
+      const tearNorm = Math.min(1, (t - 0.35) / 1.2);
+      const fadeOut = t >= 1.55 ? Math.max(0, 1 - (t - 1.55) / 0.25) : 1;
+      this.renderShards(ctx, tearNorm, fadeOut);
+    }
+  }
+
+  private renderShards(
+    ctx: CanvasRenderingContext2D,
+    tearNorm: number,
+    fadeOut: number
+  ): void {
+    ctx.save();
+    ctx.globalAlpha = fadeOut;
+
+    for (const shard of this.shards) {
+      const localT = Math.max(0, Math.min(1, (tearNorm - shard.delay) / (1 - shard.delay)));
+      const ease = localT * localT * (2.6 - 1.6 * localT);
 
       ctx.save();
-      ctx.globalAlpha = fadeOut;
+      ctx.translate(shard.cx + shard.vx * ease, shard.cy + shard.vy * ease);
+      ctx.rotate(shard.rotSpeed * ease);
+      ctx.scale(Math.max(0.1, 1 - ease * 0.28), Math.max(0.1, 1 - ease * 0.28));
 
-      for (const shard of this.shards) {
-        const localT = Math.max(0, Math.min(1, (tearNorm - shard.delay) / (1 - shard.delay)));
-        const ease = localT * localT * (2.6 - 1.6 * localT);
+      ctx.beginPath();
+      shard.points.forEach((pt, idx) => {
+        const lx = pt.x - shard.cx;
+        const ly = pt.y - shard.cy;
+        if (idx === 0) ctx.moveTo(lx, ly);
+        else ctx.lineTo(lx, ly);
+      });
+      ctx.closePath();
 
-        ctx.save();
-        ctx.translate(shard.cx + shard.vx * ease, shard.cy + shard.vy * ease);
-        ctx.rotate(shard.rotSpeed * ease);
-        ctx.scale(Math.max(0.1, 1 - ease * 0.28), Math.max(0.1, 1 - ease * 0.28));
-
-        ctx.beginPath();
-        shard.points.forEach((pt, idx) => {
-          const lx = pt.x - shard.cx;
-          const ly = pt.y - shard.cy;
-          if (idx === 0) ctx.moveTo(lx, ly);
-          else ctx.lineTo(lx, ly);
-        });
-        ctx.closePath();
-
-        ctx.fillStyle = '#110E0B';
-        ctx.fill();
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = 'rgba(212, 165, 93, 0.65)';
-        ctx.stroke();
-        ctx.restore();
-      }
-
+      ctx.fillStyle = '#110E0B';
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(212, 165, 93, 0.65)';
+      ctx.stroke();
       ctx.restore();
     }
+
+    ctx.restore();
   }
 
   private strokePolylinePartial(
@@ -335,26 +477,65 @@ export class OpeningFractureController {
     ctx.restore();
   }
 
-  public dispose(): void {
-    if (this.isDisposed) return;
-    this.isDisposed = true;
-
+  private cleanupActiveListenersAndRaf(): void {
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
     }
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('resize', this.handleResize);
+      window.removeEventListener('keydown', this.handleKeyDown);
+    }
+    if (this.skipBtnEl) {
+      this.skipBtnEl.removeEventListener('click', this.handleSkip);
+      this.skipBtnEl = null;
+    }
+  }
 
-    window.removeEventListener('resize', this.handleResize);
-    window.removeEventListener('keydown', this.handleKeyDown);
+  public cancel(): void {
+    this.isDisposed = true;
+    this.cleanupActiveListenersAndRaf();
+    if (this.ctx && this.canvasEl) {
+      this.ctx.clearRect(0, 0, this.canvasEl.width, this.canvasEl.height);
+    }
+    this.setState('disposed');
+    if (this.overlayEl) {
+      this.overlayEl.hidden = true;
+      this.overlayEl.setAttribute('hidden', '');
+      this.overlayEl.style.display = 'none';
+      this.overlayEl.dataset.state = 'disposed';
+    }
+    this.ctx = null;
+    this.activeOnComplete = undefined;
+  }
+
+  public dispose(): void {
+    if (this.isDisposed) return;
+    this.isDisposed = true;
+
+    this.cleanupActiveListenersAndRaf();
+
+    if (this.ctx && this.canvasEl) {
+      this.ctx.clearRect(0, 0, this.canvasEl.width, this.canvasEl.height);
+    }
 
     this.setState('disposed');
-    if (this.overlayEl && this.overlayEl.parentNode) {
-      this.overlayEl.parentNode.removeChild(this.overlayEl);
+    if (this.overlayEl) {
+      this.overlayEl.hidden = true;
+      this.overlayEl.setAttribute('hidden', '');
+      this.overlayEl.style.display = 'none';
+      this.overlayEl.dataset.state = 'disposed';
+
+      if (this.removeFromDomOnDispose && this.overlayEl.parentNode) {
+        this.overlayEl.parentNode.removeChild(this.overlayEl);
+        this.overlayEl = null;
+        this.canvasEl = null;
+      }
     }
-    this.overlayEl = null;
-    this.canvasEl = null;
     this.ctx = null;
 
-    this.onComplete?.();
+    const completeCb = this.activeOnComplete ?? this.defaultOnComplete;
+    this.activeOnComplete = undefined;
+    completeCb?.();
   }
 }
