@@ -92,6 +92,24 @@ export function splitDialogueIntoPages(raw: string): string[] {
   return pages.length > 0 ? pages : [formatQuotedSpeech(cleaned)];
 }
 
+/**
+ * Keep complete character identities in story data, while the dialogue
+ * nameplate uses short, readable labels like an RPG.
+ */
+function getDialogueNameplate(speaker: string, role: string): { name: string; role: string } {
+  if (speaker === 'Giao Liên Lâm Văn Bính') {
+    return { name: 'Anh Bính', role: 'Giao liên' };
+  }
+  const readableName = speaker.trim();
+  const readableRole = role.trim();
+  return {
+    name: readableName,
+    role: readableRole.toLocaleLowerCase('vi') === readableName.toLocaleLowerCase('vi')
+      ? ''
+      : readableRole,
+  };
+}
+
 export class DialoguePanel {
   private callbacks: DialoguePanelCallbacks;
   private pages: string[] = [];
@@ -377,8 +395,15 @@ export class DialoguePanel {
     const sigEl = document.getElementById('dialogue-significance');
     const citeEl = document.getElementById('dialogue-citation');
 
-    if (speakerEl) speakerEl.textContent = node.speaker;
-    if (roleEl) roleEl.textContent = node.role;
+    const displayIdentity = getDialogueNameplate(node.speaker, node.role);
+    if (speakerEl) {
+      speakerEl.textContent = displayIdentity.name;
+      speakerEl.title = node.speaker;
+    }
+    if (roleEl) {
+      roleEl.textContent = displayIdentity.role;
+      roleEl.hidden = !displayIdentity.role;
+    }
 
     this.currentArchetype = resolveDialoguePortraitArchetype(
       node.speaker,
@@ -417,8 +442,15 @@ export class DialoguePanel {
 
       const speaker = node?.speaker ?? milestone.npcSpeaker;
       const role = node?.role ?? milestone.npcRole;
-      if (speakerEl) speakerEl.textContent = speaker;
-      if (roleEl) roleEl.textContent = role;
+      const displayIdentity = getDialogueNameplate(speaker, role);
+      if (speakerEl) {
+        speakerEl.textContent = displayIdentity.name;
+        speakerEl.title = speaker;
+      }
+      if (roleEl) {
+        roleEl.textContent = displayIdentity.role;
+        roleEl.hidden = !displayIdentity.role;
+      }
 
       this.currentArchetype = resolveDialoguePortraitArchetype(
         speaker,
