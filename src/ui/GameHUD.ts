@@ -201,53 +201,65 @@ export class GameHUD {
   ): void {
     if (typeof document === 'undefined') return;
 
+    const trackerEl = document.getElementById('hud-objective-tracker');
     const questTitleEl = document.getElementById('hud-active-quest-title');
     const objTextEl = document.getElementById('hud-active-objective-text');
     const objActionEl = document.getElementById('hud-active-objective-action');
     const objHintEl = document.getElementById('hud-active-objective-hint');
 
     if (activeObjective) {
+      const { quest, objective } = activeObjective;
+      const fullAction =
+        nextActionText ??
+        objective.nextActionText ??
+        objective.hintText ??
+        objective.title;
+      const shortAction = objective.hudText || objective.title;
+      const actionKey =
+        /\[\s*E\s*\]/i.test(fullAction) && !/\[\s*E\s*\]/i.test(shortAction)
+          ? ' [E]'
+          : '';
+
       if (questTitleEl) {
-        questTitleEl.textContent = `◆ ${activeObjective.quest.title}`;
+        questTitleEl.textContent = `◆ ${quest.hudTitle || quest.title}`;
+        questTitleEl.title = quest.title;
       }
       if (objTextEl) {
-        objTextEl.textContent = activeObjective.objective.title;
+        objTextEl.textContent = `→ ${shortAction}${actionKey}`;
+        objTextEl.title = fullAction;
       }
-      if (objActionEl) {
-        const actionLine =
-          nextActionText ??
-          activeObjective.objective.nextActionText ??
-          activeObjective.objective.hintText ??
-          activeObjective.objective.title;
-        objActionEl.hidden = false;
-        objActionEl.removeAttribute('hidden');
-        objActionEl.textContent = `→ ${actionLine}`;
+      if (trackerEl) {
+        trackerEl.setAttribute(
+          'aria-label',
+          `${quest.title}. ${objective.title}. ${fullAction}. Nhấn Enter hoặc J để mở nhật ký.`
+        );
       }
     } else {
       if (questTitleEl) {
-        questTitleEl.textContent = '✓ HOÀN THÀNH MỤC TIÊU CHƯƠNG';
+        questTitleEl.textContent = '✓ Hoàn thành chương';
+        questTitleEl.title = 'Đã hoàn thành tất cả mục tiêu chương';
       }
       if (objTextEl) {
-        objTextEl.textContent =
-          nextActionText || 'Tiến tới không gian hội tụ để kích hoạt Cổng Thời Gian.';
+        objTextEl.textContent = '→ Đến Cổng Thời Gian [E]';
+        objTextEl.title = nextActionText || 'Tiến tới Cổng Thời Gian cuối chương và nhấn [E]';
       }
-      if (objActionEl) {
-        objActionEl.hidden = false;
-        objActionEl.removeAttribute('hidden');
-        objActionEl.textContent =
-          '→ Tiến tới Cổng Thời Gian cuối chương và nhấn [E]';
-      }
+      trackerEl?.setAttribute(
+        'aria-label',
+        'Hoàn thành mục tiêu chương. Tiến tới Cổng Thời Gian. Nhấn Enter hoặc J để mở nhật ký.'
+      );
     }
 
+    // Detailed action and optional hint remain in the Journal, not in the
+    // always-visible HUD. Preserve the nodes for compatibility and accessibility.
+    if (objActionEl) {
+      objActionEl.textContent = '';
+      objActionEl.hidden = true;
+      objActionEl.setAttribute('hidden', '');
+    }
     if (objHintEl) {
-      const displayHint = showHints && Boolean(hintText);
-      objHintEl.hidden = !displayHint;
-      if (displayHint) {
-        objHintEl.removeAttribute('hidden');
-        objHintEl.textContent = `▸ Gợi ý: ${hintText}`;
-      } else {
-        objHintEl.setAttribute('hidden', '');
-      }
+      objHintEl.textContent = showHints && hintText ? `Gợi ý: ${hintText}` : '';
+      objHintEl.hidden = true;
+      objHintEl.setAttribute('hidden', '');
     }
   }
 
