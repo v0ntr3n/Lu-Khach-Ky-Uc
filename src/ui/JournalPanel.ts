@@ -1,8 +1,12 @@
 /**
  * @file src/ui/JournalPanel.ts
- * @description Giao diện Nhật Ký Hành Trình & Biên Niên Sử La Mã (#journal-modal, Phím J).
- * Tích hợp hai ngăn thẻ: "Nhiệm Vụ" (quests) và "Biên Niên Sử I–XII" (codex) để người chơi
- * theo dõi mục tiêu hiện hành và tra cứu các cột mốc lịch sử đã khôi phục.
+ * @description Cửa sổ Nhật Ký Hành Trình & Biên Niên Sử La Mã I–XII (#journal-modal, phím J)
+ * thiết kế theo phong cách Pixel RPG Eastward với bố cục 2 cột (Master List + Detail Inspector):
+ * - Ngăn 1 (#journal-quests-panel): Cột trái (#journal-quest-list) liệt kê nhóm nhiệm vụ Chính/Phụ
+ *   và các bước mục tiêu ngắn gọn, dễ quét; Cột phải (#journal-active-banner) hiển thị chi tiết mục tiêu
+ *   đang chọn/dẫn đường, gợi ý hành động và ghi chú bối cảnh (loại bỏ hoàn toàn văn bản trùng lặp và huy hiệu rườm rà).
+ * - Ngăn 2 (#journal-codex-panel): Cột trái (#codex-milestone-list) liệt kê 12 Cột mốc La Mã I–XII theo chương;
+ *   Cột phải (#codex-milestone-detail) hiển thị chi tiết cột mốc, ý nghĩa lịch sử và nguồn tham chiếu.
  */
 
 import { CHAPTERS } from '../data/chronicles';
@@ -26,38 +30,53 @@ export interface JournalQuestEntry {
   }>;
 }
 
-export interface JournalPanelCallbacks {
-  onClose?: () => void;
-  onSelectObjective?: (objectiveId: string) => void;
+export interface ActiveObjectiveBannerInfo {
+  questTitle: string;
+  objectiveId?: string;
+  objectiveTitle: string;
+  description: string;
+  hint?: string;
 }
 
-const STATUS_BADGE: Record<QuestObjectiveStatus, string> = {
-  completed: '✓ ĐÃ HOÀN THÀNH',
-  active: '◆ ĐANG THỰC HIỆN',
-  locked: '○ CHƯA MỞ KHÓA',
-};
+export interface JournalPanelCallbacks {
+  onSelectObjective?: (objectiveId: string) => void;
+  onSelectMilestone?: (milestone: MilestoneArtifact) => void;
+  onClose?: () => void;
+}
 
 export class JournalPanel {
   private callbacks: JournalPanelCallbacks;
   private activeTab: JournalTabId = 'quests';
+
   private quests: JournalQuestEntry[] = [];
   private activeObjective: { quest: QuestDefinition; objective: QuestObjective } | null = null;
   private trackedObjectiveId: string | null = null;
   private hintText = '';
   private isPresenterMode = false;
+  private showHints = true;
+
+  private inspectedQuestId: string | null = null;
+  private inspectedObjectiveId: string | null = null;
 
   private codexActiveChapter: ChapterData | null = CHAPTERS[0] ?? null;
   private codexCollected: Set<RomanMilestoneId> = new Set();
   private codexActiveMilestone: MilestoneArtifact | null = null;
+  private inspectedMilestoneRoman: RomanMilestoneId | null = null;
   private onSelectMilestone?: (milestone: MilestoneArtifact) => void;
 
-  constructor(callbacks: JournalPanelCallbacks) {
+  constructor(callbacks: JournalPanelCallbacks = {}) {
     this.callbacks = callbacks;
     this.bindStaticEvents();
   }
 
   private bindStaticEvents(): void {
     if (typeof document === 'undefined') return;
+
+    const closeBtn = document.getElementById('btn-close-journal');
+    closeBtn?.addEventListener('click', () => {
+      this.toggle(false);
+      this.callbacks.onClose?.();
+    });
 
     const modal = document.getElementById('journal-modal');
     modal?.addEventListener('click', (e) => {
@@ -67,70 +86,64 @@ export class JournalPanel {
       }
     });
 
-    const closeBtn = document.getElementById('btn-close-journal');
-    closeBtn?.addEventListener('click', () => {
-      this.toggle(false);
-      this.callbacks.onClose?.();
-    });
+    const tabQuests = document.getElementById('tab-journal-quests');
+    const tabCodex = document.getElementById('tab-journal-codex');
 
-    const questsTabBtn = document.getElementById('tab-journal-quests');
-    questsTabBtn?.addEventListener('click', () => {
-      this.setActiveTab('quests');
-    });
-
-    const codexTabBtn = document.getElementById('tab-journal-codex');
-    codexTabBtn?.addEventListener('click', () => {
-      this.setActiveTab('codex');
-    });
-  }
-
-  public getActiveTab(): JournalTabId {
-    return this.activeTab;
-  }
-
-  public setActiveTab(tab: JournalTabId): void {
-    this.activeTab = tab;
-    if (typeof document === 'undefined') return;
-
-    const questsTabBtn = document.getElementById('tab-journal-quests');
-    const codexTabBtn = document.getElementById('tab-journal-codex');
-    const questsPanel = document.getElementById('journal-quests-panel');
-    const codexPanel = document.getElementById('journal-codex-panel');
-
-    const isQuests = tab === 'quests';
-
-    if (questsTabBtn) {
-      questsTabBtn.classList.toggle('is-active', isQuests);
-      questsTabBtn.setAttribute('aria-selected', String(isQuests));
-    }
-    if (codexTabBtn) {
-      codexTabBtn.classList.toggle('is-active', !isQuests);
-      codexTabBtn.setAttribute('aria-selected', String(!isQuests));
-    }
-
-    if (questsPanel) {
-      questsPanel.hidden = !isQuests;
-      if (isQuests) {
-        questsPanel.removeAttribute('hidden');
-      } else {
-        questsPanel.setAttribute('hidden', '');
-      }
-    }
-
-    if (codexPanel) {
-      codexPanel.hidden = isQuests;
-      if (!isQuests) {
-        codexPanel.removeAttribute('hidden');
-      } else {
-        codexPanel.setAttribute('hidden', '');
-      }
-    }
+    tabQuests?.addEventListener('click', () => this.setActiveTab('quests'));
+    tabCodex?.addEventListener('click', () => this.setActiveTab('codex'));
   }
 
   public isOpen(): boolean {
     if (typeof document === 'undefined') return false;
     const modal = document.getElementById('journal-modal');
     return Boolean(modal && modal.classList.contains('is-open') && !modal.hidden);
+  }
+
+  public getActiveTab(): JournalTabId {
+    return this.activeTab;
+  }
+
+  public switchTab(tab: JournalTabId): void {
+    this.setActiveTab(tab);
+  }
+
+  public setActiveTab(tab: JournalTabId): void {
+    this.activeTab = tab;
+    if (typeof document === 'undefined') return;
+
+    const tabQuests = document.getElementById('tab-journal-quests');
+    const tabCodex = document.getElementById('tab-journal-codex');
+    const panelQuests = document.getElementById('journal-quests-panel');
+    const panelCodex = document.getElementById('journal-codex-panel');
+
+    const isQuests = tab === 'quests';
+
+    if (tabQuests) {
+      tabQuests.classList.toggle('is-active', isQuests);
+      tabQuests.setAttribute('aria-selected', String(isQuests));
+    }
+    if (tabCodex) {
+      tabCodex.classList.toggle('is-active', !isQuests);
+      tabCodex.setAttribute('aria-selected', String(!isQuests));
+    }
+
+    if (panelQuests) {
+      panelQuests.hidden = !isQuests;
+      if (!isQuests) {
+        panelQuests.setAttribute('hidden', '');
+      } else {
+        panelQuests.removeAttribute('hidden');
+      }
+    }
+
+    if (panelCodex) {
+      panelCodex.hidden = isQuests;
+      if (isQuests) {
+        panelCodex.setAttribute('hidden', '');
+      } else {
+        panelCodex.removeAttribute('hidden');
+      }
+    }
   }
 
   public toggle(force?: boolean, initialTab?: JournalTabId): boolean {
@@ -164,22 +177,424 @@ export class JournalPanel {
     return next;
   }
 
+  /**
+   * Cập nhật trạng thái nhiệm vụ từ HudController / GameApp và kết xuất bố cục 2 cột.
+   */
   public updateState(
     quests: JournalQuestEntry[],
     activeObjective: { quest: QuestDefinition; objective: QuestObjective } | null,
     hintText: string,
     isPresenterMode = false,
-    trackedObjectiveId: string | null = null
+    trackedObjectiveId: string | null = null,
+    showHints = true
   ): void {
     this.quests = quests;
     this.activeObjective = activeObjective;
     this.hintText = hintText;
     this.isPresenterMode = isPresenterMode;
+    this.showHints = showHints;
     this.trackedObjectiveId =
       trackedObjectiveId ?? activeObjective?.objective.id ?? null;
     this.render();
   }
 
+  /**
+   * Kết xuất ngăn Nhiệm Vụ (#journal-quests-panel) theo bố cục 2 cột Eastward RPG:
+   * - Cột trái (#journal-quest-list): Danh sách nhiệm vụ Chính/Phụ và các dòng mục tiêu tinh gọn.
+   * - Cột phải (#journal-active-banner): Khung chi tiết nhiệm vụ & bước mục tiêu đang chọn/theo dõi.
+   */
+  public render(): void {
+    if (typeof document === 'undefined') return;
+
+    const summaryEl = document.getElementById('journal-summary');
+    const bannerEl = document.getElementById('journal-active-banner');
+    const listEl = document.getElementById('journal-quest-list');
+
+    // Đảm bảo khung 2 cột luôn được bao bọc quanh #journal-quest-list và #journal-active-banner
+    const questsPanel = document.getElementById('journal-quests-panel');
+    if (questsPanel && listEl && bannerEl) {
+      let twoColWrap = questsPanel.querySelector<HTMLElement>('.journal-two-col-grid');
+      if (!twoColWrap) {
+        twoColWrap = document.createElement('div');
+        twoColWrap.className = 'journal-two-col-grid';
+        listEl.parentNode?.insertBefore(twoColWrap, listEl);
+        twoColWrap.appendChild(listEl);
+        twoColWrap.appendChild(bannerEl);
+      }
+    }
+
+    let totalObjectives = 0;
+    let completedObjectives = 0;
+    let completedQuests = 0;
+
+    for (const qEntry of this.quests) {
+      let allDone = qEntry.objectives.length > 0;
+      for (const objItem of qEntry.objectives) {
+        totalObjectives += 1;
+        const effStatus: QuestObjectiveStatus = this.isPresenterMode
+          ? 'completed'
+          : objItem.status;
+        if (effStatus === 'completed') {
+          completedObjectives += 1;
+        } else {
+          allDone = false;
+        }
+      }
+      if (allDone) {
+        completedQuests += 1;
+      }
+    }
+
+    if (summaryEl) {
+      summaryEl.textContent = `${completedObjectives}/${totalObjectives} bước mục tiêu · ${completedQuests}/${this.quests.length} nhiệm vụ hoàn tất${
+        this.isPresenterMode ? ' · [GIẢNG VIÊN]' : ''
+      }`;
+    }
+
+    const effectiveTrackedId =
+      this.trackedObjectiveId ?? this.activeObjective?.objective.id ?? null;
+
+    // Xác định nhiệm vụ và mục tiêu đang được chọn để hiển thị chi tiết ở cột phải
+    let selectedEntry: JournalQuestEntry | undefined;
+    let selectedObjItem:
+      | {
+          objective: QuestObjective;
+          status: QuestObjectiveStatus;
+          prerequisiteText?: string;
+        }
+      | undefined;
+
+    if (this.inspectedObjectiveId) {
+      for (const entry of this.quests) {
+        const found = entry.objectives.find(
+          (o) => o.objective.id === this.inspectedObjectiveId
+        );
+        if (found) {
+          selectedEntry = entry;
+          selectedObjItem = found;
+          break;
+        }
+      }
+    }
+
+    if (!selectedEntry && effectiveTrackedId) {
+      for (const entry of this.quests) {
+        const found = entry.objectives.find(
+          (o) => o.objective.id === effectiveTrackedId
+        );
+        if (found) {
+          selectedEntry = entry;
+          selectedObjItem = found;
+          break;
+        }
+      }
+    }
+
+    if (!selectedEntry && this.inspectedQuestId) {
+      selectedEntry = this.quests.find(
+        (e) => e.quest.id === this.inspectedQuestId
+      );
+    }
+
+    if (!selectedEntry && this.quests.length > 0) {
+      selectedEntry =
+        this.quests.find((e) =>
+          e.objectives.some(
+            (o) => (this.isPresenterMode ? 'completed' : o.status) !== 'completed'
+          )
+        ) ?? this.quests[0];
+    }
+
+    if (selectedEntry && !selectedObjItem) {
+      selectedObjItem =
+        selectedEntry.objectives.find(
+          (o) => o.objective.id === effectiveTrackedId
+        ) ??
+        selectedEntry.objectives.find(
+          (o) => (this.isPresenterMode ? 'completed' : o.status) === 'active'
+        ) ??
+        selectedEntry.objectives[selectedEntry.objectives.length - 1];
+    }
+
+    this.renderQuestInspector(
+      bannerEl,
+      selectedEntry ?? null,
+      selectedObjItem ?? null,
+      effectiveTrackedId
+    );
+
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    for (const entry of this.quests) {
+      const { quest, objectives } = entry;
+      let doneSteps = 0;
+      let hasActive = false;
+
+      for (const item of objectives) {
+        const effStatus: QuestObjectiveStatus = this.isPresenterMode
+          ? 'completed'
+          : item.status;
+        if (effStatus === 'completed') doneSteps += 1;
+        if (effStatus === 'active') hasActive = true;
+      }
+
+      const isQuestCompleted =
+        objectives.length > 0 && doneSteps === objectives.length;
+      const isQuestSelected = selectedEntry?.quest.id === quest.id;
+
+      const card = document.createElement('article');
+      card.className = `journal-quest-card is-${quest.category} ${
+        isQuestCompleted ? 'is-completed' : hasActive ? 'is-active' : 'is-locked'
+      }${isQuestSelected ? ' is-selected' : ''}`;
+      card.dataset.questId = quest.id;
+
+      const catLabel = quest.category === 'main' ? 'CHÍNH' : 'PHỤ';
+
+      const header = document.createElement('div');
+      header.className = 'journal-quest-header';
+      header.innerHTML = `
+        <div class="journal-quest-title-wrap">
+          <span class="journal-category-badge is-${quest.category}">${catLabel}</span>
+          <h4 class="journal-quest-title">${quest.title}</h4>
+        </div>
+        <span class="journal-step-count">${doneSteps}/${objectives.length}</span>
+      `;
+      header.addEventListener('click', () => {
+        this.inspectedQuestId = quest.id;
+        const firstActive = objectives.find(
+          (o) => (this.isPresenterMode ? 'completed' : o.status) === 'active'
+        );
+        this.inspectedObjectiveId =
+          firstActive?.objective.id ?? objectives[0]?.objective.id ?? null;
+        this.render();
+      });
+      card.appendChild(header);
+
+      const objList = document.createElement('ul');
+      objList.className = 'journal-objective-list';
+
+      for (const item of objectives) {
+        const effStatus: QuestObjectiveStatus = this.isPresenterMode
+          ? 'completed'
+          : item.status;
+        const isTracked =
+          effStatus === 'active' && item.objective.id === effectiveTrackedId;
+        const isInspected =
+          selectedObjItem?.objective.id === item.objective.id;
+
+        const li = document.createElement('li');
+        li.className = `journal-objective-row is-${effStatus}${
+          isTracked ? ' is-tracked' : ''
+        }${isInspected ? ' is-selected' : ''}`;
+        li.dataset.objectiveId = item.objective.id;
+
+        const statusGlyph =
+          effStatus === 'completed'
+            ? '✓'
+            : isTracked
+              ? '▼'
+              : effStatus === 'active'
+                ? '◆'
+                : '○';
+
+        const trackPillHtml =
+          effStatus === 'active'
+            ? `<span class="journal-track-pill ${isTracked ? 'is-tracked' : ''}">${
+                isTracked ? 'Đang dẫn' : 'Dẫn đường'
+              }</span>`
+            : '';
+
+        li.innerHTML = `
+          <div class="journal-obj-top">
+            <span class="journal-status-badge is-${effStatus}${
+              isTracked ? ' is-tracked' : ''
+            }" aria-hidden="true">${statusGlyph}</span>
+            <strong class="journal-obj-title">${item.objective.title}</strong>
+            ${trackPillHtml}
+          </div>
+        `;
+
+        li.addEventListener('mouseenter', () => {
+          if (this.inspectedObjectiveId !== item.objective.id) {
+            this.inspectedQuestId = quest.id;
+            this.inspectedObjectiveId = item.objective.id;
+            this.renderQuestInspector(
+              bannerEl,
+              entry,
+              item,
+              effectiveTrackedId
+            );
+            listEl
+              .querySelectorAll('.journal-objective-row.is-selected')
+              .forEach((el) => el.classList.remove('is-selected'));
+            li.classList.add('is-selected');
+          }
+        });
+
+        if (effStatus === 'active') {
+          li.tabIndex = 0;
+          li.setAttribute('role', 'button');
+          li.setAttribute(
+            'aria-label',
+            `Dẫn đường mục tiêu: ${item.objective.title}`
+          );
+          const triggerSelect = () => {
+            this.inspectedQuestId = quest.id;
+            this.inspectedObjectiveId = item.objective.id;
+            this.callbacks.onSelectObjective?.(item.objective.id);
+          };
+          li.addEventListener('click', triggerSelect);
+          li.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter' || ev.key === ' ') {
+              ev.preventDefault();
+              triggerSelect();
+            }
+          });
+        } else {
+          li.addEventListener('click', () => {
+            this.inspectedQuestId = quest.id;
+            this.inspectedObjectiveId = item.objective.id;
+            this.render();
+          });
+        }
+
+        objList.appendChild(li);
+      }
+
+      card.appendChild(objList);
+      listEl.appendChild(card);
+    }
+  }
+
+  private renderQuestInspector(
+    bannerEl: HTMLElement | null,
+    entry: JournalQuestEntry | null,
+    objItem: {
+      objective: QuestObjective;
+      status: QuestObjectiveStatus;
+      prerequisiteText?: string;
+    } | null,
+    effectiveTrackedId: string | null
+  ): void {
+    if (!bannerEl) return;
+
+    if (!entry && !this.activeObjective) {
+      bannerEl.innerHTML = `
+        <div class="journal-inspector-empty">
+          <div class="journal-banner-label">✓ HOÀN TẤT TOÀN BỘ MỤC TIÊU</div>
+          <div class="journal-banner-title">Sẵn sàng kích hoạt Cổng Thời Gian cuối chương</div>
+          <div class="journal-banner-desc">Tiến tới Điểm Hội Tụ Lịch Sử để khép lại chương hiện tại.</div>
+        </div>
+      `;
+      return;
+    }
+
+    const quest = entry?.quest ?? this.activeObjective?.quest;
+    const objective = objItem?.objective ?? this.activeObjective?.objective;
+    const effStatus: QuestObjectiveStatus = this.isPresenterMode
+      ? 'completed'
+      : (objItem?.status ?? 'active');
+
+    const isTracked = Boolean(
+      objective && effStatus === 'active' && objective.id === effectiveTrackedId
+    );
+
+    const stepIndex =
+      quest && objective
+        ? Math.max(
+            1,
+            quest.objectives.findIndex((o) => o.id === objective.id) + 1
+          )
+        : 1;
+    const totalSteps = quest ? Math.max(1, quest.objectives.length) : 1;
+
+    const categoryText =
+      quest?.category === 'side' ? 'NHIỆM VỤ PHỤ' : 'NHIỆM VỤ CHÍNH';
+
+    const kickerLabel = isTracked
+      ? '▼ MỤC TIÊU ĐANG DẪN ĐƯỜNG'
+      : effStatus === 'completed'
+        ? '✓ MỤC TIÊU ĐÃ HOÀN TẤT'
+        : effStatus === 'locked'
+          ? '○ BƯỚC TIẾP THEO (CHƯA MỞ)'
+          : '◆ CHI TIẾT MỤC TIÊU';
+
+    const objTitle = objective?.title ?? 'Đã hoàn thành các bước nhiệm vụ';
+    const objDesc =
+      effStatus === 'locked'
+        ? objItem?.prerequisiteText ||
+          'Hãy hoàn thành bước mục tiêu hiện tại để mở khóa diễn biến tiếp theo.'
+        : (objective?.description ?? 'Mọi mục tiêu của nhiệm vụ này đã hoàn tất.');
+
+    const rawHint =
+      objective?.hintText ||
+      (isTracked ? this.hintText : '');
+    const hintHtml =
+      this.showHints && rawHint && effStatus !== 'completed'
+        ? `<div class="journal-banner-hint">▸ Gợi ý: ${rawHint}</div>`
+        : '';
+
+    const trackActionHtml =
+      objective && effStatus === 'active'
+        ? `<button type="button" class="ctrl-btn ${
+            isTracked ? 'is-primary' : ''
+          } journal-inspector-track-btn" data-inspect-track-id="${objective.id}">
+            ${
+              isTracked
+                ? '▼ Đang dẫn đường trên Minimap'
+                : '▸ Dẫn đường mục tiêu này'
+            }
+          </button>`
+        : '';
+
+    const sourceCite =
+      quest?.provenance?.citation ||
+      quest?.provenance?.historicalNote ||
+      quest?.provenance?.label ||
+      '';
+    const sourceCiteHtml = sourceCite
+      ? `<div class="journal-quest-cite">◆ Tư liệu: ${sourceCite}</div>`
+      : '';
+
+    bannerEl.innerHTML = `
+      <div class="journal-inspector-top">
+        <span class="journal-banner-label">${kickerLabel}</span>
+        <span class="journal-inspector-step-pill">${categoryText} · Bước ${stepIndex}/${totalSteps}</span>
+      </div>
+      <div class="journal-inspector-quest-head">
+        <h4 class="journal-inspector-quest-title">${quest?.title ?? ''}</h4>
+        ${
+          quest?.summary
+            ? `<p class="journal-quest-summary">${quest.summary}</p>`
+            : ''
+        }
+      </div>
+      <div class="journal-inspector-objective-box is-${effStatus}">
+        <div class="journal-banner-title"><strong>${objTitle}</strong></div>
+        <div class="journal-banner-desc">${objDesc}</div>
+        ${hintHtml}
+        ${trackActionHtml}
+      </div>
+      ${sourceCiteHtml}
+    `;
+
+    const trackBtn = bannerEl.querySelector<HTMLButtonElement>(
+      '.journal-inspector-track-btn'
+    );
+    trackBtn?.addEventListener('click', () => {
+      const objId = trackBtn.dataset.inspectTrackId;
+      if (objId) {
+        this.callbacks.onSelectObjective?.(objId);
+      }
+    });
+  }
+
+  /**
+   * Cập nhật ngăn Biên Niên Sử La Mã I–XII (#journal-codex-panel) theo bố cục 2 cột:
+   * - Cột trái (#codex-milestone-list): Danh sách 12 cột mốc tinh gọn chia theo 4 Chương.
+   * - Cột phải (#codex-milestone-detail): Khung tra cứu chi tiết cột mốc đang chọn.
+   */
   public updateCodex(
     activeChapter: ChapterData,
     collectedMilestones: ReadonlySet<RomanMilestoneId>,
@@ -198,16 +613,52 @@ export class JournalPanel {
   public renderCodex(): void {
     if (typeof document === 'undefined') return;
 
-    const progressEl = document.getElementById('codex-progress-count');
-    if (progressEl) {
-      progressEl.textContent = `${this.codexCollected.size} / 12 CỘT MỐC`;
+    const countEl = document.getElementById('codex-progress-count');
+    if (countEl) {
+      countEl.textContent = `${this.codexCollected.size} / 12 CỘT MỐC`;
     }
 
-    const container = document.getElementById('codex-milestone-list');
-    if (!container) return;
+    const codexList = document.getElementById('codex-milestone-list');
+    if (!codexList) return;
 
-    container.innerHTML = '';
-    const activeChapterId = this.codexActiveChapter?.id ?? CHAPTERS[0]?.id;
+    // Đảm bảo khung 2 cột cho Biên Niên Sử có vùng chi tiết #codex-milestone-detail
+    const codexPanel = document.getElementById('journal-codex-panel');
+    let detailEl = document.getElementById('codex-milestone-detail');
+    if (codexPanel && !detailEl) {
+      let splitWrap = codexPanel.querySelector<HTMLElement>('.codex-two-col-grid');
+      if (!splitWrap) {
+        splitWrap = document.createElement('div');
+        splitWrap.className = 'codex-two-col-grid';
+        codexList.parentNode?.insertBefore(splitWrap, codexList);
+        splitWrap.appendChild(codexList);
+      }
+      detailEl = document.createElement('aside');
+      detailEl.id = 'codex-milestone-detail';
+      detailEl.setAttribute('aria-live', 'polite');
+      splitWrap.appendChild(detailEl);
+    }
+
+    const activeChapter = this.codexActiveChapter ?? CHAPTERS[0];
+    const allMilestones: Array<{ chapter: ChapterData; milestone: MilestoneArtifact }> = [];
+    for (const ch of CHAPTERS) {
+      for (const m of ch.milestones) {
+        allMilestones.push({ chapter: ch, milestone: m });
+      }
+    }
+
+    const collectedArr = Array.from(this.codexCollected);
+    const targetRoman =
+      this.inspectedMilestoneRoman ??
+      this.codexActiveMilestone?.roman ??
+      collectedArr[collectedArr.length - 1] ??
+      activeChapter?.milestones[0]?.roman ??
+      'I';
+
+    const selectedEntry =
+      allMilestones.find((e) => e.milestone.roman === targetRoman) ??
+      allMilestones[0];
+
+    codexList.innerHTML = '';
 
     for (const ch of CHAPTERS) {
       const groupEl = document.createElement('div');
@@ -215,17 +666,17 @@ export class JournalPanel {
 
       const headerEl = document.createElement('div');
       headerEl.className = `codex-chapter-header ${
-        ch.id === activeChapterId ? 'is-active' : ''
+        ch.id === activeChapter?.id ? 'is-active' : ''
       }`;
       headerEl.textContent = `${ch.chapterNum} · ${ch.years} — ${ch.title}`;
       groupEl.appendChild(headerEl);
 
-      const gridEl = document.createElement('div');
-      gridEl.className = 'codex-chapter-items';
+      const itemsBox = document.createElement('div');
+      itemsBox.className = 'codex-chapter-items';
 
       for (const m of ch.milestones) {
         const isDone = this.codexCollected.has(m.roman);
-        const isCurrent = this.codexActiveMilestone?.roman === m.roman;
+        const isCurrent = selectedEntry?.milestone.roman === m.roman;
 
         const itemBtn = document.createElement('button');
         itemBtn.type = 'button';
@@ -238,166 +689,90 @@ export class JournalPanel {
           .filter(Boolean)
           .join(' ');
 
-        if (isDone) {
-          itemBtn.innerHTML = `
-            <span class="codex-roman">✓ ${m.roman}</span>
-            <span class="codex-dots" aria-hidden="true"></span>
-            <span class="codex-item-body">
-              <strong class="codex-title">${m.year} · ${m.title}</strong>
-            </span>
-          `;
-        } else {
-          itemBtn.innerHTML = `
-            <span class="codex-roman">${m.roman}</span>
-            <span class="codex-dots" aria-hidden="true"></span>
-            <span class="codex-item-body">
-              <strong class="codex-title">${m.year} · Cột mốc chưa khôi phục</strong>
-              <span class="codex-cite">Khám phá tại hiện trường lịch sử để mở khóa sử liệu</span>
-            </span>
-          `;
-        }
+        itemBtn.innerHTML = `
+          <span class="codex-roman">${isDone ? '✓ ' : ''}${m.roman}</span>
+          <div class="codex-item-body">
+            <strong class="codex-title">${m.year} · ${
+              isDone || this.isPresenterMode ? m.title : 'Cột mốc chưa khôi phục'
+            }</strong>
+          </div>
+        `;
 
         itemBtn.addEventListener('click', () => {
-          this.onSelectMilestone?.(m);
+          this.inspectedMilestoneRoman = m.roman;
+          this.renderCodexDetail(
+            detailEl,
+            ch,
+            m,
+            this.codexCollected.has(m.roman)
+          );
+          codexList
+            .querySelectorAll('.codex-item.is-current')
+            .forEach((el) => el.classList.remove('is-current'));
+          itemBtn.classList.add('is-current');
+          if (this.onSelectMilestone) {
+            this.onSelectMilestone(m);
+          } else {
+            this.callbacks.onSelectMilestone?.(m);
+          }
         });
-        gridEl.appendChild(itemBtn);
+        itemsBox.appendChild(itemBtn);
       }
 
-      groupEl.appendChild(gridEl);
-      container.appendChild(groupEl);
+      groupEl.appendChild(itemsBox);
+      codexList.appendChild(groupEl);
+    }
+
+    if (selectedEntry) {
+      this.renderCodexDetail(
+        detailEl,
+        selectedEntry.chapter,
+        selectedEntry.milestone,
+        this.codexCollected.has(selectedEntry.milestone.roman)
+      );
     }
   }
 
-  public render(): void {
-    if (typeof document === 'undefined') return;
+  private renderCodexDetail(
+    detailEl: HTMLElement | null,
+    chapter: ChapterData,
+    milestone: MilestoneArtifact,
+    isCollected: boolean
+  ): void {
+    if (!detailEl) return;
 
-    const summaryEl = document.getElementById('journal-summary');
-    const bannerEl = document.getElementById('journal-active-banner');
-    const listEl = document.getElementById('journal-quest-list');
-
-    let totalObjectives = 0;
-    let completedObjectives = 0;
-    for (const q of this.quests) {
-      for (const obj of q.objectives) {
-        totalObjectives++;
-        if (obj.status === 'completed' || this.isPresenterMode) {
-          completedObjectives++;
-        }
-      }
-    }
-
-    if (summaryEl) {
-      summaryEl.textContent = `Tiến độ nhiệm vụ: ${completedObjectives} / ${totalObjectives} mục tiêu hoàn thành · ${
-        this.codexCollected.size
-      } / 12 cột mốc${this.isPresenterMode ? ' · [CHẾ ĐỘ GIẢNG VIÊN]' : ''}`;
-    }
-
-    if (bannerEl) {
-      if (this.activeObjective) {
-        bannerEl.innerHTML = `
-          <div class="journal-banner-label">▼ MỤC TIÊU ĐANG DẪN ĐƯỜNG TRÊN BẢN ĐỒ</div>
-          <strong class="journal-banner-title">${this.activeObjective.quest.title} — ${this.activeObjective.objective.title}</strong>
-          <p class="journal-banner-desc">${this.activeObjective.objective.description}</p>
-          ${
-            this.hintText
-              ? `<p class="journal-banner-hint">▸ Gợi ý dẫn đường: ${this.hintText}</p>`
-              : ''
-          }
-        `;
-      } else {
-        bannerEl.innerHTML = `
-          <div class="journal-banner-label">✓ ĐÃ HOÀN THÀNH TOÀN BỘ MỤC TIÊU</div>
-          <strong class="journal-banner-title">Sẵn sàng kích hoạt Cổng Thời Gian cuối chương</strong>
-        `;
-      }
-    }
-
-    if (!listEl) return;
-    listEl.innerHTML = '';
-
-    const activeTrackedId =
-      this.trackedObjectiveId ?? this.activeObjective?.objective.id ?? null;
-
-    for (const entry of this.quests) {
-      const { quest, objectives } = entry;
-      const card = document.createElement('div');
-      card.className = `journal-quest-card is-${quest.category}`;
-      card.dataset.questId = quest.id;
-
-      const categoryLabel =
-        quest.category === 'main' ? '◆ NHIỆM VỤ CHÍNH' : '▸ NHIỆM VỤ PHỤ';
-
-      let objectivesHtml = '';
-      for (const item of objectives) {
-        const effStatus: QuestObjectiveStatus = this.isPresenterMode
-          ? 'completed'
-          : item.status;
-        const isTracked =
-          effStatus === 'active' && item.objective.id === activeTrackedId;
-        const badgeText = isTracked
-          ? '▼ ĐANG DẪN ĐƯỜNG'
-          : STATUS_BADGE[effStatus];
-        const titleText =
-          effStatus === 'locked'
-            ? `${item.objective.title} (Chưa mở khóa)`
-            : item.objective.title;
-        const descText =
-          effStatus === 'locked'
-            ? item.prerequisiteText ||
-              'Hãy hoàn thành mục tiêu hiện tại để tiếp tục dòng sự kiện lịch sử.'
-            : item.objective.description;
-        const trackCta =
-          effStatus === 'active'
-            ? `<span class="journal-track-pill ${isTracked ? 'is-tracked' : ''}">${
-                isTracked ? '▼ Đang theo dõi trên Minimap' : '▸ Nhấp để dẫn đường'
-              }</span>`
-            : '';
-
-        objectivesHtml += `
-          <li class="journal-objective-row is-${effStatus}${isTracked ? ' is-tracked' : ''}" data-objective-id="${item.objective.id}" ${
-            effStatus === 'active' ? 'tabindex="0" role="button"' : ''
-          }>
-            <div class="journal-obj-top">
-              <span class="journal-status-badge is-${effStatus}${isTracked ? ' is-tracked' : ''}">${badgeText}</span>
-              <strong>${titleText}</strong>
-              ${trackCta}
-            </div>
-            <p class="journal-obj-desc">${descText}</p>
-          </li>
-        `;
-      }
-
-      card.innerHTML = `
-        <div class="journal-quest-header">
-          <div>
-            <span class="journal-category-badge">${categoryLabel}</span>
-            <h4 class="journal-quest-title">${quest.title}</h4>
-            <p class="journal-quest-sub">${quest.subtitle}</p>
-          </div>
-          
+    if (!isCollected && !this.isPresenterMode) {
+      detailEl.innerHTML = `
+        <div class="codex-detail-top">
+          <span class="codex-detail-seal is-locked">CỘT MỐC ${milestone.roman} · ${milestone.year}</span>
+          <span class="codex-detail-status is-locked">○ Chưa khôi phục</span>
         </div>
-        <p class="journal-quest-summary">${quest.summary}</p>
-        <ul class="journal-objective-list">${objectivesHtml}</ul>
-
+        <h4 class="codex-detail-title">Dấu Ấn Lịch Sử Chưa Mở Khóa</h4>
+        <div class="codex-detail-meta">${chapter.chapterNum} · ${chapter.locationLabel}</div>
+        <p class="codex-detail-desc">
+          Khám phá không gian <strong>${chapter.locationLabel}</strong> và hoàn thành nhiệm vụ liên quan để khôi phục sự kiện lịch sử này vào Biên Niên Sử.
+        </p>
+        <div class="codex-detail-cite">◆ Tham chiếu: ${milestone.textbookCitation}</div>
       `;
-
-      card
-        .querySelectorAll<HTMLElement>('.journal-objective-row.is-active')
-        .forEach((rowEl) => {
-          const objId = rowEl.dataset.objectiveId;
-          if (!objId) return;
-          rowEl.addEventListener('click', () => {
-            this.callbacks.onSelectObjective?.(objId);
-          });
-          rowEl.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              this.callbacks.onSelectObjective?.(objId);
-            }
-          });
-        });
-
-      listEl.appendChild(card);
+      return;
     }
+
+    const quoteText = milestone.dialogue[0] ?? '';
+
+    detailEl.innerHTML = `
+      <div class="codex-detail-top">
+        <span class="codex-detail-seal is-collected">✓ CỘT MỐC ${milestone.roman} · ${milestone.year}</span>
+        <span class="codex-detail-status is-collected">Đã khôi phục</span>
+      </div>
+      <h4 class="codex-detail-title">${milestone.title}</h4>
+      <div class="codex-detail-meta">${chapter.chapterNum} · ${milestone.npcSpeaker} (${milestone.npcRole})</div>
+      ${
+        quoteText
+          ? `<blockquote class="codex-detail-quote">${quoteText}</blockquote>`
+          : ''
+      }
+      <p class="codex-detail-desc">${milestone.historicalSignificance}</p>
+      <div class="codex-detail-cite">◆ Tư liệu: ${milestone.textbookCitation}</div>
+    `;
   }
 }

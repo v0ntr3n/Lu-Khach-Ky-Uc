@@ -13,15 +13,18 @@ import type {
   SaveDataV1,
   SaveDataV2,
   SaveSummary,
+  ThemeMode,
 } from '../types/game';
 
 export const SAVE_KEY_V2 = 'lu_khach_ky_uc_save_v2';
 export const SAVE_KEY_V1 = 'lu_khach_ky_uc_save_v1';
 export const SETTINGS_KEY_V1 = 'lu_khach_ky_uc_settings_v1';
+export const THEME_KEY_V1 = 'lu_khach_ky_uc_theme';
 
 const VALID_ERAS: readonly EraId[] = ['1930', '1945', '1954_1975', '1986_2045'];
 const VALID_CAMERA_ZOOMS: readonly CameraZoomPreset[] = ['wide', 'normal', 'close'];
 const VALID_EFFECTS_QUALITIES: readonly EffectsQuality[] = ['full', 'subtle'];
+const VALID_THEME_MODES: readonly ThemeMode[] = ['system', 'light', 'dark'];
 const VALID_MILESTONES: readonly RomanMilestoneId[] = [
   'I',
   'II',
@@ -76,6 +79,7 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
   presenterModeUnlocked: false,
   tutorialCompleted: false,
   showMinimap: true,
+  themeMode: 'system',
 };
 
 export function normalizeSettings(raw?: Partial<GameSettings> | null): GameSettings {
@@ -93,6 +97,11 @@ export function normalizeSettings(raw?: Partial<GameSettings> | null): GameSetti
     raw?.effectsQuality && VALID_EFFECTS_QUALITIES.includes(raw.effectsQuality)
       ? raw.effectsQuality
       : 'full';
+
+  const themeMode: ThemeMode =
+    raw?.themeMode && VALID_THEME_MODES.includes(raw.themeMode)
+      ? raw.themeMode
+      : 'system';
 
   return {
     muted: typeof raw?.muted === 'boolean' ? raw.muted : DEFAULT_GAME_SETTINGS.muted,
@@ -112,6 +121,7 @@ export function normalizeSettings(raw?: Partial<GameSettings> | null): GameSetti
       typeof raw?.tutorialCompleted === 'boolean' ? raw.tutorialCompleted : false,
     showMinimap:
       typeof raw?.showMinimap === 'boolean' ? raw.showMinimap : true,
+    themeMode,
   };
 }
 
@@ -147,6 +157,9 @@ export function normalizeEmbeddedSaveSettings(
   }
   if (raw && raw.showMinimap !== undefined) {
     embedded.showMinimap = full.showMinimap;
+  }
+  if (raw && raw.themeMode !== undefined) {
+    embedded.themeMode = full.themeMode;
   }
 
   return embedded;
@@ -185,6 +198,7 @@ export class SaveManager {
   public static readonly STORAGE_KEY_V2 = SAVE_KEY_V2;
   public static readonly STORAGE_KEY_V1 = SAVE_KEY_V1;
   public static readonly STORAGE_KEY_SETTINGS_V1 = SETTINGS_KEY_V1;
+  public static readonly STORAGE_KEY_THEME_V1 = THEME_KEY_V1;
 
   public static normalizeSettings(raw?: Partial<GameSettings> | null): GameSettings {
     return normalizeSettings(raw);
@@ -207,6 +221,7 @@ export class SaveManager {
       if (typeof localStorage === 'undefined') return;
       const normalized = normalizeSettings(settings);
       localStorage.setItem(SETTINGS_KEY_V1, JSON.stringify(normalized));
+      localStorage.setItem(THEME_KEY_V1, normalized.themeMode ?? 'system');
     } catch {
       // Bỏ qua lỗi quota hoặc môi trường ẩn danh không cho phép localStorage
     }
@@ -222,11 +237,18 @@ export class SaveManager {
         return normalizeSettings(DEFAULT_GAME_SETTINGS);
       }
 
+      const rawTheme = localStorage.getItem(THEME_KEY_V1) as ThemeMode | null;
+      const standaloneTheme =
+        rawTheme && VALID_THEME_MODES.includes(rawTheme) ? rawTheme : undefined;
+
       const rawSettings = localStorage.getItem(SETTINGS_KEY_V1);
       if (rawSettings) {
         const parsed = JSON.parse(rawSettings) as Partial<GameSettings> | null;
         if (parsed && typeof parsed === 'object') {
-          return normalizeSettings(parsed);
+          return normalizeSettings({
+            ...parsed,
+            ...(standaloneTheme && !parsed.themeMode ? { themeMode: standaloneTheme } : {}),
+          });
         }
       }
 
@@ -234,11 +256,19 @@ export class SaveManager {
       if (rawV2) {
         const parsedSave = JSON.parse(rawV2) as Partial<SaveDataV2> | null;
         if (parsedSave && parsedSave.version === 2 && parsedSave.settings) {
-          return normalizeSettings(parsedSave.settings);
+          return normalizeSettings({
+            ...parsedSave.settings,
+            ...(standaloneTheme && !parsedSave.settings.themeMode
+              ? { themeMode: standaloneTheme }
+              : {}),
+          });
         }
       }
 
-      return normalizeSettings(DEFAULT_GAME_SETTINGS);
+      return normalizeSettings({
+        ...DEFAULT_GAME_SETTINGS,
+        ...(standaloneTheme ? { themeMode: standaloneTheme } : {}),
+      });
     } catch {
       return normalizeSettings(DEFAULT_GAME_SETTINGS);
     }

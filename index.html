@@ -1,9 +1,50 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" data-theme="dark" data-theme-mode="system">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Lữ Khách Ký Ức (1930 – 2045) — Hành Trình Lịch Sử Sơn Mài &amp; Giấy Dó</title>
+    <script>
+      (function () {
+        try {
+          var mode = localStorage.getItem('lu_khach_ky_uc_theme');
+          if (mode !== 'light' && mode !== 'dark' && mode !== 'system') {
+            var raw = localStorage.getItem('lu_khach_ky_uc_settings_v1');
+            if (raw) {
+              var parsed = JSON.parse(raw);
+              if (
+                parsed &&
+                (parsed.themeMode === 'light' ||
+                  parsed.themeMode === 'dark' ||
+                  parsed.themeMode === 'system')
+              ) {
+                mode = parsed.themeMode;
+              }
+            }
+          }
+          if (mode !== 'light' && mode !== 'dark' && mode !== 'system') {
+            mode = 'system';
+          }
+          var effective = 'dark';
+          if (mode === 'light') {
+            effective = 'light';
+          } else if (mode === 'dark') {
+            effective = 'dark';
+          } else if (
+            window.matchMedia &&
+            window.matchMedia('(prefers-color-scheme: light)').matches
+          ) {
+            effective = 'light';
+          }
+          document.documentElement.dataset.theme = effective;
+          document.documentElement.dataset.themeMode = mode;
+          document.documentElement.style.colorScheme = effective;
+        } catch (e) {
+          document.documentElement.dataset.theme = 'dark';
+          document.documentElement.dataset.themeMode = 'system';
+        }
+      })();
+    </script>
     <link
       rel="icon"
       type="image/svg+xml"
@@ -16,8 +57,15 @@
       rel="stylesheet"
     />
     <style>
-      :root {
-        /* Hệ thống 12 Sắc độ Sơn Mài & Giấy Dó (DESIGN.md) */
+      /* ==========================================================================
+         HỆ THỐNG DESIGN TOKENS TẬP TRUNG — EASTWARD PIXEL RPG (SƠN MÀI & GIẤY DÓ)
+         - Dark Mode (Mặc định): Nâu than ấm, Sơn mài đen thẫm, Vàng đồng dịu, Đỏ son.
+         - Light Mode: Giấy dó cổ, Màu kem ấm, Nâu mực thẫm, Vàng đồng cổ.
+         - Đảm bảo độ tương phản WCAG AA (>= 4.5:1) trên mọi bề mặt ở cả hai chế độ.
+         ========================================================================== */
+      :root,
+      [data-theme='dark'] {
+        /* 12 Sắc độ gốc (Base Palette Reference) */
         --lacquer-void: #110e0b;
         --lacquer-deep: #1b1612;
         --lacquer-elevated: #241d17;
@@ -31,12 +79,194 @@
         --parchment-warm: #e6e5dc;
         --parchment-light: #f4efe4;
 
-        /* Hệ thống phông chữ tiếng Việt sắc nét */
+        /* Phông chữ tiếng Việt sắc nét */
         --font-display: 'Cormorant Garamond', 'Noto Serif', Georgia, 'Times New Roman', serif;
         --font-serif: 'Newsreader', 'Be Vietnam Pro', Georgia, serif;
         --font-ui: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
           sans-serif;
         --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+        /* Semantic Tokens — Background & Overlay */
+        --bg-canvas: #110e0b;
+        --bg-page: #110e0b;
+        --bg-overlay: rgba(17, 14, 11, 0.88);
+        --bg-vignette-radial: radial-gradient(
+          ellipse 68% 74% at 50% 46%,
+          rgba(17, 14, 11, 0.42) 0%,
+          rgba(17, 14, 11, 0.78) 70%,
+          rgba(17, 14, 11, 0.94) 100%
+        );
+        --bg-vignette-linear: linear-gradient(
+          180deg,
+          rgba(17, 14, 11, 0.65) 0%,
+          rgba(17, 14, 11, 0.2) 45%,
+          rgba(17, 14, 11, 0.86) 100%
+        );
+
+        /* Semantic Tokens — Surfaces */
+        --surface-primary: #1b1612;
+        --surface-hud: rgba(27, 22, 18, 0.95);
+        --surface-elevated: #241d17;
+        --surface-subtle: #15110d;
+        --surface-inset: #2b221b;
+        --surface-hover: #38291d;
+        --surface-active: #9e3321;
+        --surface-selected: #332419;
+        --surface-disabled: #18130f;
+        --surface-touch: rgba(27, 22, 18, 0.88);
+        --surface-touch-primary: rgba(158, 51, 33, 0.92);
+        --surface-next-btn: rgba(158, 51, 33, 0.45);
+
+        /* Semantic Tokens — Typography & Text (WCAG AA >= 4.5:1 verified) */
+        --text-primary: #f4efe4;
+        --text-secondary: #dfd6c5;
+        --text-muted: #b8aa93;
+        --text-accent: #e2b56b;
+        --text-crimson: #f28470;
+        --text-on-accent: #fbf8f1;
+        --text-disabled: #8f826f;
+
+        /* Semantic Tokens — Borders & Focus */
+        --border-subtle: rgba(212, 165, 93, 0.28);
+        --border-default: #8a5a2b;
+        --border-strong: #d4a55d;
+        --border-accent: #9e3321;
+        --border-focus: #e2b56b;
+
+        /* Semantic Tokens — Accents */
+        --accent-primary: #9e3321;
+        --accent-primary-hover: #b33b27;
+        --accent-secondary: #d4a55d;
+        --accent-gradient: linear-gradient(90deg, #9e3321 0%, #d4a55d 100%);
+        --rule-gradient: linear-gradient(
+          90deg,
+          transparent 0%,
+          #8a5a2b 20%,
+          #d4a55d 50%,
+          #8a5a2b 80%,
+          transparent 100%
+        );
+
+        /* Semantic Tokens — Statuses (Tracked, Completed, Locked, Error) */
+        --status-tracked-bg: #3b1d17;
+        --status-tracked-border: #df6b57;
+        --status-tracked-text: #fbf8f1;
+        --status-completed-bg: #1f2b1e;
+        --status-completed-border: #7fa668;
+        --status-completed-text: #d0e6c2;
+        --status-locked-bg: #15110d;
+        --status-locked-border: #5c452d;
+        --status-locked-text: #b0a28c;
+        --status-error-bg: rgba(158, 51, 33, 0.28);
+        --status-error-border: #df6b57;
+        --status-error-text: #f59381;
+
+        /* Semantic Tokens — Shadows & Frames */
+        --shadow-panel: 0 22px 56px rgba(0, 0, 0, 0.88);
+        --shadow-hud: 0 6px 18px rgba(17, 14, 11, 0.78);
+        --shadow-toast: 0 10px 28px rgba(17, 14, 11, 0.88);
+        --shadow-drawer: -14px 0 36px rgba(0, 0, 0, 0.82);
+        --shadow-inset: inset 0 0 0 1px rgba(212, 165, 93, 0.22);
+        --shadow-dialogue: inset 0 0 0 2px #110e0b,
+          inset 0 0 0 3px rgba(212, 165, 93, 0.36),
+          0 16px 38px rgba(17, 14, 11, 0.92);
+        --shadow-portrait: inset 0 0 0 1px rgba(212, 165, 93, 0.35),
+          0 4px 12px rgba(0, 0, 0, 0.65);
+        --shadow-loading: inset 0 0 0 3px #110e0b, 0 18px 42px rgba(0, 0, 0, 0.85);
+        --shadow-title: 0 3px 0 #110e0b, 0 8px 28px rgba(17, 14, 11, 0.95);
+        --shadow-subtitle: 0 2px 10px rgba(17, 14, 11, 0.95);
+      }
+
+      [data-theme='light'] {
+        /* Semantic Tokens — Background & Overlay (Giấy cổ, Kem ấm, Nâu mực, Vàng đồng) */
+        --bg-canvas: #16120e;
+        --bg-page: #efe7d6;
+        --bg-overlay: rgba(34, 28, 21, 0.72);
+        --bg-vignette-radial: radial-gradient(
+          ellipse 68% 74% at 50% 46%,
+          rgba(28, 22, 16, 0.35) 0%,
+          rgba(28, 22, 16, 0.68) 70%,
+          rgba(28, 22, 16, 0.88) 100%
+        );
+        --bg-vignette-linear: linear-gradient(
+          180deg,
+          rgba(28, 22, 16, 0.58) 0%,
+          rgba(28, 22, 16, 0.16) 45%,
+          rgba(28, 22, 16, 0.78) 100%
+        );
+
+        /* Semantic Tokens — Surfaces */
+        --surface-primary: #f4efe4;
+        --surface-hud: rgba(244, 239, 228, 0.96);
+        --surface-elevated: #e8dfc9;
+        --surface-subtle: #dfd3b8;
+        --surface-inset: #fbf8f1;
+        --surface-hover: #d8c7a6;
+        --surface-active: #8f2918;
+        --surface-selected: #e2d1b0;
+        --surface-disabled: #e4dccb;
+        --surface-touch: rgba(244, 239, 228, 0.92);
+        --surface-touch-primary: rgba(143, 41, 24, 0.94);
+        --surface-next-btn: rgba(143, 41, 24, 0.14);
+
+        /* Semantic Tokens — Typography & Text (WCAG AA >= 4.5:1 verified on parchment) */
+        --text-primary: #221c15;
+        --text-secondary: #3f3528;
+        --text-muted: #594a37;
+        --text-accent: #734215;
+        --text-crimson: #8f2918;
+        --text-on-accent: #fbf8f1;
+        --text-disabled: #736450;
+
+        /* Semantic Tokens — Borders & Focus */
+        --border-subtle: rgba(122, 78, 34, 0.28);
+        --border-default: #8a5a2b;
+        --border-strong: #6e4419;
+        --border-accent: #8f2918;
+        --border-focus: #8f2918;
+
+        /* Semantic Tokens — Accents */
+        --accent-primary: #8f2918;
+        --accent-primary-hover: #752012;
+        --accent-secondary: #734215;
+        --accent-gradient: linear-gradient(90deg, #8f2918 0%, #b88238 100%);
+        --rule-gradient: linear-gradient(
+          90deg,
+          transparent 0%,
+          #8a5a2b 20%,
+          #d4a55d 50%,
+          #8a5a2b 80%,
+          transparent 100%
+        );
+
+        /* Semantic Tokens — Statuses */
+        --status-tracked-bg: #f2dfd9;
+        --status-tracked-border: #8f2918;
+        --status-tracked-text: #66190c;
+        --status-completed-bg: #dde8d6;
+        --status-completed-border: #3b692f;
+        --status-completed-text: #214219;
+        --status-locked-bg: #e2d9c5;
+        --status-locked-border: #9c896e;
+        --status-locked-text: #544634;
+        --status-error-bg: rgba(143, 41, 24, 0.12);
+        --status-error-border: #8f2918;
+        --status-error-text: #7a1f10;
+
+        /* Semantic Tokens — Shadows & Frames */
+        --shadow-panel: 0 20px 48px rgba(34, 28, 21, 0.38);
+        --shadow-hud: 0 6px 18px rgba(34, 28, 21, 0.24);
+        --shadow-toast: 0 10px 26px rgba(34, 28, 21, 0.3);
+        --shadow-drawer: -12px 0 32px rgba(34, 28, 21, 0.32);
+        --shadow-inset: inset 0 0 0 1px rgba(122, 78, 34, 0.22);
+        --shadow-dialogue: inset 0 0 0 2px #dfd3b8,
+          inset 0 0 0 3px rgba(122, 78, 34, 0.32),
+          0 14px 34px rgba(34, 28, 21, 0.36);
+        --shadow-portrait: inset 0 0 0 1px rgba(122, 78, 34, 0.35),
+          0 4px 10px rgba(34, 28, 21, 0.25);
+        --shadow-loading: inset 0 0 0 3px #dfd3b8, 0 18px 42px rgba(34, 28, 21, 0.38);
+        --shadow-title: 0 3px 0 #110e0b, 0 8px 28px rgba(17, 14, 11, 0.95);
+        --shadow-subtitle: 0 2px 10px rgba(17, 14, 11, 0.95);
       }
 
       * {
@@ -65,8 +295,8 @@
         margin: 0;
         padding: 0;
         overflow: hidden;
-        background-color: var(--lacquer-void);
-        color: var(--parchment-light);
+        background-color: var(--bg-page);
+        color: var(--text-primary);
         font-family: var(--font-ui);
         line-height: 1.5;
         user-select: none;
@@ -105,7 +335,7 @@
         width: 100vw;
         height: 100dvh;
         overflow: hidden;
-        background: var(--lacquer-void);
+        background: var(--bg-canvas);
       }
 
       /* 1. KHUNG NHÌN THẾ GIỚI 100% (#stage-viewport.main-stage) */
@@ -129,8 +359,15 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        background: var(--lacquer-void);
+        background: var(--bg-canvas);
         overflow: hidden;
+      }
+
+      /* Tuyệt đối không áp dụng filter lên pixel-art canvas */
+      #pixel-canvas,
+      #main-menu-bg-canvas,
+      #dialogue-portrait-canvas {
+        filter: none !important;
       }
 
       #pixel-canvas {
@@ -154,10 +391,10 @@
         align-items: center;
         gap: 9px;
         padding: 7px 14px 7px 9px;
-        background: var(--lacquer-deep);
-        color: var(--parchment-light);
-        border: 1.5px solid var(--bronze-bright);
-        box-shadow: 0 8px 22px rgba(17, 14, 11, 0.88), inset 0 0 0 1px rgba(212, 165, 93, 0.22);
+        background: var(--surface-primary);
+        color: var(--text-primary);
+        border: 1.5px solid var(--border-strong);
+        box-shadow: var(--shadow-toast), var(--shadow-inset);
         font-family: var(--font-ui);
         font-size: 1rem;
         font-weight: 600;
@@ -175,9 +412,9 @@
         min-width: 24px;
         height: 24px;
         padding: 0 6px;
-        background: var(--crimson-seal);
-        color: var(--parchment-light);
-        border: 1px solid var(--bronze-bright);
+        background: var(--accent-primary);
+        color: var(--text-on-accent);
+        border: 1px solid var(--border-strong);
         font-family: var(--font-mono);
         font-size: 0.82rem;
         font-weight: 600;
@@ -192,11 +429,11 @@
         transform: translateY(10px);
         z-index: 700;
         max-width: min(440px, calc(100vw - 36px));
-        background: rgba(27, 22, 18, 0.96);
-        color: var(--parchment-light);
-        border: 1.5px solid var(--bronze-bright);
-        border-left: 4px solid var(--crimson-seal);
-        box-shadow: 0 10px 28px rgba(17, 14, 11, 0.88);
+        background: var(--surface-hud);
+        color: var(--text-primary);
+        border: 1.5px solid var(--border-strong);
+        border-left: 4px solid var(--accent-primary);
+        box-shadow: var(--shadow-toast);
         padding: 10px 16px;
         font-family: var(--font-ui);
         font-size: 1rem;
@@ -230,10 +467,10 @@
         align-items: center;
         gap: 3px;
         padding: 9px 24px;
-        background: rgba(17, 14, 11, 0.94);
-        border: 1.5px solid var(--bronze-bright);
-        border-top: 3px solid var(--crimson-seal);
-        box-shadow: 0 10px 28px rgba(17, 14, 11, 0.88), inset 0 0 0 1px rgba(212, 165, 93, 0.2);
+        background: var(--surface-hud);
+        border: 1.5px solid var(--border-strong);
+        border-top: 3px solid var(--accent-primary);
+        box-shadow: var(--shadow-toast), var(--shadow-inset);
         pointer-events: none;
         opacity: 0;
         transition: opacity 0.25s ease-out, transform 0.25s ease-out;
@@ -248,7 +485,7 @@
         font-family: var(--font-mono);
         font-size: 0.76rem;
         font-weight: 600;
-        color: var(--bronze-bright);
+        color: var(--text-accent);
         letter-spacing: 0.08em;
         text-transform: uppercase;
       }
@@ -257,7 +494,7 @@
         font-family: var(--font-display);
         font-size: 1.28rem;
         font-weight: 700;
-        color: var(--parchment-light);
+        color: var(--text-primary);
         letter-spacing: 0.03em;
       }
 
@@ -288,23 +525,23 @@
         flex-wrap: wrap;
         gap: 8px;
         padding: 7px 14px;
-        background: rgba(27, 22, 18, 0.94);
-        border: 1px solid var(--bronze-antique);
-        border-left: 3px solid var(--crimson-seal);
-        box-shadow: 0 6px 18px rgba(17, 14, 11, 0.72);
+        background: var(--surface-hud);
+        border: 1px solid var(--border-default);
+        border-left: 3px solid var(--accent-primary);
+        box-shadow: var(--shadow-hud);
       }
 
       #stage-chapter-num {
         font-family: var(--font-mono);
         font-size: 0.82rem;
         font-weight: 600;
-        color: var(--crimson-vermilion);
+        color: var(--text-crimson);
         letter-spacing: 0.06em;
         text-transform: uppercase;
       }
 
       .hud-plaque-sep {
-        color: var(--bronze-antique);
+        color: var(--text-accent);
         font-size: 0.72rem;
       }
 
@@ -312,7 +549,7 @@
         font-family: var(--font-ui);
         font-size: 1rem;
         font-weight: 600;
-        color: var(--parchment-light);
+        color: var(--text-primary);
       }
 
       #stage-shelter-status {
@@ -322,27 +559,27 @@
         font-family: var(--font-ui);
         font-size: 0.92rem;
         font-weight: 600;
-        background: var(--lacquer-deep);
-        border: 1px solid var(--bronze-antique);
-        color: var(--parchment-light);
+        background: var(--surface-primary);
+        border: 1px solid var(--border-default);
+        color: var(--text-primary);
       }
 
       #stage-shelter-status.is-sheltered {
-        background: var(--lacquer-elevated);
-        border-color: var(--bronze-bright);
-        color: var(--bronze-bright);
+        background: var(--surface-elevated);
+        border-color: var(--border-strong);
+        color: var(--text-accent);
       }
 
       #stage-shelter-status.is-suspicious {
-        background: var(--bronze-muted);
-        border-color: var(--bronze-bright);
-        color: var(--parchment-light);
+        background: var(--surface-hover);
+        border-color: var(--border-strong);
+        color: var(--text-primary);
       }
 
       #stage-shelter-status.is-alert {
-        background: var(--crimson-seal);
-        border-color: var(--crimson-vermilion);
-        color: var(--parchment-light);
+        background: var(--accent-primary);
+        border-color: var(--border-strong);
+        color: var(--text-on-accent);
       }
 
       #hud-top-right {
@@ -364,10 +601,10 @@
 
       #minimap-panel {
         pointer-events: auto;
-        background: rgba(27, 22, 18, 0.95);
-        border: 1px solid var(--bronze-antique);
-        border-right: 3px solid var(--bronze-bright);
-        box-shadow: 0 6px 18px rgba(17, 14, 11, 0.78);
+        background: var(--surface-hud);
+        border: 1px solid var(--border-default);
+        border-right: 3px solid var(--border-strong);
+        box-shadow: var(--shadow-hud);
         padding: 6px 8px;
         display: flex;
         flex-direction: column;
@@ -390,7 +627,7 @@
         font-family: var(--font-mono);
         font-size: 0.72rem;
         font-weight: 600;
-        color: var(--bronze-bright);
+        color: var(--text-accent);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -407,9 +644,9 @@
       #btn-toggle-minimap {
         min-height: 22px;
         padding: 1px 6px;
-        background: var(--lacquer-void);
-        color: var(--parchment-light);
-        border: 1px solid var(--bronze-antique);
+        background: var(--surface-subtle);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
         font-family: var(--font-mono);
         font-size: 0.68rem;
         cursor: pointer;
@@ -417,8 +654,9 @@
 
       #btn-minimap-open-map:hover,
       #btn-toggle-minimap:hover {
-        background: var(--crimson-seal);
-        border-color: var(--bronze-bright);
+        background: var(--accent-primary);
+        color: var(--text-on-accent);
+        border-color: var(--border-strong);
       }
 
       #minimap-body {
@@ -434,53 +672,26 @@
         image-rendering: pixelated;
         image-rendering: crisp-edges;
         cursor: pointer;
-        border: 1px solid rgba(138, 90, 43, 0.55);
+        border: 1px solid var(--border-default);
       }
 
       #minimap-route-banner {
         font-family: var(--font-ui);
         font-size: 0.76rem;
         line-height: 1.3;
-        color: var(--parchment-warm);
+        color: var(--text-secondary);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
       }
 
-      .journal-objective-row.is-active {
-        cursor: pointer;
-        transition: background-color 0.14s ease, border-color 0.14s ease;
-      }
-
-      .journal-objective-row.is-active:hover,
-      .journal-objective-row.is-tracked {
-        border-color: var(--crimson-seal) !important;
-        box-shadow: inset 3px 0 0 var(--crimson-seal);
-      }
-
-      .journal-track-pill {
-        margin-left: auto;
-        padding: 2px 8px;
-        background: var(--lacquer-deep);
-        color: var(--parchment-light);
-        border: 1px solid var(--bronze-antique);
-        font-family: var(--font-ui);
-        font-size: 0.78rem;
-        font-weight: 600;
-      }
-
-      .journal-track-pill.is-tracked {
-        background: var(--crimson-seal);
-        border-color: var(--bronze-bright);
-      }
-
       #hud-objective-tracker {
         pointer-events: auto;
         cursor: pointer;
-        background: rgba(27, 22, 18, 0.94);
-        border: 1px solid var(--bronze-antique);
-        border-right: 3px solid var(--bronze-bright);
-        box-shadow: 0 6px 18px rgba(17, 14, 11, 0.72);
+        background: var(--surface-hud);
+        border: 1px solid var(--border-default);
+        border-right: 3px solid var(--border-strong);
+        box-shadow: var(--shadow-hud);
         padding: 8px 14px;
         display: flex;
         flex-direction: column;
@@ -493,7 +704,7 @@
         font-size: 0.78rem;
         font-weight: 600;
         letter-spacing: 0.04em;
-        color: var(--bronze-bright);
+        color: var(--text-accent);
       }
 
       #hud-active-objective-text {
@@ -501,23 +712,23 @@
         font-size: 1rem;
         font-weight: 600;
         line-height: 1.38;
-        color: var(--parchment-light);
+        color: var(--text-primary);
       }
 
       #hud-active-objective-action {
         font-family: var(--font-ui);
-        font-size: 0.94rem; /* 15px */
+        font-size: 0.94rem;
         font-weight: 500;
         line-height: 1.4;
-        color: var(--bronze-bright);
+        color: var(--text-accent);
         margin-top: 1px;
       }
 
       #hud-active-objective-hint {
         font-family: var(--font-ui);
-        font-size: 0.90625rem; /* 14.5px */
+        font-size: 0.90625rem;
         line-height: 1.4;
-        color: var(--crimson-vermilion);
+        color: var(--text-crimson);
         margin-top: 2px;
       }
 
@@ -532,11 +743,11 @@
         width: min(680px, calc(100vw - 32px));
         z-index: 26;
         pointer-events: auto;
-        background: rgba(27, 22, 18, 0.96);
-        color: var(--parchment-light);
-        border: 1.5px solid var(--bronze-bright);
-        border-left: 4px solid var(--crimson-seal);
-        box-shadow: 0 10px 28px rgba(17, 14, 11, 0.86);
+        background: var(--surface-hud);
+        color: var(--text-primary);
+        border: 1.5px solid var(--border-strong);
+        border-left: 4px solid var(--accent-primary);
+        box-shadow: var(--shadow-toast);
         padding: 10px 16px;
         display: none;
         flex-direction: column;
@@ -564,9 +775,9 @@
 
       #tutorial-step-badge {
         padding: 2px 8px;
-        background: var(--crimson-seal);
-        color: var(--parchment-light);
-        border: 1px solid var(--bronze-bright);
+        background: var(--accent-primary);
+        color: var(--text-on-accent);
+        border: 1px solid var(--border-strong);
         font-family: var(--font-mono);
         font-size: 0.76rem;
         font-weight: 600;
@@ -577,16 +788,16 @@
         font-family: var(--font-display);
         font-size: 1.12rem;
         font-weight: 700;
-        color: var(--bronze-bright);
+        color: var(--text-accent);
       }
 
       #tutorial-step-keycap {
         display: inline-flex;
         align-items: center;
         padding: 2px 8px;
-        background: var(--lacquer-void);
-        color: var(--parchment-light);
-        border: 1px solid var(--bronze-antique);
+        background: var(--surface-subtle);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
         font-family: var(--font-mono);
         font-size: 0.8rem;
         font-weight: 600;
@@ -606,7 +817,7 @@
         font-family: var(--font-ui);
         font-size: 0.98rem;
         line-height: 1.45;
-        color: var(--parchment-light);
+        color: var(--text-primary);
       }
 
       .tutorial-coach-actions {
@@ -630,24 +841,23 @@
         gap: 8px;
         min-height: 44px;
         padding: 8px 12px;
-        background: rgba(27, 22, 18, 0.95);
-        color: var(--parchment-light);
-        border: 1px solid var(--bronze-antique);
-        box-shadow: 0 6px 18px rgba(17, 14, 11, 0.72);
+        background: var(--surface-hud);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
+        box-shadow: var(--shadow-hud);
         cursor: pointer;
         flex-shrink: 0;
-        transition: background-color 0.16s ease, border-color 0.16s ease;
       }
 
       #btn-open-pause:hover {
-        background: var(--lacquer-elevated);
-        border-color: var(--bronze-bright);
+        background: var(--surface-hover);
+        border-color: var(--border-strong);
       }
 
       #btn-open-pause svg {
         width: 18px;
         height: 18px;
-        stroke: var(--bronze-bright);
+        stroke: var(--text-accent);
         flex-shrink: 0;
       }
 
@@ -656,9 +866,9 @@
         left: 16px;
         bottom: 14px;
         padding: 6px 12px;
-        background: rgba(17, 14, 11, 0.94);
-        color: var(--bronze-bright);
-        border: 1px solid var(--bronze-antique);
+        background: var(--surface-hud);
+        color: var(--text-accent);
+        border: 1px solid var(--border-default);
         font-family: var(--font-mono);
         font-size: 0.85rem;
         letter-spacing: 0.02em;
@@ -728,15 +938,15 @@
       }
 
       /* ==========================================================================
-         HỆ THỐNG NÚT SƠN MÀI DÙNG CHUNG (.ctrl-btn, .lacquer-button)
+         HỆ THỐNG NÚT SƠN MÀI / GIẤY DÓ DÙNG CHUNG (.ctrl-btn, .lacquer-button)
          ========================================================================== */
       .ctrl-btn,
       .lacquer-button {
         min-height: 44px;
         padding: 9px 16px;
-        background: var(--lacquer-elevated);
-        color: var(--parchment-light);
-        border: 1px solid var(--bronze-antique);
+        background: var(--surface-elevated);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
         font-family: var(--font-ui);
         font-size: 1rem;
         font-weight: 500;
@@ -745,48 +955,58 @@
         align-items: center;
         justify-content: center;
         gap: 8px;
-        transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
       }
 
       .ctrl-btn:hover:not(:disabled),
       .lacquer-button:hover:not(:disabled) {
-        background: var(--bronze-muted);
-        border-color: var(--bronze-bright);
-        color: var(--parchment-light);
+        background: var(--surface-hover);
+        border-color: var(--border-strong);
+        color: var(--text-primary);
+      }
+
+      .ctrl-btn:disabled,
+      .lacquer-button:disabled {
+        background: var(--surface-disabled);
+        color: var(--text-disabled);
+        cursor: not-allowed;
+        opacity: 0.72;
       }
 
       .ctrl-btn.is-primary,
       .ctrl-btn.is-active,
       .lacquer-button.is-active,
       .lacquer-button.is-presenter-active {
-        background: var(--crimson-seal);
-        border-color: var(--bronze-bright);
-        color: var(--parchment-light);
+        background: var(--accent-primary);
+        border-color: var(--border-strong);
+        color: var(--text-on-accent);
       }
 
-      .ctrl-btn.is-primary:hover:not(:disabled) {
-        background: #b13b27;
+      .ctrl-btn.is-primary:hover:not(:disabled),
+      .ctrl-btn.is-active:hover:not(:disabled) {
+        background: var(--accent-primary-hover);
+        color: var(--text-on-accent);
       }
 
       .ctrl-btn.is-danger {
-        border-color: var(--crimson-seal);
-        color: var(--crimson-vermilion);
+        border-color: var(--border-accent);
+        color: var(--text-crimson);
       }
 
       .ctrl-btn.is-danger:hover:not(:disabled) {
-        background: var(--crimson-seal);
-        color: var(--parchment-light);
+        background: var(--accent-primary);
+        color: var(--text-on-accent);
       }
 
       .touch-dpad .ctrl-btn,
       .touch-actions .ctrl-btn {
-        background: rgba(27, 22, 18, 0.86);
+        background: var(--surface-touch);
         font-size: 0.92rem;
         padding: 6px 12px;
       }
 
       .touch-actions .ctrl-btn.is-primary {
-        background: rgba(158, 51, 33, 0.92);
+        background: var(--surface-touch-primary);
+        color: var(--text-on-accent);
       }
 
       /* ==========================================================================
@@ -822,11 +1042,10 @@
 
       #dialogue-lore-drawer {
         width: min(410px, 100%);
-        background: var(--parchment-warm);
-        color: var(--ink-primary);
-        border: 2px solid var(--bronze-antique);
-        box-shadow: inset 0 0 0 2px var(--parchment-light),
-          0 12px 28px rgba(17, 14, 11, 0.9);
+        background: var(--surface-elevated);
+        color: var(--text-primary);
+        border: 2px solid var(--border-default);
+        box-shadow: var(--shadow-inset), var(--shadow-toast);
         padding: 10px 14px;
         display: flex;
         flex-direction: column;
@@ -853,7 +1072,7 @@
         align-items: center;
         justify-content: space-between;
         gap: 8px;
-        border-bottom: 1px solid rgba(138, 90, 43, 0.32);
+        border-bottom: 1px solid var(--border-subtle);
         padding-bottom: 4px;
       }
 
@@ -862,7 +1081,7 @@
         font-size: 0.72rem;
         font-weight: 700;
         letter-spacing: 0.08em;
-        color: var(--crimson-seal);
+        color: var(--text-crimson);
         text-transform: uppercase;
       }
 
@@ -870,7 +1089,7 @@
         font-family: var(--font-display);
         font-size: 1.04rem;
         font-weight: 700;
-        color: var(--crimson-seal);
+        color: var(--text-accent);
         line-height: 1.3;
         margin: 0;
       }
@@ -879,7 +1098,7 @@
         font-family: var(--font-serif);
         font-size: 0.92rem;
         line-height: 1.45;
-        color: var(--ink-secondary);
+        color: var(--text-secondary);
         font-style: italic;
         margin: 0;
       }
@@ -888,7 +1107,7 @@
         font-family: var(--font-ui);
         font-size: 0.84rem;
         font-weight: 600;
-        color: var(--ink-primary);
+        color: var(--text-primary);
         line-height: 1.38;
       }
 
@@ -908,10 +1127,10 @@
         justify-content: flex-start;
         text-align: left;
         padding: 7px 12px;
-        background: rgba(27, 22, 18, 0.96);
-        color: var(--parchment-light);
-        border: 1.5px solid var(--bronze-antique);
-        box-shadow: 0 6px 18px rgba(17, 14, 11, 0.85);
+        background: var(--surface-hud);
+        color: var(--text-primary);
+        border: 1.5px solid var(--border-default);
+        box-shadow: var(--shadow-hud);
         font-family: var(--font-ui);
         font-size: 0.96rem;
         font-weight: 500;
@@ -920,16 +1139,15 @@
         align-items: center;
         gap: 9px;
         cursor: pointer;
-        transition: transform 0.12s ease, background-color 0.12s ease,
-          border-color 0.12s ease;
+        transition: transform 0.12s ease;
       }
 
       .dialogue-choice-btn:hover,
       .dialogue-choice-btn:focus-visible {
-        background: var(--crimson-seal);
-        border-color: var(--bronze-bright);
-        box-shadow: inset 3px 0 0 var(--bronze-bright),
-          0 8px 20px rgba(17, 14, 11, 0.92);
+        background: var(--accent-primary);
+        color: var(--text-on-accent);
+        border-color: var(--border-strong);
+        box-shadow: inset 3px 0 0 var(--border-strong), var(--shadow-toast);
         transform: translateX(-3px);
       }
 
@@ -937,15 +1155,13 @@
         flex: 1;
       }
 
-      /* Thanh thoại Sơn Mài Đậm nhỏ gọn neo đáy (#dialogue-parchment-card) */
+      /* Thanh thoại nhỏ gọn neo đáy (#dialogue-parchment-card) */
       #dialogue-parchment-card {
         position: relative;
-        background: var(--lacquer-deep);
-        color: var(--parchment-light);
-        border: 2px solid var(--bronze-bright);
-        box-shadow: inset 0 0 0 2px var(--lacquer-void),
-          inset 0 0 0 3px rgba(212, 165, 93, 0.36),
-          0 16px 38px rgba(17, 14, 11, 0.92);
+        background: var(--surface-primary);
+        color: var(--text-primary);
+        border: 2px solid var(--border-strong);
+        box-shadow: var(--shadow-dialogue);
         padding: 22px 18px 12px 14px;
         min-height: 118px;
         max-height: 168px;
@@ -957,7 +1173,7 @@
         pointer-events: auto;
       }
 
-      /* Thẻ tên Đỏ Son & Vàng Đồng nổi trên viền trên bên trái */
+      /* Thẻ tên nổi trên viền trên bên trái */
       #dialogue-nameplate {
         position: absolute;
         top: -15px;
@@ -967,9 +1183,9 @@
         align-items: baseline;
         gap: 8px;
         padding: 3px 12px 4px;
-        background: var(--crimson-seal);
-        border: 1.5px solid var(--bronze-bright);
-        box-shadow: 0 4px 12px rgba(17, 14, 11, 0.88);
+        background: var(--accent-primary);
+        border: 1.5px solid var(--border-strong);
+        box-shadow: var(--shadow-hud);
         max-width: calc(100% - 240px);
       }
 
@@ -977,7 +1193,7 @@
         font-family: var(--font-display);
         font-size: 1.12rem;
         font-weight: 700;
-        color: var(--parchment-light);
+        color: var(--text-on-accent);
         letter-spacing: 0.02em;
         white-space: nowrap;
       }
@@ -986,13 +1202,14 @@
         font-family: var(--font-ui);
         font-size: 0.8rem;
         font-weight: 500;
-        color: var(--bronze-bright);
+        color: var(--text-on-accent);
+        opacity: 0.9;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
       }
 
-      /* Cụm huy hiệu nguồn sử liệu + nút mở ngăn Tư liệu nổi góc trên bên phải */
+      /* Cụm nút mở ngăn Tư liệu nổi góc trên bên phải */
       .dialogue-meta-bar {
         position: absolute;
         top: -14px;
@@ -1011,39 +1228,41 @@
         font-size: 0.76rem;
         font-weight: 600;
         letter-spacing: 0.02em;
-        box-shadow: 0 3px 10px rgba(17, 14, 11, 0.8);
+        box-shadow: var(--shadow-hud);
       }
 
       .provenance-badge.is-historical_fact {
-        background: var(--crimson-seal);
-        color: var(--parchment-light);
-        border: 1px solid var(--bronze-bright);
+        background: var(--accent-primary);
+        color: var(--text-on-accent);
+        border: 1px solid var(--border-strong);
       }
 
       .provenance-badge.is-fictional_npc {
-        background: var(--parchment-light);
-        color: var(--ink-primary);
-        border: 1px solid var(--bronze-antique);
+        background: var(--surface-elevated);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
       }
 
       .provenance-badge.is-speculative_2045 {
-        background: var(--lacquer-elevated);
-        color: var(--bronze-bright);
-        border: 1px solid var(--bronze-bright);
+        background: var(--surface-elevated);
+        color: var(--text-accent);
+        border: 1px solid var(--border-strong);
       }
-
 
       /* Metadata is retained in code for audit, but no source-reference badges are shown in-game. */
       #dialogue-provenance-badge[hidden],
       #dossier-provenance-badge[hidden],
-      .provenance-badge[hidden] { display: none !important; }
+      .provenance-badge[hidden] {
+        display: none !important;
+      }
+
       #btn-toggle-dialogue-lore {
         padding: 2px 9px;
         min-height: 24px;
-        background: var(--lacquer-elevated);
-        color: var(--bronze-bright);
-        border: 1px solid var(--bronze-antique);
-        box-shadow: 0 3px 10px rgba(17, 14, 11, 0.8);
+        background: var(--surface-elevated);
+        color: var(--text-accent);
+        border: 1px solid var(--border-default);
+        box-shadow: var(--shadow-hud);
         font-family: var(--font-ui);
         font-size: 0.76rem;
         font-weight: 600;
@@ -1055,19 +1274,18 @@
 
       #btn-toggle-dialogue-lore:hover,
       #btn-toggle-dialogue-lore.is-active {
-        background: var(--crimson-seal);
-        color: var(--parchment-light);
-        border-color: var(--bronze-bright);
+        background: var(--accent-primary);
+        color: var(--text-on-accent);
+        border-color: var(--border-strong);
       }
 
       /* Khung chân dung Pixel Art 80×80px bên trái */
       #dialogue-portrait-frame {
         width: 84px;
         height: 84px;
-        background: var(--lacquer-void);
-        border: 2px solid var(--bronze-antique);
-        box-shadow: inset 0 0 0 1px rgba(212, 165, 93, 0.35),
-          0 4px 12px rgba(0, 0, 0, 0.65);
+        background: var(--surface-subtle);
+        border: 2px solid var(--border-default);
+        box-shadow: var(--shadow-portrait);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -1094,9 +1312,9 @@
 
       #dialogue-body-text {
         font-family: var(--font-serif);
-        font-size: 1.1875rem; /* 19px desktop */
+        font-size: 1.1875rem;
         line-height: 1.48;
-        color: var(--parchment-light);
+        color: var(--text-primary);
         margin: 0;
         text-wrap: pretty;
         cursor: pointer;
@@ -1113,7 +1331,7 @@
       #dialogue-page-indicator {
         font-family: var(--font-mono);
         font-size: 0.75rem;
-        color: var(--bronze-bright);
+        color: var(--text-accent);
         margin-right: auto;
       }
 
@@ -1130,9 +1348,9 @@
       #btn-dialogue-next-page {
         padding: 2px 10px;
         min-height: 26px;
-        background: rgba(139, 30, 30, 0.45);
-        color: var(--bronze-bright);
-        border: 1px solid var(--bronze-bright);
+        background: var(--surface-next-btn);
+        color: var(--text-accent);
+        border: 1px solid var(--border-strong);
         font-family: var(--font-ui);
         font-size: 0.82rem;
         font-weight: 600;
@@ -1154,19 +1372,19 @@
       #btn-close-dialogue {
         padding: 2px 10px;
         min-height: 26px;
-        background: var(--lacquer-elevated);
-        color: var(--parchment-warm);
-        border: 1px solid var(--bronze-muted);
+        background: var(--surface-elevated);
+        color: var(--text-secondary);
+        border: 1px solid var(--border-default);
         font-family: var(--font-ui);
-        font-size: 1rem; /* 16px chuẩn kiểm thử M7 */
+        font-size: 1rem;
         line-height: 1.2;
         cursor: pointer;
       }
 
       #btn-close-dialogue:hover {
-        background: var(--crimson-seal);
-        color: var(--parchment-light);
-        border-color: var(--bronze-bright);
+        background: var(--accent-primary);
+        color: var(--text-on-accent);
+        border-color: var(--border-strong);
       }
 
       /* ==========================================================================
@@ -1181,7 +1399,7 @@
         justify-content: space-between;
         align-items: center;
         padding: clamp(20px, 4.5dvh, 48px) 24px clamp(16px, 3dvh, 30px);
-        background: var(--lacquer-void);
+        background: var(--bg-canvas);
         overflow: hidden;
       }
 
@@ -1201,18 +1419,7 @@
         inset: 0;
         z-index: 1;
         pointer-events: none;
-        background: radial-gradient(
-            ellipse 68% 74% at 50% 46%,
-            rgba(17, 14, 11, 0.42) 0%,
-            rgba(17, 14, 11, 0.78) 70%,
-            rgba(17, 14, 11, 0.94) 100%
-          ),
-          linear-gradient(
-            180deg,
-            rgba(17, 14, 11, 0.65) 0%,
-            rgba(17, 14, 11, 0.2) 45%,
-            rgba(17, 14, 11, 0.86) 100%
-          );
+        background: var(--bg-vignette-radial), var(--bg-vignette-linear);
       }
 
       .main-menu-centerpiece {
@@ -1239,9 +1446,9 @@
         align-items: center;
         gap: 8px;
         padding: 5px 14px;
-        background: var(--crimson-seal);
-        color: var(--parchment-light);
-        border: 1px solid var(--bronze-bright);
+        background: var(--accent-primary);
+        color: var(--text-on-accent);
+        border: 1px solid var(--border-strong);
         font-family: var(--font-mono);
         font-size: 0.84rem;
         font-weight: 600;
@@ -1255,20 +1462,13 @@
         line-height: 1.04;
         letter-spacing: 0.06em;
         color: var(--parchment-light);
-        text-shadow: 0 3px 0 var(--lacquer-void), 0 8px 28px rgba(17, 14, 11, 0.95);
+        text-shadow: var(--shadow-title);
       }
 
       .menu-title-rule {
         width: min(320px, 72vw);
         height: 2px;
-        background: linear-gradient(
-          90deg,
-          transparent 0%,
-          var(--bronze-antique) 20%,
-          var(--bronze-bright) 50%,
-          var(--bronze-antique) 80%,
-          transparent 100%
-        );
+        background: var(--rule-gradient);
       }
 
       .menu-subtitle {
@@ -1277,7 +1477,7 @@
         font-weight: 500;
         color: var(--bronze-bright);
         letter-spacing: 0.03em;
-        text-shadow: 0 2px 10px rgba(17, 14, 11, 0.95);
+        text-shadow: var(--shadow-subtitle);
       }
 
       .menu-command-list {
@@ -1292,10 +1492,10 @@
         width: 100%;
         min-height: 50px;
         padding: 11px 20px 11px 40px;
-        background: rgba(27, 22, 18, 0.92);
-        color: var(--parchment-light);
-        border: 1px solid var(--bronze-antique);
-        box-shadow: 0 6px 20px rgba(17, 14, 11, 0.72);
+        background: var(--surface-hud);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
+        box-shadow: var(--shadow-hud);
         display: flex;
         flex-direction: column;
         align-items: flex-start;
@@ -1303,7 +1503,7 @@
         gap: 2px;
         text-align: left;
         cursor: pointer;
-        transition: transform 0.16s ease, background-color 0.16s ease, border-color 0.16s ease;
+        transition: transform 0.16s ease;
       }
 
       .menu-cmd-indicator {
@@ -1311,10 +1511,10 @@
         left: 15px;
         top: 50%;
         transform: translateY(-50%) scale(0.75);
-        color: var(--bronze-antique);
+        color: var(--text-muted);
         font-size: 0.9rem;
-        opacity: 0.45;
-        transition: transform 0.16s ease, color 0.16s ease, opacity 0.16s ease;
+        opacity: 0.65;
+        transition: transform 0.16s ease, opacity 0.16s ease;
       }
 
       .menu-cmd-row {
@@ -1327,7 +1527,7 @@
 
       .menu-cmd-label {
         font-family: var(--font-ui);
-        font-size: 1.08rem; /* >17px */
+        font-size: 1.08rem;
         font-weight: 700;
         letter-spacing: 0.08em;
       }
@@ -1336,14 +1536,14 @@
         font-family: var(--font-ui);
         font-size: 0.88rem;
         font-weight: 400;
-        color: var(--bronze-bright);
+        color: var(--text-accent);
       }
 
       .menu-soon-tag {
         padding: 2px 8px;
-        background: var(--lacquer-void);
-        color: var(--bronze-bright);
-        border: 1px solid var(--bronze-muted);
+        background: var(--surface-subtle);
+        color: var(--text-accent);
+        border: 1px solid var(--border-default);
         font-family: var(--font-ui);
         font-size: 0.78rem;
         font-weight: 600;
@@ -1352,36 +1552,38 @@
 
       .menu-cmd-btn:hover:not(:disabled),
       .menu-cmd-btn.is-focused:not(:disabled) {
-        background: var(--lacquer-elevated);
-        border-color: var(--bronze-bright);
-        box-shadow: inset 3px 0 0 var(--crimson-seal), 0 8px 24px rgba(17, 14, 11, 0.88);
+        background: var(--surface-elevated);
+        border-color: var(--border-strong);
+        box-shadow: inset 3px 0 0 var(--accent-primary), var(--shadow-toast);
         transform: translateX(3px);
       }
 
       .menu-cmd-btn:hover:not(:disabled) .menu-cmd-indicator,
       .menu-cmd-btn.is-focused:not(:disabled) .menu-cmd-indicator {
-        color: var(--crimson-vermilion);
+        color: var(--text-crimson);
         opacity: 1;
         transform: translateY(-50%) scale(1.08);
       }
 
       .menu-cmd-btn:disabled,
       .menu-cmd-btn.is-disabled {
-        opacity: 0.48;
+        background: var(--surface-disabled);
+        color: var(--text-disabled);
+        opacity: 0.65;
         cursor: not-allowed;
       }
 
       .menu-cmd-btn:disabled #menu-save-summary {
-        color: var(--parchment-warm);
+        color: var(--text-disabled);
       }
 
       .main-menu-keybind-bar {
         position: relative;
         z-index: 2;
         padding: 7px 18px;
-        background: rgba(17, 14, 11, 0.88);
-        border: 1px solid rgba(138, 90, 43, 0.55);
-        color: var(--parchment-warm);
+        background: var(--surface-hud);
+        border: 1px solid var(--border-default);
+        color: var(--text-secondary);
         font-family: var(--font-ui);
         font-size: 0.95rem;
         letter-spacing: 0.02em;
@@ -1395,7 +1597,7 @@
         position: fixed;
         inset: 0;
         z-index: 550;
-        background: var(--lacquer-void);
+        background: var(--bg-page);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -1416,16 +1618,16 @@
         text-align: center;
         gap: 16px;
         padding: 32px 28px;
-        background: var(--lacquer-deep);
-        border: 1.5px solid var(--bronze-antique);
-        box-shadow: inset 0 0 0 3px var(--lacquer-void), 0 18px 42px rgba(0, 0, 0, 0.85);
+        background: var(--surface-primary);
+        border: 1.5px solid var(--border-default);
+        box-shadow: var(--shadow-loading);
       }
 
       .loading-crest {
         padding: 5px 14px;
-        background: var(--crimson-seal);
-        color: var(--parchment-light);
-        border: 1px solid var(--bronze-bright);
+        background: var(--accent-primary);
+        color: var(--text-on-accent);
+        border: 1px solid var(--border-strong);
         font-family: var(--font-mono);
         font-size: 0.82rem;
         font-weight: 600;
@@ -1435,22 +1637,22 @@
       #loading-stage-label {
         font-family: var(--font-serif);
         font-size: 1.12rem;
-        color: var(--parchment-light);
+        color: var(--text-primary);
         min-height: 1.6em;
       }
 
       #loading-progress-bar {
         width: 100%;
         height: 10px;
-        background: var(--lacquer-void);
-        border: 1px solid var(--bronze-antique);
+        background: var(--surface-subtle);
+        border: 1px solid var(--border-default);
         overflow: hidden;
       }
 
       #loading-progress-fill {
         width: 0%;
         height: 100%;
-        background: linear-gradient(90deg, var(--crimson-seal) 0%, var(--bronze-bright) 100%);
+        background: var(--accent-gradient);
         transition: width 0.12s ease-out;
       }
 
@@ -1458,7 +1660,7 @@
         font-family: var(--font-mono);
         font-size: 0.92rem;
         font-weight: 600;
-        color: var(--bronze-bright);
+        color: var(--text-accent);
       }
 
       /* ==========================================================================
@@ -1488,9 +1690,9 @@
         z-index: 2;
         min-height: 44px;
         padding: 9px 18px;
-        background: var(--lacquer-deep);
-        color: var(--parchment-light);
-        border: 1.5px solid var(--bronze-bright);
+        background: var(--surface-primary);
+        color: var(--text-primary);
+        border: 1.5px solid var(--border-strong);
         font-family: var(--font-ui);
         font-size: 1rem;
         font-weight: 600;
@@ -1498,7 +1700,8 @@
       }
 
       #skip-opening-btn:hover {
-        background: var(--crimson-seal);
+        background: var(--accent-primary);
+        color: var(--text-on-accent);
       }
 
       /* ==========================================================================
@@ -1516,7 +1719,7 @@
       #confirm-modal {
         position: fixed;
         inset: 0;
-        background: rgba(17, 14, 11, 0.88);
+        background: var(--bg-overlay);
         display: none;
         align-items: center;
         justify-content: center;
@@ -1561,14 +1764,14 @@
 
       .rpg-modal-dialog,
       .world-map-dialog {
-        background: var(--lacquer-deep);
-        color: var(--parchment-light);
-        border: 2px solid var(--bronze-bright);
-        box-shadow: 0 22px 56px rgba(0, 0, 0, 0.88);
-        max-width: 940px;
+        background: var(--surface-primary);
+        color: var(--text-primary);
+        border: 2px solid var(--border-strong);
+        box-shadow: var(--shadow-panel);
+        max-width: 960px;
         width: 100%;
         max-height: min(90dvh, 860px);
-        padding: 22px 26px;
+        padding: 20px 24px;
         display: flex;
         flex-direction: column;
         gap: 14px;
@@ -1576,7 +1779,7 @@
       }
 
       .rpg-modal-dialog.is-compact {
-        max-width: 660px;
+        max-width: 680px;
       }
 
       .rpg-modal-dialog.is-narrow {
@@ -1590,7 +1793,7 @@
         align-items: flex-start;
         flex-wrap: nowrap;
         gap: 16px;
-        border-bottom: 1px solid rgba(212, 165, 93, 0.3);
+        border-bottom: 1px solid var(--border-subtle);
         padding-bottom: 12px;
       }
 
@@ -1608,17 +1811,30 @@
       .rpg-modal-header h3,
       .world-map-header h3 {
         font-family: var(--font-display);
-        font-size: 1.65rem;
+        font-size: 1.6rem;
         font-weight: 700;
-        color: var(--bronze-bright);
+        color: var(--text-accent);
         letter-spacing: 0.02em;
       }
 
       .modal-subtitle {
         font-family: var(--font-ui);
-        font-size: 1rem;
-        color: var(--parchment-warm);
-        margin-top: 3px;
+        font-size: 0.96rem;
+        color: var(--text-secondary);
+        margin-top: 2px;
+      }
+
+      .modal-header-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .modal-body-paragraph {
+        font-size: 1.02rem;
+        line-height: 1.62;
+        color: var(--text-secondary);
       }
 
       /* THANH CHUYỂN THẺ (TABS) TRONG NHẬT KÝ & HƯỚNG DẪN */
@@ -1626,169 +1842,362 @@
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
-        border-bottom: 1px solid rgba(212, 165, 93, 0.24);
+        border-bottom: 1px solid var(--border-subtle);
         padding-bottom: 10px;
       }
 
       .rpg-tab-btn {
-        min-height: 44px;
-        padding: 8px 18px;
-        background: var(--lacquer-elevated);
-        color: var(--parchment-warm);
-        border: 1px solid var(--bronze-muted);
+        min-height: 42px;
+        padding: 7px 16px;
+        background: var(--surface-elevated);
+        color: var(--text-secondary);
+        border: 1px solid var(--border-default);
         font-family: var(--font-ui);
-        font-size: 1rem;
+        font-size: 0.98rem;
         font-weight: 600;
         cursor: pointer;
       }
 
       .rpg-tab-btn:hover {
-        border-color: var(--bronze-bright);
-        color: var(--parchment-light);
+        background: var(--surface-hover);
+        border-color: var(--border-strong);
+        color: var(--text-primary);
       }
 
       .rpg-tab-btn.is-active {
-        background: var(--crimson-seal);
-        color: var(--parchment-light);
-        border-color: var(--bronze-bright);
+        background: var(--accent-primary);
+        color: var(--text-on-accent);
+        border-color: var(--border-strong);
       }
 
-      /* NHẬT KÝ NHIỆM VỤ & BIÊN NIÊN SỬ LA MÃ I–XII (#journal-modal) */
+      /* ==========================================================================
+         NHẬT KÝ NHIỆM VỤ & BIÊN NIÊN SỬ LA MÃ I–XII 2 CỘT EASTWARD (#journal-modal)
+         ========================================================================== */
       #journal-quests-panel,
       #journal-codex-panel {
         display: flex;
         flex-direction: column;
-        gap: 14px;
+        gap: 12px;
+        min-height: 0;
       }
 
-      #journal-active-banner {
-        background: var(--lacquer-elevated);
-        border: 1px solid var(--bronze-bright);
-        border-left: 4px solid var(--crimson-seal);
-        padding: 14px 16px;
+      .journal-two-col-grid,
+      .codex-two-col-grid {
+        display: grid;
+        grid-template-columns: minmax(290px, 0.95fr) minmax(320px, 1.15fr);
+        gap: 14px;
+        align-items: start;
+      }
+
+      #journal-quest-list,
+      #codex-milestone-list {
         display: flex;
         flex-direction: column;
-        gap: 5px;
+        gap: 10px;
+        max-height: min(62dvh, 520px);
+        overflow-y: auto;
+        padding-right: 4px;
       }
 
-      .journal-banner-label {
-        font-family: var(--font-mono);
-        font-size: 0.82rem;
-        font-weight: 600;
-        color: var(--bronze-bright);
-      }
-
-      .journal-banner-title {
-        font-size: 1.08rem;
-        color: var(--parchment-light);
-      }
-
-      .journal-banner-desc,
-      .journal-banner-hint {
-        font-size: 1rem;
-        line-height: 1.5;
-      }
-
-      .journal-banner-hint {
-        color: var(--crimson-vermilion);
-      }
-
-      #journal-quest-list {
+      #presenter-codex-list {
         display: flex;
         flex-direction: column;
         gap: 12px;
       }
 
       .journal-quest-card {
-        background: var(--parchment-warm);
-        color: var(--ink-primary);
-        border: 1px solid var(--bronze-antique);
-        padding: 16px 18px;
+        background: var(--surface-elevated);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
+        padding: 12px 14px;
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 8px;
+      }
+
+      .journal-quest-card.is-selected {
+        border-color: var(--border-strong);
+        box-shadow: inset 3px 0 0 var(--accent-primary);
+      }
+
+      .journal-quest-card.is-completed {
+        border-color: var(--status-completed-border);
       }
 
       .journal-quest-header {
         display: flex;
         justify-content: space-between;
-        align-items: flex-start;
-        flex-wrap: wrap;
+        align-items: center;
         gap: 10px;
+        cursor: pointer;
+      }
+
+      .journal-quest-title-wrap {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
       }
 
       .journal-category-badge {
         font-family: var(--font-mono);
-        font-size: 0.8rem;
-        font-weight: 600;
-        color: var(--crimson-seal);
+        font-size: 0.72rem;
+        font-weight: 700;
+        padding: 2px 6px;
+        background: var(--accent-primary);
+        color: var(--text-on-accent);
+        border: 1px solid var(--border-strong);
+        letter-spacing: 0.04em;
+        flex-shrink: 0;
+      }
+
+      .journal-category-badge.is-side {
+        background: var(--surface-subtle);
+        color: var(--text-accent);
+        border-color: var(--border-default);
       }
 
       .journal-quest-title {
         font-family: var(--font-display);
-        font-size: 1.38rem;
+        font-size: 1.2rem;
         font-weight: 700;
-        color: var(--ink-primary);
+        color: var(--text-primary);
+        line-height: 1.25;
       }
 
-      .journal-quest-sub,
-      .journal-quest-summary {
-        font-size: 1rem;
-        line-height: 1.55;
+      .journal-step-count {
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--text-accent);
+        padding: 2px 7px;
+        background: var(--surface-subtle);
+        border: 1px solid var(--border-subtle);
+        flex-shrink: 0;
       }
 
       .journal-objective-list {
         list-style: none;
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 6px;
       }
 
       .journal-objective-row {
-        padding: 10px 12px;
-        background: var(--parchment-light);
-        border-left: 4px solid var(--bronze-muted);
-        font-size: 1rem;
-      }
-
-      .journal-objective-row.is-completed {
-        border-left-color: var(--crimson-seal);
+        padding: 8px 10px;
+        background: var(--surface-inset);
+        color: var(--text-primary);
+        border: 1px solid var(--border-subtle);
+        border-left: 3px solid var(--border-default);
+        font-size: 0.94rem;
       }
 
       .journal-objective-row.is-active {
-        border-left-color: var(--bronze-bright);
+        cursor: pointer;
+        border-left-color: var(--border-strong);
+      }
+
+      .journal-objective-row.is-active:hover,
+      .journal-objective-row.is-tracked {
+        background: var(--status-tracked-bg);
+        color: var(--status-tracked-text);
+        border-color: var(--status-tracked-border);
+        border-left: 3px solid var(--accent-primary);
+      }
+
+      .journal-objective-row.is-selected {
+        outline: 1.5px solid var(--border-strong);
+      }
+
+      .journal-objective-row.is-completed {
+        background: var(--status-completed-bg);
+        color: var(--status-completed-text);
+        border-color: var(--status-completed-border);
+        border-left: 3px solid var(--status-completed-border);
+      }
+
+      .journal-objective-row.is-locked {
+        background: var(--status-locked-bg);
+        color: var(--status-locked-text);
+        border-color: var(--status-locked-border);
+        border-left: 3px solid var(--status-locked-border);
       }
 
       .journal-obj-top {
         display: flex;
         align-items: center;
-        flex-wrap: wrap;
         gap: 8px;
-        margin-bottom: 4px;
+      }
+
+      .journal-obj-title {
+        flex: 1;
+        font-weight: 600;
+        line-height: 1.35;
       }
 
       .journal-status-badge {
         font-family: var(--font-mono);
-        font-size: 0.8rem;
-        font-weight: 600;
-        color: var(--crimson-seal);
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: var(--text-accent);
+        flex-shrink: 0;
       }
 
-      .journal-quest-cite {
-        font-size: 0.95rem;
-        font-weight: 600;
-        color: var(--crimson-seal);
+      .journal-objective-row.is-completed .journal-status-badge {
+        color: var(--status-completed-text);
       }
 
+      .journal-objective-row.is-locked .journal-status-badge {
+        color: var(--status-locked-text);
+      }
+
+      .journal-track-pill {
+        margin-left: auto;
+        padding: 2px 8px;
+        background: var(--surface-elevated);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
+        font-family: var(--font-ui);
+        font-size: 0.75rem;
+        font-weight: 600;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+
+      .journal-track-pill.is-tracked {
+        background: var(--accent-primary);
+        color: var(--text-on-accent);
+        border-color: var(--border-strong);
+      }
+
+      /* CỘT PHẢI: KHUNG CHI TIẾT NHIỆM VỤ & MỤC TIÊU (#journal-active-banner) */
+      #journal-active-banner,
+      #codex-milestone-detail {
+        background: var(--surface-elevated);
+        color: var(--text-primary);
+        border: 1.5px solid var(--border-strong);
+        border-top: 3px solid var(--accent-primary);
+        padding: 16px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .journal-inspector-top,
+      .codex-detail-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 8px;
+        border-bottom: 1px solid var(--border-subtle);
+        padding-bottom: 8px;
+      }
+
+      .journal-banner-label {
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--text-crimson);
+        letter-spacing: 0.05em;
+      }
+
+      .journal-inspector-step-pill {
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--text-accent);
+        padding: 2px 8px;
+        background: var(--surface-subtle);
+        border: 1px solid var(--border-subtle);
+      }
+
+      .journal-inspector-quest-head {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .journal-inspector-quest-title,
+      .codex-detail-title {
+        font-family: var(--font-display);
+        font-size: 1.38rem;
+        font-weight: 700;
+        color: var(--text-accent);
+        line-height: 1.25;
+      }
+
+      .journal-quest-summary,
+      .codex-detail-desc {
+        font-size: 0.96rem;
+        line-height: 1.55;
+        color: var(--text-secondary);
+      }
+
+      .journal-inspector-objective-box {
+        background: var(--surface-inset);
+        border: 1px solid var(--border-default);
+        border-left: 4px solid var(--accent-primary);
+        padding: 12px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .journal-inspector-objective-box.is-completed {
+        border-left-color: var(--status-completed-border);
+      }
+
+      .journal-inspector-objective-box.is-locked {
+        border-left-color: var(--status-locked-border);
+      }
+
+      .journal-banner-title {
+        font-size: 1.04rem;
+        color: var(--text-primary);
+      }
+
+      .journal-banner-desc {
+        font-size: 0.96rem;
+        line-height: 1.5;
+        color: var(--text-secondary);
+      }
+
+      .journal-banner-hint {
+        font-size: 0.92rem;
+        line-height: 1.45;
+        font-weight: 500;
+        color: var(--text-crimson);
+      }
+
+      .journal-inspector-track-btn,
+      .codex-detail-action-btn {
+        margin-top: 4px;
+        align-self: flex-start;
+        min-height: 38px;
+        padding: 7px 14px;
+        font-size: 0.92rem;
+      }
+
+      .journal-quest-cite,
+      .codex-detail-cite {
+        font-size: 0.88rem;
+        font-weight: 600;
+        color: var(--text-accent);
+        padding-top: 6px;
+        border-top: 1px solid var(--border-subtle);
+      }
+
+      /* BIÊN NIÊN SỬ LA MÃ I–XII 2 CỘT */
       .codex-panel-banner {
         display: flex;
         justify-content: space-between;
         align-items: center;
         flex-wrap: wrap;
         gap: 10px;
-        padding: 12px 16px;
-        background: var(--lacquer-elevated);
-        border: 1px solid var(--bronze-antique);
+        padding: 10px 14px;
+        background: var(--surface-elevated);
+        border: 1px solid var(--border-default);
       }
 
       .codex-sub {
@@ -1798,88 +2207,93 @@
         align-items: center;
         flex-wrap: wrap;
         gap: 10px;
-        font-size: 1rem;
+        font-size: 0.96rem;
+        color: var(--text-secondary);
       }
 
       #codex-progress-count {
         font-family: var(--font-mono);
-        font-size: 0.95rem;
-        color: var(--bronze-bright);
-      }
-
-      #codex-milestone-list,
-      #presenter-codex-list {
-        display: flex;
-        flex-direction: column;
-        gap: 14px;
+        font-size: 0.92rem;
+        color: var(--text-accent);
       }
 
       .codex-chapter-group {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 6px;
       }
 
       .codex-chapter-header {
         font-family: var(--font-display);
-        font-size: 1.24rem;
+        font-size: 1.16rem;
         font-weight: 700;
-        color: var(--parchment-warm);
-        border-bottom: 1px solid rgba(212, 165, 93, 0.22);
-        padding-bottom: 4px;
+        color: var(--text-secondary);
+        border-bottom: 1px solid var(--border-subtle);
+        padding-bottom: 3px;
       }
 
       .codex-chapter-header.is-active {
-        color: var(--bronze-bright);
+        color: var(--text-accent);
       }
 
       .codex-chapter-items {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        gap: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
       }
 
       .codex-item {
         display: flex;
-        align-items: flex-start;
+        align-items: center;
         gap: 10px;
-        padding: 12px 14px;
-        background: var(--lacquer-elevated);
-        border: 1px solid var(--bronze-muted);
-        color: var(--parchment-warm);
+        padding: 9px 12px;
+        background: var(--surface-elevated);
+        border: 1px solid var(--border-default);
+        color: var(--text-primary);
         text-align: left;
-        font-size: 1rem;
+        font-size: 0.95rem;
         cursor: pointer;
       }
 
       .codex-item:hover {
-        border-color: var(--bronze-bright);
-        color: var(--parchment-light);
+        background: var(--surface-hover);
+        border-color: var(--border-strong);
       }
 
       .codex-item.is-collected {
-        background: var(--parchment-warm);
-        color: var(--ink-primary);
-        border-color: var(--bronze-antique);
+        background: var(--surface-inset);
+        color: var(--text-primary);
+        border-color: var(--border-strong);
+      }
+
+      .codex-item.is-locked {
+        background: var(--status-locked-bg);
+        color: var(--status-locked-text);
+        border-color: var(--status-locked-border);
       }
 
       .codex-item.is-current {
-        outline: 2px solid var(--bronze-bright);
+        border-color: var(--border-strong);
+        box-shadow: inset 3px 0 0 var(--accent-primary);
+        background: var(--surface-selected);
+        color: var(--text-primary);
       }
 
       .codex-roman {
         font-family: var(--font-mono);
-        font-size: 0.92rem;
+        font-size: 0.84rem;
         font-weight: 700;
         padding: 2px 7px;
-        background: var(--lacquer-void);
-        color: var(--bronze-bright);
+        background: var(--surface-subtle);
+        color: var(--text-accent);
+        border: 1px solid var(--border-subtle);
         flex-shrink: 0;
       }
 
       .codex-item.is-collected .codex-roman {
-        background: var(--crimson-seal);
-        color: var(--parchment-light);
+        background: var(--accent-primary);
+        color: var(--text-on-accent);
+        border-color: var(--border-strong);
       }
 
       .codex-dots {
@@ -1889,17 +2303,53 @@
       .codex-item-body {
         display: flex;
         flex-direction: column;
-        gap: 3px;
+        gap: 2px;
+        min-width: 0;
       }
 
       .codex-title {
-        font-size: 1rem;
-        line-height: 1.4;
+        font-size: 0.95rem;
+        line-height: 1.35;
       }
 
-      .codex-cite {
-        font-size: 0.88rem;
-        opacity: 0.85;
+      .codex-detail-seal {
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        font-weight: 700;
+        padding: 2px 8px;
+        background: var(--accent-primary);
+        color: var(--text-on-accent);
+        border: 1px solid var(--border-strong);
+      }
+
+      .codex-detail-seal.is-locked {
+        background: var(--status-locked-bg);
+        color: var(--status-locked-text);
+        border-color: var(--status-locked-border);
+      }
+
+      .codex-detail-status {
+        font-family: var(--font-mono);
+        font-size: 0.76rem;
+        font-weight: 600;
+        color: var(--text-accent);
+      }
+
+      .codex-detail-meta {
+        font-family: var(--font-mono);
+        font-size: 0.82rem;
+        color: var(--text-muted);
+      }
+
+      .codex-detail-quote {
+        font-family: var(--font-serif);
+        font-size: 1.02rem;
+        font-style: italic;
+        line-height: 1.52;
+        color: var(--text-primary);
+        padding: 8px 12px;
+        background: var(--surface-inset);
+        border-left: 3px solid var(--accent-primary);
       }
 
       /* TÚI TƯ LIỆU (#inventory-modal) */
@@ -1918,9 +2368,9 @@
       .inventory-item-card {
         text-align: left;
         padding: 12px 14px;
-        background: var(--lacquer-elevated);
-        color: var(--parchment-light);
-        border: 1px solid var(--bronze-muted);
+        background: var(--surface-elevated);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
         display: flex;
         flex-direction: column;
         gap: 4px;
@@ -1928,27 +2378,42 @@
         cursor: pointer;
       }
 
+      .inventory-item-card:hover {
+        background: var(--surface-hover);
+        border-color: var(--border-strong);
+      }
+
       .inventory-item-card.is-collected {
-        background: var(--parchment-warm);
-        color: var(--ink-primary);
-        border-color: var(--bronze-antique);
+        background: var(--surface-inset);
+        color: var(--text-primary);
+        border-color: var(--border-strong);
+      }
+
+      .inventory-item-card.is-locked {
+        background: var(--status-locked-bg);
+        color: var(--status-locked-text);
+        border-color: var(--status-locked-border);
       }
 
       .inventory-item-card.is-selected {
-        border: 2px solid var(--crimson-seal);
-        outline: 1px solid var(--bronze-bright);
+        background: var(--surface-selected);
+        color: var(--text-primary);
+        border: 2px solid var(--accent-primary);
+        box-shadow: inset 3px 0 0 var(--border-strong);
       }
 
       .inv-card-cat {
         font-family: var(--font-mono);
-        font-size: 0.82rem;
+        font-size: 0.8rem;
         font-weight: 600;
+        color: var(--text-accent);
       }
 
       #inventory-item-detail {
-        background: var(--parchment-light);
-        color: var(--ink-primary);
-        border: 1px solid var(--bronze-antique);
+        background: var(--surface-elevated);
+        color: var(--text-primary);
+        border: 1.5px solid var(--border-strong);
+        border-top: 3px solid var(--accent-primary);
         padding: 18px;
         display: flex;
         flex-direction: column;
@@ -1968,26 +2433,28 @@
       .inv-detail-title {
         font-family: var(--font-display);
         font-size: 1.42rem;
-        color: var(--crimson-seal);
+        color: var(--text-accent);
       }
 
       .inv-detail-quote {
         font-family: var(--font-serif);
-        font-size: 1.08rem;
+        font-size: 1.06rem;
         font-style: italic;
-        padding-left: 12px;
-        border-left: 3px solid var(--bronze-antique);
+        padding: 8px 12px;
+        background: var(--surface-inset);
+        border-left: 3px solid var(--accent-primary);
+        color: var(--text-primary);
       }
 
       .inv-detail-cite {
         font-weight: 600;
-        color: var(--crimson-seal);
+        color: var(--text-accent);
       }
 
       /* BẢN ĐỒ KHU VỰC (#world-map-modal) */
       #world-map-summary {
-        font-size: 1rem;
-        color: var(--parchment-warm);
+        font-size: 0.98rem;
+        color: var(--text-secondary);
         margin-top: 4px;
       }
 
@@ -1999,8 +2466,9 @@
 
       .world-map-node {
         padding: 12px 14px;
-        border: 1px solid var(--bronze-muted);
-        background: var(--lacquer-elevated);
+        border: 1px solid var(--border-default);
+        background: var(--surface-elevated);
+        color: var(--text-primary);
         display: flex;
         flex-direction: column;
         gap: 6px;
@@ -2008,19 +2476,21 @@
       }
 
       .world-map-node.is-discovered {
-        background: var(--parchment-warm);
-        color: var(--ink-primary);
-        border-color: var(--bronze-antique);
+        background: var(--surface-inset);
+        color: var(--text-primary);
+        border-color: var(--border-strong);
       }
 
       .world-map-node.is-current {
-        border: 2px solid var(--bronze-bright);
-        outline: 2px solid var(--crimson-seal);
+        background: var(--surface-selected);
+        border: 2px solid var(--border-strong);
+        box-shadow: inset 3px 0 0 var(--accent-primary);
       }
 
       .world-map-node.is-locked {
-        background: var(--lacquer-void);
-        color: rgba(230, 229, 220, 0.65);
+        background: var(--status-locked-bg);
+        color: var(--status-locked-text);
+        border-color: var(--status-locked-border);
         border-style: dashed;
       }
 
@@ -2034,16 +2504,17 @@
       }
 
       .wm-district-badge {
-        background: var(--lacquer-elevated);
-        color: var(--bronze-bright);
+        background: var(--surface-subtle);
+        color: var(--text-accent);
+        border: 1px solid var(--border-subtle);
         padding: 2px 7px;
         font-family: var(--font-mono);
         font-size: 0.74rem;
       }
 
       .wm-current-seal {
-        background: var(--crimson-seal);
-        color: var(--parchment-light);
+        background: var(--accent-primary);
+        color: var(--text-on-accent);
         padding: 2px 7px;
         font-weight: 600;
       }
@@ -2051,18 +2522,20 @@
       .wm-node-title {
         font-family: var(--font-display);
         font-size: 1.18rem;
+        color: var(--text-primary);
       }
 
       .wm-node-links,
       .wm-node-cp {
         font-size: 0.88rem;
+        color: var(--text-secondary);
       }
 
       #world-map-zone-detail {
         display: flex;
         flex-direction: column;
         gap: 8px;
-        border-top: 1px solid rgba(212, 165, 93, 0.28);
+        border-top: 1px solid var(--border-subtle);
         padding-top: 12px;
       }
 
@@ -2073,15 +2546,16 @@
         flex-wrap: wrap;
         gap: 12px;
         padding: 12px 16px;
-        border: 1px solid var(--bronze-muted);
-        background: var(--lacquer-elevated);
+        border: 1px solid var(--border-default);
+        background: var(--surface-elevated);
+        color: var(--text-primary);
         font-size: 1rem;
       }
 
       .wm-zone-card.is-discovered {
-        background: var(--parchment-light);
-        color: var(--ink-primary);
-        border-color: var(--bronze-antique);
+        background: var(--surface-inset);
+        color: var(--text-primary);
+        border-color: var(--border-strong);
       }
 
       .wm-zone-header {
@@ -2093,13 +2567,14 @@
 
       .wm-zone-desc {
         font-size: 0.96rem;
+        color: var(--text-secondary);
         margin-top: 3px;
       }
 
       .wm-lock-reason {
         font-size: 0.9rem;
         font-weight: 600;
-        color: var(--crimson-seal);
+        color: var(--text-crimson);
       }
 
       /* TẠM DỪNG (#pause-modal) */
@@ -2108,7 +2583,7 @@
         font-size: 0.82rem;
         font-weight: 600;
         letter-spacing: 0.06em;
-        color: var(--bronze-bright);
+        color: var(--text-accent);
         text-transform: uppercase;
       }
 
@@ -2130,8 +2605,8 @@
 
       /* CÀI ĐẶT HỆ THỐNG (#settings-modal) */
       .settings-group {
-        background: var(--lacquer-elevated);
-        border: 1px solid rgba(212, 165, 93, 0.28);
+        background: var(--surface-elevated);
+        border: 1px solid var(--border-subtle);
         padding: 14px 16px;
         display: flex;
         flex-direction: column;
@@ -2143,8 +2618,15 @@
         font-size: 0.82rem;
         font-weight: 600;
         letter-spacing: 0.06em;
-        color: var(--bronze-bright);
+        color: var(--text-accent);
         text-transform: uppercase;
+      }
+
+      .settings-sub-label {
+        font-family: var(--font-ui);
+        font-size: 0.88rem;
+        font-weight: 600;
+        color: var(--text-secondary);
       }
 
       .settings-row {
@@ -2165,7 +2647,7 @@
 
       #settings-volume-slider {
         flex: 1;
-        accent-color: var(--crimson-seal);
+        accent-color: var(--accent-primary);
         height: 8px;
         cursor: pointer;
       }
@@ -2175,10 +2657,11 @@
         font-size: 0.94rem;
         min-width: 78px;
         text-align: right;
-        color: var(--parchment-light);
+        color: var(--text-primary);
       }
 
-      .zoom-preset-group {
+      .zoom-preset-group,
+      .theme-mode-group {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 8px;
@@ -2186,9 +2669,9 @@
       }
 
       .settings-hint-note {
-        font-size: 0.94rem;
+        font-size: 0.92rem;
         line-height: 1.5;
-        color: var(--parchment-warm);
+        color: var(--text-secondary);
       }
 
       /* BÀN KIỂM ĐỊNH HỒ SƠ (#dossier-puzzle-modal) */
@@ -2199,9 +2682,9 @@
       }
 
       .dossier-slot-card {
-        background: var(--parchment-warm);
-        color: var(--ink-primary);
-        border: 1px solid var(--bronze-antique);
+        background: var(--surface-elevated);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
         padding: 14px 16px;
         display: flex;
         flex-direction: column;
@@ -2211,12 +2694,12 @@
       .dossier-slot-label {
         font-family: var(--font-display);
         font-size: 1.28rem;
-        color: var(--crimson-seal);
+        color: var(--text-accent);
       }
 
       .dossier-slot-prompt {
         font-size: 1rem;
-        color: var(--ink-secondary);
+        color: var(--text-secondary);
       }
 
       .dossier-options-group {
@@ -2228,26 +2711,31 @@
       .dossier-option-btn {
         text-align: left;
         padding: 11px 14px;
-        background: var(--parchment-light);
-        color: var(--ink-primary);
-        border: 1px solid var(--bronze-antique);
+        background: var(--surface-inset);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
         font-family: var(--font-serif);
         font-size: 1.02rem;
         line-height: 1.5;
         cursor: pointer;
       }
 
+      .dossier-option-btn:hover {
+        background: var(--surface-hover);
+        border-color: var(--border-strong);
+      }
+
       .dossier-option-btn.is-selected {
-        background: var(--crimson-seal);
-        color: var(--parchment-light);
-        border-color: var(--bronze-bright);
+        background: var(--accent-primary);
+        color: var(--text-on-accent);
+        border-color: var(--border-strong);
         font-weight: 600;
       }
 
       #dossier-progressive-hint {
-        background: var(--lacquer-elevated);
-        color: var(--bronze-bright);
-        border: 1px solid var(--bronze-bright);
+        background: var(--surface-elevated);
+        color: var(--text-accent);
+        border: 1px solid var(--border-strong);
         padding: 12px 14px;
         font-size: 1rem;
       }
@@ -2259,22 +2747,23 @@
       }
 
       .dossier-feedback-banner.is-success {
-        background: rgba(212, 165, 93, 0.22);
-        color: var(--parchment-light);
-        border: 1px solid var(--bronze-bright);
+        background: var(--status-completed-bg);
+        color: var(--status-completed-text);
+        border: 1px solid var(--status-completed-border);
       }
 
       .dossier-feedback-banner.is-error {
-        background: rgba(158, 51, 33, 0.28);
-        color: var(--crimson-vermilion);
-        border: 1px solid var(--crimson-seal);
+        background: var(--status-error-bg);
+        color: var(--status-error-text);
+        border: 1px solid var(--status-error-border);
       }
 
       /* CLIMAX MODAL (#climax-modal) */
       .climax-dialog {
-        background: var(--parchment-warm);
-        color: var(--ink-primary);
-        border: 2px solid var(--bronze-bright);
+        background: var(--surface-primary);
+        color: var(--text-primary);
+        border: 2px solid var(--border-strong);
+        box-shadow: var(--shadow-panel);
         max-width: 720px;
         width: 100%;
         max-height: min(90dvh, 840px);
@@ -2289,7 +2778,7 @@
       .climax-dialog h3 {
         font-family: var(--font-display);
         font-size: 1.55rem;
-        color: var(--crimson-seal);
+        color: var(--text-accent);
       }
 
       .climax-top {
@@ -2297,6 +2786,13 @@
         justify-content: space-between;
         align-items: center;
         gap: 12px;
+      }
+
+      .climax-cite-note {
+        font-size: 0.94rem;
+        font-weight: 600;
+        color: var(--text-accent);
+        margin-top: 6px;
       }
 
       .climax-options-list {
@@ -2309,9 +2805,9 @@
       .climax-option-btn {
         text-align: left;
         padding: 12px 15px;
-        background: var(--parchment-light);
-        color: var(--ink-primary);
-        border: 1px solid var(--bronze-antique);
+        background: var(--surface-elevated);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
         font-family: var(--font-serif);
         font-size: 1.05rem;
         line-height: 1.55;
@@ -2319,7 +2815,8 @@
       }
 
       .climax-option-btn:hover {
-        border-color: var(--crimson-seal);
+        background: var(--surface-hover);
+        border-color: var(--border-strong);
       }
 
       .climax-feedback {
@@ -2329,19 +2826,19 @@
       }
 
       .climax-feedback.is-correct {
-        background: rgba(212, 165, 93, 0.25);
-        color: var(--ink-primary);
-        border: 1px solid var(--bronze-antique);
+        background: var(--status-completed-bg);
+        color: var(--status-completed-text);
+        border: 1px solid var(--status-completed-border);
       }
 
       .climax-feedback.is-retry {
-        background: rgba(158, 51, 33, 0.14);
-        color: var(--crimson-seal);
-        border: 1px solid var(--crimson-seal);
+        background: var(--status-error-bg);
+        color: var(--status-error-text);
+        border: 1px solid var(--status-error-border);
       }
 
       #climax-step-b {
-        border-top: 2px solid var(--bronze-antique);
+        border-top: 2px solid var(--border-default);
         padding-top: 14px;
         display: flex;
         flex-direction: column;
@@ -2355,10 +2852,10 @@
         right: 0;
         height: 100dvh;
         width: min(480px, 94vw);
-        background: var(--parchment-warm);
-        color: var(--ink-primary);
-        border-left: 2px solid var(--bronze-antique);
-        box-shadow: -14px 0 36px rgba(0, 0, 0, 0.72);
+        background: var(--surface-primary);
+        color: var(--text-primary);
+        border-left: 2px solid var(--border-strong);
+        box-shadow: var(--shadow-drawer);
         z-index: 340;
         padding: 20px 22px;
         display: flex;
@@ -2372,10 +2869,10 @@
         right: 0;
         height: 100dvh;
         width: min(520px, 94vw);
-        background: var(--lacquer-deep);
-        color: var(--parchment-light);
-        border-left: 2px solid var(--bronze-bright);
-        box-shadow: -14px 0 36px rgba(0, 0, 0, 0.82);
+        background: var(--surface-primary);
+        color: var(--text-primary);
+        border-left: 2px solid var(--border-strong);
+        box-shadow: var(--shadow-drawer);
         z-index: 360;
         padding: 20px 22px;
         display: flex;
@@ -2394,20 +2891,20 @@
       .lookup-top h3 {
         font-family: var(--font-display);
         font-size: 1.5rem;
-        color: var(--crimson-seal);
+        color: var(--text-accent);
       }
 
       #presenter-drawer .lookup-top h3 {
-        color: var(--bronze-bright);
+        color: var(--text-accent);
       }
 
       #lookup-search-input {
         width: 100%;
         min-height: 44px;
         padding: 9px 14px;
-        background: var(--parchment-light);
-        color: var(--ink-primary);
-        border: 1px solid var(--bronze-antique);
+        background: var(--surface-inset);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
         font-family: var(--font-ui);
         font-size: 1rem;
         user-select: text;
@@ -2424,9 +2921,9 @@
       .lookup-chip-btn,
       .era-tab-btn {
         min-height: 36px;
-        background: var(--lacquer-elevated);
-        color: var(--parchment-light);
-        border: 1px solid var(--bronze-antique);
+        background: var(--surface-elevated);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
         padding: 6px 12px;
         font-family: var(--font-ui);
         font-size: 0.92rem;
@@ -2436,8 +2933,9 @@
       .lookup-chip-btn:hover,
       .era-tab-btn:hover,
       .era-tab-btn.is-active {
-        background: var(--crimson-seal);
-        border-color: var(--bronze-bright);
+        background: var(--accent-primary);
+        color: var(--text-on-accent);
+        border-color: var(--border-strong);
       }
 
       #lookup-results-list {
@@ -2449,8 +2947,9 @@
       }
 
       .lookup-entry-card {
-        background: var(--parchment-light);
-        border: 1px solid rgba(138, 90, 43, 0.45);
+        background: var(--surface-elevated);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
         padding: 14px;
         display: flex;
         flex-direction: column;
@@ -2459,8 +2958,8 @@
       }
 
       .lookup-milestone-badge {
-        background: var(--crimson-seal);
-        color: var(--parchment-light);
+        background: var(--accent-primary);
+        color: var(--text-on-accent);
         font-family: var(--font-mono);
         font-size: 0.78rem;
         padding: 2px 7px;
@@ -2470,11 +2969,12 @@
       .lookup-entry-answer {
         font-size: 1rem;
         line-height: 1.62;
+        color: var(--text-secondary);
       }
 
       .lookup-entry-cite {
         font-size: 0.92rem;
-        color: var(--crimson-seal);
+        color: var(--text-accent);
         font-weight: 600;
       }
 
@@ -2486,8 +2986,9 @@
       }
 
       .guide-card {
-        background: var(--lacquer-elevated);
-        border: 1px solid var(--bronze-muted);
+        background: var(--surface-elevated);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
         padding: 14px 16px;
         display: flex;
         flex-direction: column;
@@ -2497,16 +2998,16 @@
       }
 
       .guide-card strong {
-        color: var(--bronze-bright);
+        color: var(--text-accent);
       }
 
       .soon-banner-seal {
         display: inline-flex;
         align-self: flex-start;
         padding: 4px 12px;
-        background: var(--crimson-seal);
-        color: var(--parchment-light);
-        border: 1px solid var(--bronze-bright);
+        background: var(--accent-primary);
+        color: var(--text-on-accent);
+        border: 1px solid var(--border-strong);
         font-family: var(--font-mono);
         font-size: 0.84rem;
         font-weight: 600;
@@ -2517,17 +3018,20 @@
       button:focus-visible,
       input:focus-visible,
       [tabindex]:focus-visible {
-        outline: 2px solid var(--bronze-bright);
+        outline: 2px solid var(--border-focus);
         outline-offset: 2px;
       }
 
       /* ĐÁP ỨNG ĐA THIẾT BỊ & XOAY NGANG DI ĐỘNG */
       @media (max-width: 860px) {
+        .journal-two-col-grid,
+        .codex-two-col-grid,
         .inventory-body-grid,
         #world-map-graph,
         .pause-quick-grid,
         .pause-actions-list,
-        .zoom-preset-group {
+        .zoom-preset-group,
+        .theme-mode-group {
           grid-template-columns: 1fr;
         }
       }
@@ -2930,7 +3434,7 @@
         <button id="skip-opening-btn" type="button">Bỏ qua Mở màn [Esc]</button>
       </div>
 
-      <!-- 7A. NHẬT KÝ NHIỆM VỤ & BIÊN NIÊN SỬ LA MÃ I–XII (#journal-modal — Phím J) -->
+      <!-- 7A. NHẬT KÝ NHIỆM VỤ & BIÊN NIÊN SỬ LA MÃ I–XII 2 CỘT (#journal-modal — Phím J) -->
       <div
         id="journal-modal"
         role="dialog"
@@ -2943,7 +3447,7 @@
             <div>
               <h3 id="journal-modal-title">NHẬT KÝ HÀNH TRÌNH &amp; BIÊN NIÊN SỬ</h3>
               <p id="journal-summary" class="modal-subtitle">
-                Tiến độ nhiệm vụ: 0 / 0 mục tiêu hoàn thành
+                0/0 bước mục tiêu · 0/0 nhiệm vụ hoàn tất
               </p>
             </div>
             <button type="button" id="btn-close-journal" class="ctrl-btn">✕ Đóng [J/Esc]</button>
@@ -2973,8 +3477,14 @@
           </div>
 
           <div id="journal-quests-panel" role="tabpanel" aria-labelledby="tab-journal-quests">
-            <div id="journal-active-banner" aria-live="polite"></div>
-            <div id="journal-quest-list"></div>
+            <div class="journal-two-col-grid">
+              <div id="journal-quest-list" aria-label="Danh sách nhiệm vụ và mục tiêu"></div>
+              <aside
+                id="journal-active-banner"
+                aria-live="polite"
+                aria-label="Chi tiết mục tiêu đang chọn"
+              ></aside>
+            </div>
           </div>
 
           <div
@@ -2985,11 +3495,18 @@
           >
             <div class="codex-panel-banner">
               <div class="codex-sub">
-                <span>Bấm cột mốc đã khôi phục để đối chiếu sử liệu</span>
+                <span>Chọn cột mốc để tra cứu bối cảnh &amp; tư liệu</span>
                 <strong id="codex-progress-count">0 / 12 CỘT MỐC</strong>
               </div>
             </div>
-            <div id="codex-milestone-list"></div>
+            <div class="codex-two-col-grid">
+              <div id="codex-milestone-list" aria-label="Danh sách 12 cột mốc La Mã"></div>
+              <aside
+                id="codex-milestone-detail"
+                aria-live="polite"
+                aria-label="Chi tiết cột mốc lịch sử"
+              ></aside>
+            </div>
           </div>
         </div>
       </div>
@@ -3056,12 +3573,12 @@
               <h3 id="dossier-puzzle-title">BÀN KIỂM ĐỊNH LUẬN CƯƠNG &amp; CƯƠNG LĨNH 2/1930</h3>
               <p id="dossier-puzzle-subtitle" class="modal-subtitle"></p>
             </div>
-            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+            <div class="modal-header-actions">
               <span id="dossier-provenance-badge" hidden></span>
               <button type="button" id="btn-close-dossier" class="ctrl-btn">✕ Đóng [Esc]</button>
             </div>
           </div>
-          <p id="dossier-puzzle-instruction" style="font-size: 1.04rem; line-height: 1.6"></p>
+          <p id="dossier-puzzle-instruction" class="modal-body-paragraph"></p>
           <div id="dossier-slots-container"></div>
           <div id="dossier-progressive-hint" hidden></div>
           <div id="dossier-feedback-banner" class="dossier-feedback-banner" hidden></div>
@@ -3081,22 +3598,16 @@
               <h3 id="climax-a-title">BƯỚC A · KHÔI PHỤC QUYẾT SÁCH LỊCH SỬ</h3>
               <button type="button" id="btn-close-climax" class="ctrl-btn">✕ Đóng [Esc]</button>
             </div>
-            <p id="climax-a-prompt" style="margin-top: 6px; line-height: 1.6"></p>
-            <div
-              id="climax-a-cite"
-              style="font-size: 0.94rem; font-weight: 600; color: var(--crimson-seal); margin-top: 6px"
-            ></div>
+            <p id="climax-a-prompt" class="modal-body-paragraph"></p>
+            <div id="climax-a-cite" class="climax-cite-note"></div>
             <div id="climax-a-options" class="climax-options-list"></div>
             <div id="climax-a-feedback" class="climax-feedback"></div>
           </div>
 
           <div id="climax-step-b" hidden>
             <h3 id="climax-b-title">BƯỚC B · ĐẠI CẢNH LỊCH SỬ</h3>
-            <p id="climax-b-subtitle" style="line-height: 1.6"></p>
-            <div
-              id="climax-b-cite"
-              style="font-size: 0.94rem; font-weight: 600; color: var(--crimson-seal)"
-            ></div>
+            <p id="climax-b-subtitle" class="modal-body-paragraph"></p>
+            <div id="climax-b-cite" class="climax-cite-note"></div>
             <button type="button" id="climax-b-action-btn" class="ctrl-btn is-primary">
               ◆ Kích Hoạt Đại Cảnh Lịch Sử
             </button>
@@ -3212,11 +3723,41 @@
             <div>
               <h3 id="settings-modal-title">CÀI ĐẶT HỆ THỐNG</h3>
               <p class="modal-subtitle">
-                Âm thanh Ngũ cung, hiển thị khung nhìn, cỡ chữ và trợ năng
+                Giao diện Sáng/Tối, âm thanh Ngũ cung, khung nhìn và trợ năng
               </p>
             </div>
             <button type="button" id="btn-close-settings" class="ctrl-btn">✕ Đóng [Esc]</button>
           </div>
+
+          <section class="settings-group" aria-label="Chế độ giao diện Sáng Tối">
+            <div class="settings-group-title">◆ Chế độ Giao diện (Eastward Theme)</div>
+            <div class="theme-mode-group" role="group" aria-label="Chế độ giao diện">
+              <button
+                type="button"
+                class="ctrl-btn is-active"
+                data-theme-mode="system"
+                aria-pressed="true"
+              >
+                ◐ Hệ thống
+              </button>
+              <button
+                type="button"
+                class="ctrl-btn"
+                data-theme-mode="light"
+                aria-pressed="false"
+              >
+                ☀ Sáng (Giấy Dó)
+              </button>
+              <button
+                type="button"
+                class="ctrl-btn"
+                data-theme-mode="dark"
+                aria-pressed="false"
+              >
+                ☾ Tối (Sơn Mài)
+              </button>
+            </div>
+          </section>
 
           <section class="settings-group" aria-label="Cài đặt âm thanh">
             <div class="settings-group-title">◆ Âm thanh Ngũ cung</div>
@@ -3436,12 +3977,12 @@
             </button>
           </div>
           <span class="soon-banner-seal">SẮP RA MẮT · KIẾN TRÚC TƯƠNG LAI</span>
-          <p style="font-size: 1.04rem; line-height: 1.65; color: var(--parchment-warm)">
+          <p class="modal-body-paragraph">
             <strong>Lữ Khách Ký Ức (1930 – 2045)</strong> hiện vận hành trọn vẹn theo kiến trúc
             nhập vai lịch sử một người chơi cục bộ (<em>single-player local-first RPG</em>), không
             phụ thuộc máy chủ trực tuyến.
           </p>
-          <p style="font-size: 1rem; line-height: 1.6; color: var(--parchment-warm)">
+          <p class="modal-body-paragraph">
             Tính năng khám phá tổ đội và phòng học tương tác đồng bộ được dành riêng cho cột mốc
             kiến trúc tiếp theo — cam kết không hiển thị sảnh ghép trận giả lập.
           </p>
@@ -3461,7 +4002,7 @@
           <div class="rpg-modal-header">
             <h3 id="confirm-modal-title">XÁC NHẬN THAO TÁC</h3>
           </div>
-          <p id="confirm-modal-body" style="font-size: 1.04rem; line-height: 1.6"></p>
+          <p id="confirm-modal-body" class="modal-body-paragraph"></p>
           <div class="modal-footer">
             <button type="button" id="btn-confirm-no" class="ctrl-btn">Hủy bỏ [Esc]</button>
             <button type="button" id="btn-confirm-yes" class="ctrl-btn is-primary">

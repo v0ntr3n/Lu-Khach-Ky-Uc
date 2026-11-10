@@ -32,6 +32,10 @@ export type CameraZoomPreset = 'wide' | 'normal' | 'close';
 
 export type EffectsQuality = 'full' | 'subtle';
 
+export type ThemeMode = 'system' | 'light' | 'dark';
+
+export type EffectiveTheme = 'light' | 'dark';
+
 /**
  * Trạng thái điều khiển độc quyền của game.
  * Chỉ khi lifecycle === 'PLAYING' và mode === 'exploring' người chơi mới có thể di chuyển và tương tác thế giới.
@@ -520,6 +524,7 @@ export interface GameSettings {
   presenterModeUnlocked?: boolean; // explicitly enables developer/presenter controls
   tutorialCompleted?: boolean; // tracks first-play onboarding completion
   showMinimap?: boolean; // controls real-time top-right minimap visibility
+  themeMode?: ThemeMode; // 'system' | 'light' | 'dark' (default 'system')
 }
 
 export interface SaveSummary {
