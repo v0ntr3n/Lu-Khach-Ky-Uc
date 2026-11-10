@@ -2217,6 +2217,148 @@
         border-top: 1px solid var(--border-subtle);
       }
 
+      /* QUEST JOURNAL: information on demand, not a wall of history text. */
+      #journal-modal .rpg-modal-dialog {
+        max-width: 920px;
+        gap: 12px;
+      }
+      #journal-modal .rpg-modal-header h3 {
+        font-family: var(--font-ui);
+        font-size: 1.25rem;
+        letter-spacing: 0.025em;
+      }
+      #journal-modal .modal-subtitle { font-size: 0.82rem; }
+      #journal-modal .journal-two-col-grid {
+        grid-template-columns: minmax(260px, 1fr) minmax(290px, 1.08fr);
+        gap: 10px;
+      }
+      #journal-modal .journal-quest-card {
+        gap: 4px;
+        padding: 8px 10px;
+        border-color: var(--border-subtle);
+      }
+      #journal-modal .journal-quest-header { min-height: 34px; }
+      #journal-modal .journal-category-glyph {
+        color: var(--text-accent);
+        font-size: 0.9rem;
+        flex-shrink: 0;
+      }
+      #journal-modal .journal-quest-title {
+        font-family: var(--font-ui);
+        font-size: 0.92rem;
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      #journal-modal .journal-step-count {
+        background: transparent;
+        border: none;
+        font-size: 0.75rem;
+        padding: 0;
+      }
+      #journal-modal .journal-objective-list { gap: 2px; }
+      #journal-modal .journal-objective-row {
+        border: none;
+        border-left: 2px solid transparent;
+        background: transparent;
+        padding: 8px 7px;
+        font-size: 0.85rem;
+      }
+      #journal-modal .journal-objective-row.is-tracked,
+      #journal-modal .journal-objective-row.is-selected {
+        background: var(--surface-selected);
+        color: var(--text-primary);
+        border: none;
+        border-left: 2px solid var(--accent-primary);
+        outline: none;
+      }
+      #journal-modal .journal-objective-row.is-completed {
+        color: var(--status-completed-text);
+        border-color: transparent;
+        background: transparent;
+      }
+      #journal-modal .journal-objective-row.is-locked {
+        color: var(--status-locked-text);
+        border-color: transparent;
+        background: transparent;
+      }
+      #journal-modal .journal-obj-title {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      #journal-modal .journal-status-badge { font-size: 0.85rem; }
+      #journal-modal #journal-active-banner {
+        border: 1px solid var(--border-subtle);
+        border-top: 2px solid var(--border-strong);
+        padding: 16px;
+        gap: 12px;
+        min-height: 230px;
+      }
+      #journal-modal .journal-inspector-top {
+        border-bottom: none;
+        padding-bottom: 0;
+      }
+      #journal-modal .journal-banner-label {
+        font-family: var(--font-ui);
+        font-size: 0.78rem;
+        letter-spacing: 0;
+        color: var(--text-accent);
+      }
+      #journal-modal .journal-inspector-step-pill { background: transparent; border: none; }
+      #journal-modal .journal-inspector-quest-title {
+        font-family: var(--font-ui);
+        color: var(--text-muted);
+        font-size: 0.86rem;
+        font-weight: 600;
+      }
+      #journal-modal .journal-inspector-objective-box {
+        gap: 12px;
+        padding: 12px;
+        background: var(--surface-inset);
+        border: none;
+        border-left: 3px solid var(--accent-primary);
+      }
+      #journal-modal .journal-banner-title {
+        font-size: 1.14rem;
+        line-height: 1.35;
+      }
+      #journal-modal .journal-compact-hint {
+        color: var(--text-muted);
+        font-size: 0.85rem;
+      }
+      #journal-modal .journal-inspector-track-btn { margin: 0; }
+      #journal-modal .journal-quest-lore {
+        border-top: 1px solid var(--border-subtle);
+        padding-top: 12px;
+      }
+      #journal-modal .journal-quest-lore summary {
+        color: var(--text-accent);
+        font-size: 0.88rem;
+        font-weight: 600;
+        cursor: pointer;
+        padding: 4px 0;
+      }
+      #journal-modal .journal-quest-lore-content {
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+        padding-top: 12px;
+        font-size: 0.88rem;
+        line-height: 1.5;
+        color: var(--text-secondary);
+      }
+      #journal-modal .journal-quest-lore-content h5 { color: var(--text-primary); font-size: 0.9rem; }
+      #journal-modal .journal-quest-cite { border: none; padding: 0; font-size: 0.82rem; }
+      @media (max-width: 860px) {
+        #journal-modal .journal-two-col-grid { grid-template-columns: 1fr; }
+        #journal-modal .rpg-modal-dialog { padding: 14px; }
+        #journal-modal #journal-quest-list { max-height: min(30dvh, 260px); }
+      }
+
       /* BIÊN NIÊN SỬ LA MÃ I–XII 2 CỘT */
       .codex-panel-banner {
         display: flex;
@@ -3490,9 +3632,9 @@
         <div class="rpg-modal-dialog">
           <div class="rpg-modal-header">
             <div>
-              <h3 id="journal-modal-title">NHẬT KÝ HÀNH TRÌNH &amp; BIÊN NIÊN SỬ</h3>
+              <h3 id="journal-modal-title">NHẬT KÝ</h3>
               <p id="journal-summary" class="modal-subtitle">
-                0/0 bước mục tiêu · 0/0 nhiệm vụ hoàn tất
+                0/0 mục tiêu · 0/0 nhiệm vụ
               </p>
             </div>
             <button type="button" id="btn-close-journal" class="ctrl-btn">✕ Đóng [J/Esc]</button>
@@ -3507,7 +3649,7 @@
               aria-selected="true"
               aria-controls="journal-quests-panel"
             >
-              ◆ Nhiệm Vụ
+              Nhiệm vụ
             </button>
             <button
               type="button"
@@ -3517,7 +3659,7 @@
               aria-selected="false"
               aria-controls="journal-codex-panel"
             >
-              ▸ Biên Niên Sử I–XII
+              Biên niên sử
             </button>
           </div>
 
