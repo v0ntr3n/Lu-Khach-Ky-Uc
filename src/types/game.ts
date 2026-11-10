@@ -398,6 +398,8 @@ export type TutorialStepId =
 export interface QuestObjective {
   id: string;
   title: string;
+  /** Concise, action-oriented label for the in-game HUD; full title stays in Journal. */
+  hudText?: string;
   description: string;
   zoneId: string;
   targetRef?: QuestTargetRef;
@@ -416,6 +418,8 @@ export interface QuestDefinition {
   id: string;
   eraId: EraId;
   title: string;
+  /** Short quest name for the compact HUD. */
+  hudTitle?: string;
   subtitle: string;
   category: 'main' | 'side';
   summary: string;
