@@ -566,6 +566,22 @@ export class PhaserRuntime {
     return this.camera.getPosition();
   }
 
+  public setViewportSize(width: number, height: number): void {
+    const safeW = Math.max(1, Math.round(width));
+    const safeH = Math.max(1, Math.round(height));
+    this.camera.setViewport(safeW, safeH);
+    const scaleMgr = (
+      this.phaserGame as { scale?: { resize?: (w: number, h: number) => void } } | null
+    )?.scale;
+    if (scaleMgr && typeof scaleMgr.resize === 'function') {
+      try {
+        scaleMgr.resize(safeW, safeH);
+      } catch {
+        // Ignore in headless/mock environments
+      }
+    }
+  }
+
   public isPlayerInShelter(): boolean {
     const foot = this.getPlayerFootRect();
     const centerX = foot.x + foot.width * 0.5;

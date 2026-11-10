@@ -1,16 +1,18 @@
 /**
  * @file src/engine/PixelRenderer.ts
- * @description Bộ dựng hình Canvas 2D 320x180 Integer-Scaled (HD-2D Chiaroscuro Sơn Mài & Giấy Dó).
+ * @description Bộ dựng hình Canvas 2D Integer-Scaled (HD-2D Chiaroscuro Sơn Mài & Giấy Dó).
  * Hỗ trợ:
- * - Chế độ Khám phá 2D Top-Down (Orthogonal 16x16 Tilemap, Y-Depth Sorting, Foreground Occlusion, 4-Direction Sprites)
+ * - Khung nhìn logic động (`setLogicalSize`, `GameShell` integer pixel scaling) không cắt xén biên
+ * - Chế độ Khám phá 2D Top-Down (Orthogonal 16x16 Tilemap, Y-Depth Sorting, Foreground Occlusion, 4-Direction 16x22 Sprites)
+ * - Khung viền đồng cổ 2 lớp quanh bản đồ nội thất nhỏ căn giữa (`cameraX < 0 || cameraY < 0`)
  * - Chế độ 4 lớp Parallax theo từng Chương (1930, 1945, 1954-1975, 1986-2045)
- * - Ánh sáng Chiaroscuro hướng tâm & đèn rọi tuần tra Mức 1 (Story-Driven)
- * - 4 Đại Cảnh Tương Tác Bùng Nổ (Climax Set-Pieces: Đuốc 1930, Cờ Ba Đình 1945, Xe tăng 1975, Tàu cao tốc 2045)
+ * - Ánh sáng Chiaroscuro hướng tâm, chất lượng hiệu ứng (`effectsQuality: 'full' | 'subtle'`) & Đại Cảnh Climax
  */
 
 import { PALETTE_12 } from '../data/chronicles';
 import type {
   ChapterData,
+  EffectsQuality,
   Facing4,
   MilestoneArtifact,
   NormalizedMapData,
@@ -53,6 +55,7 @@ export interface RenderState {
   debugOverlay?: boolean;
   patrolActors?: PatrolActorRenderState[];
   reducedMotion?: boolean;
+  effectsQuality?: EffectsQuality;
   transitionFadeAlpha?: number;
 }
 
@@ -62,14 +65,43 @@ export class PixelRenderer {
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    this.canvas.width = INTERNAL_WIDTH;
-    this.canvas.height = INTERNAL_HEIGHT;
+    if (
+      !this.canvas.width ||
+      !this.canvas.height ||
+      (this.canvas.width === 300 && this.canvas.height === 150)
+    ) {
+      this.canvas.width = INTERNAL_WIDTH;
+      this.canvas.height = INTERNAL_HEIGHT;
+    }
     const context = this.canvas.getContext('2d');
     if (!context) {
       throw new Error('Không thể khởi tạo Canvas 2D cho PixelRenderer.');
     }
     this.ctx = context;
     this.ctx.imageSmoothingEnabled = false;
+  }
+
+  /**
+   * Cập nhật độ phân giải logic của `#pixel-canvas` đồng bộ với `GameShell`.
+   */
+  public setLogicalSize(width: number, height: number): void {
+    const safeW = Math.max(160, Math.round(width || INTERNAL_WIDTH));
+    const safeH = Math.max(90, Math.round(height || INTERNAL_HEIGHT));
+    if (this.canvas.width !== safeW) {
+      this.canvas.width = safeW;
+    }
+    if (this.canvas.height !== safeH) {
+      this.canvas.height = safeH;
+    }
+    this.ctx.imageSmoothingEnabled = false;
+  }
+
+  private getViewWidth(): number {
+    return this.canvas.width || INTERNAL_WIDTH;
+  }
+
+  private getViewHeight(): number {
+    return this.canvas.height || INTERNAL_HEIGHT;
   }
 
   public render(state: RenderState): void {
@@ -92,17 +124,30 @@ export class PixelRenderer {
       climaxBurstProgress,
       timeSec,
     } = state;
+    const effectsQuality: EffectsQuality = state.effectsQuality ?? 'full';
 
     ctx.imageSmoothingEnabled = false;
 
     // 1. Nền đêm Sơn Mài & Hào quang Chiaroscuro hướng tâm
-    this.drawSkyAndChiaroscuro(chapter, climaxBurstProgress, timeSec);
+    this.drawSkyAndChiaroscuro(chapter, climaxBurstProgress, timeSec, effectsQuality);
 
     // 2. Lớp kiến trúc nền xa (Parallax 0.25x)
-    this.drawDistantParallax(chapter, cameraX, collectedMilestones, climaxBurstProgress, timeSec);
+    this.drawDistantParallax(
+      chapter,
+      cameraX,
+      collectedMilestones,
+      climaxBurstProgress,
+      timeSec
+    );
 
     // 3. Lớp kiến trúc trung cảnh & đường dây/cầu (Parallax 0.55x)
-    this.drawMidgroundParallax(chapter, cameraX, collectedMilestones, climaxBurstProgress, timeSec);
+    this.drawMidgroundParallax(
+      chapter,
+      cameraX,
+      collectedMilestones,
+      climaxBurstProgress,
+      timeSec
+    );
 
     // 4. Mặt đất & Hiên nhà / Bóng đa / Giao thông hào ẩn nấp (Parallax 1.0x)
     this.drawGroundAndShelters(chapter, cameraX, playerX);
@@ -113,10 +158,22 @@ export class PixelRenderer {
     }
 
     // 6. Cột mốc La Mã (I - XII) & NPC Nhân chứng Lịch sử
-    this.drawMilestonesAndNpcs(chapter, cameraX, collectedMilestones, nearbyMilestone, timeSec);
+    this.drawMilestonesAndNpcs(
+      chapter,
+      cameraX,
+      collectedMilestones,
+      nearbyMilestone,
+      timeSec
+    );
 
     // 7. Cổng Thời Gian Cuối Màn (Climax Gate)
-    this.drawClimaxGate(chapter, cameraX, nearClimaxGate, climaxBurstProgress, timeSec);
+    this.drawClimaxGate(
+      chapter,
+      cameraX,
+      nearClimaxGate,
+      climaxBurstProgress,
+      timeSec
+    );
 
     // 8. Nhân vật Lữ Khách Ký Ức 2045
     const screenPlayerX = Math.round(playerX - cameraX);
@@ -136,7 +193,9 @@ export class PixelRenderer {
     }
 
     // 10. Thời tiết & Hạt bụi điểm ảnh Sơn Mài (Rain / Autumn / Embers / Digital Stars)
-    this.drawWeatherParticles(chapter, timeSec);
+    if (!state.reducedMotion) {
+      this.drawWeatherParticles(chapter, timeSec, effectsQuality, false);
+    }
   }
 
   public renderTopDownWorld(state: RenderState): void {
@@ -151,6 +210,9 @@ export class PixelRenderer {
       return;
     }
 
+    const viewW = this.getViewWidth();
+    const viewH = this.getViewHeight();
+
     const {
       chapter,
       playerX,
@@ -159,8 +221,6 @@ export class PixelRenderer {
       isMoving,
       isSheltered,
       collectedMilestones,
-      nearbyMilestone,
-      nearClimaxGate,
       climaxBurstProgress,
       timeSec,
     } = state;
@@ -168,22 +228,25 @@ export class PixelRenderer {
     const playerY = state.playerY ?? GROUND_Y;
     const cameraY = state.cameraY ?? 0;
     const facing: Facing4 = state.playerFacing ?? (facingRight ? 'right' : 'left');
-    const isInterior = mapData.id.includes('interior') || mapData.id.includes('warehouse');
+    const reducedMotion = Boolean(state.reducedMotion);
+    const effectsQuality: EffectsQuality = state.effectsQuality ?? 'full';
+    const isInterior =
+      mapData.id.includes('interior') || mapData.id.includes('warehouse');
     const tileSize = mapData.tileSize || 16;
 
     ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = PALETTE_12.LACQUER_VOID;
-    ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
+    ctx.fillRect(0, 0, viewW, viewH);
 
     const startCol = Math.max(0, Math.floor(cameraX / tileSize));
     const endCol = Math.min(
       mapData.widthInTiles - 1,
-      Math.ceil((cameraX + INTERNAL_WIDTH) / tileSize)
+      Math.ceil((cameraX + viewW) / tileSize)
     );
     const startRow = Math.max(0, Math.floor(cameraY / tileSize));
     const endRow = Math.min(
       mapData.heightInTiles - 1,
-      Math.ceil((cameraY + INTERNAL_HEIGHT) / tileSize)
+      Math.ceil((cameraY + viewH) / tileSize)
     );
 
     const drawTileLayer = (layerName: string) => {
@@ -217,8 +280,10 @@ export class PixelRenderer {
       const sy = Math.round(shelter.bounds.y - cameraY);
       const sw = Math.round(shelter.bounds.width);
       const sh = Math.round(shelter.bounds.height);
-      if (sx + sw < 0 || sx > INTERNAL_WIDTH || sy + sh < 0 || sy > INTERNAL_HEIGHT) continue;
-      ctx.fillStyle = isSheltered ? 'rgba(212, 165, 93, 0.20)' : 'rgba(17, 14, 11, 0.28)';
+      if (sx + sw < 0 || sx > viewW || sy + sh < 0 || sy > viewH) continue;
+      ctx.fillStyle = isSheltered
+        ? 'rgba(212, 165, 93, 0.20)'
+        : 'rgba(17, 14, 11, 0.28)';
       ctx.fillRect(sx, sy, sw, sh);
     }
 
@@ -227,7 +292,7 @@ export class PixelRenderer {
       const py = Math.round(portal.y - cameraY);
       const pw = Math.max(16, Math.round(portal.width));
       const ph = Math.max(10, Math.round(portal.height));
-      if (px + pw < -16 || px > INTERNAL_WIDTH + 16 || py + ph < -16 || py > INTERNAL_HEIGHT + 16) {
+      if (px + pw < -16 || px > viewW + 16 || py + ph < -16 || py > viewH + 16) {
         continue;
       }
       ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
@@ -262,20 +327,22 @@ export class PixelRenderer {
     for (const inter of mapData.interactables) {
       const ix = Math.round(inter.x - cameraX);
       const iy = Math.round(inter.y - cameraY);
-      if (ix < -32 || ix > INTERNAL_WIDTH + 32 || iy < -32 || iy > INTERNAL_HEIGHT + 32) continue;
+      if (ix < -32 || ix > viewW + 32 || iy < -32 || iy > viewH + 32) continue;
 
       if (inter.kind === 'climax_gate') {
         depthQueue.push({
           footY: inter.y + 8,
           draw: () => {
-            const pulse = Math.round(Math.sin(timeSec * 5) * 2);
+            const pulse = reducedMotion ? 0 : Math.round(Math.sin(timeSec * 5) * 2);
             ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
             ctx.fillRect(ix - 14, iy - 30, 4, 30);
             ctx.fillRect(ix + 10, iy - 30, 4, 30);
             ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
             ctx.fillRect(ix - 16, iy - 34, 32, 4);
             ctx.fillStyle =
-              climaxBurstProgress > 0 ? PALETTE_12.PARCHMENT_LIGHT : PALETTE_12.CRIMSON_SEAL;
+              climaxBurstProgress > 0
+                ? PALETTE_12.PARCHMENT_LIGHT
+                : PALETTE_12.CRIMSON_SEAL;
             ctx.fillRect(ix - 8, iy - 28, 16, 26);
             ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
             ctx.fillRect(ix - 3, iy - 24, 6 + pulse, 20);
@@ -302,7 +369,9 @@ export class PixelRenderer {
         const milestone = inter.milestoneId
           ? chapter.milestones.find((m) => m.roman === inter.milestoneId)
           : undefined;
-        const isDone = inter.milestoneId ? collectedMilestones.has(inter.milestoneId) : false;
+        const isDone = inter.milestoneId
+          ? collectedMilestones.has(inter.milestoneId)
+          : false;
         depthQueue.push({
           footY: inter.y + 4,
           draw: () => {
@@ -314,13 +383,20 @@ export class PixelRenderer {
               ix,
               iy - 10,
               isDone,
-              timeSec
+              reducedMotion ? 0 : timeSec
             );
+            // Huy hiệu điểm ảnh sắc nét báo hiệu cột mốc (thay thế chữ 7px bị nhòe)
             if (inter.milestoneId) {
-              ctx.font = 'bold 7px monospace';
-              ctx.textAlign = 'center';
-              ctx.fillStyle = isDone ? PALETTE_12.PARCHMENT_LIGHT : PALETTE_12.BRONZE_BRIGHT;
-              ctx.fillText(isDone ? `✓ ${inter.milestoneId}` : inter.milestoneId, ix, iy - 20);
+              if (isDone) {
+                ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+                ctx.fillRect(ix - 3, iy - 24, 6, 5);
+                ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+                ctx.fillRect(ix - 1, iy - 22, 2, 2);
+              } else {
+                ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+                ctx.fillRect(ix - 1, iy - 25, 2, 5);
+                ctx.fillRect(ix - 2, iy - 23, 4, 1);
+              }
             }
           },
         });
@@ -354,13 +430,23 @@ export class PixelRenderer {
     for (const npc of mapData.npcs) {
       const nx = Math.round(npc.x - cameraX);
       const ny = Math.round(npc.y - cameraY);
-      if (nx < -24 || nx > INTERNAL_WIDTH + 24 || ny < -24 || ny > INTERNAL_HEIGHT + 24) continue;
+      if (nx < -28 || nx > viewW + 28 || ny < -28 || ny > viewH + 28) continue;
 
       const role = this.resolveNpcRole(npc);
       depthQueue.push({
         footY: npc.y,
         draw: () => {
-          drawCharacter4Dir(ctx, role, nx, ny, npc.facing, false, false, timeSec);
+          drawCharacter4Dir(
+            ctx,
+            role,
+            nx,
+            ny,
+            npc.facing,
+            false,
+            false,
+            timeSec,
+            reducedMotion
+          );
         },
       });
     }
@@ -368,7 +454,7 @@ export class PixelRenderer {
     // Nhân vật Lữ Khách Ký Ức 2045
     const screenPlayerX = Math.round(playerX - cameraX);
     const screenPlayerY = Math.round(playerY - cameraY);
-    const animateWalk = isMoving && !state.reducedMotion;
+    const animateWalk = isMoving && !reducedMotion;
     depthQueue.push({
       footY: playerY,
       draw: () => {
@@ -380,7 +466,8 @@ export class PixelRenderer {
           facing,
           animateWalk,
           isSheltered,
-          timeSec
+          timeSec,
+          reducedMotion
         );
       },
     });
@@ -416,20 +503,33 @@ export class PixelRenderer {
         cameraX,
         cameraY,
         timeSec,
-        state.patrolActors
+        state.patrolActors,
+        reducedMotion
       );
     }
 
     // 6. Hào quang Chiaroscuro quanh Lữ Khách & Vầng sáng đèn lồng/mưa đêm PixelFX
-    this.drawTopDownChiaroscuro(screenPlayerX, screenPlayerY, climaxBurstProgress, isInterior);
+    this.drawTopDownChiaroscuro(
+      screenPlayerX,
+      screenPlayerY,
+      climaxBurstProgress,
+      isInterior,
+      effectsQuality
+    );
     this.drawEnvironmentalVfx(
       mapData,
       cameraX,
       cameraY,
       timeSec,
       isInterior,
-      Boolean(state.reducedMotion)
+      reducedMotion,
+      effectsQuality
     );
+
+    // 6.5. Khung viền đồng cổ 2 lớp quanh bản đồ nhỏ căn giữa (khi cameraX < 0 || cameraY < 0)
+    if (cameraX < 0 || cameraY < 0) {
+      this.drawCenteredMapBorder(cameraX, cameraY, mapData.widthPx, mapData.heightPx);
+    }
 
     // 7. Đại cảnh Climax nếu kích hoạt
     if (climaxBurstProgress > 0) {
@@ -437,42 +537,67 @@ export class PixelRenderer {
     }
 
     // 8. Hạt thời tiết (chỉ vẽ ngoài trời và khi không bật giảm chuyển động)
-    if (!isInterior && !state.reducedMotion) {
-      this.drawWeatherParticles(chapter, timeSec);
+    if (!isInterior && !reducedMotion) {
+      this.drawWeatherParticles(chapter, timeSec, effectsQuality, true);
     }
 
-    // 8.5. Lớp phủ kiểm định bản đồ (Debug Overlay [F3])
+    // 8.5. Lớp phủ kiểm định hình học bản đồ (Debug Overlay [F3] — văn bản hiển thị qua DOM #dev-debug-readout)
     if (state.debugOverlay) {
       this.drawDebugOverlay(mapData, state, cameraX, cameraY);
     }
 
-    // 9. Nhãn tương tác [E] ngữ cảnh
-    const promptLabel =
-      state.nearbyPrompt ??
-      (nearbyMilestone
-        ? `[E] ${nearbyMilestone.roman} · ${nearbyMilestone.title}`
-        : nearClimaxGate
-          ? '[E] CỔNG THỜI GIAN'
-          : null);
-
-    if (promptLabel) {
-      const targetX = state.nearbyTargetPos
-        ? Math.round(state.nearbyTargetPos.x - cameraX)
-        : screenPlayerX;
-      const targetY = state.nearbyTargetPos
-        ? Math.round(state.nearbyTargetPos.y - cameraY) - 22
-        : screenPlayerY - 22;
-      this.drawPromptBadge(targetX, targetY, promptLabel);
-    }
+    // Lưu ý: Nhãn tương tác [E] ngữ cảnh được dựng sắc nét trên lớp phủ DOM `#world-interaction-prompt`
+    // thay vì vẽ chữ 7px lên Canvas!
 
     // 10. Hiệu ứng mờ chuyển cảnh Sơn Mài (Scene Transition Ink-Lacquer Fade)
-    if ((state.transitionFadeAlpha ?? 0) > 0.01 && !state.reducedMotion) {
+    if ((state.transitionFadeAlpha ?? 0) > 0.01 && !reducedMotion) {
       ctx.save();
       ctx.fillStyle = PALETTE_12.LACQUER_VOID;
       ctx.globalAlpha = Math.max(0, Math.min(1, state.transitionFadeAlpha ?? 0));
-      ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
+      ctx.fillRect(0, 0, viewW, viewH);
       ctx.restore();
     }
+  }
+
+  /**
+   * Vẽ khung kiến trúc đồng cổ 2 lớp (`PALETTE_12.BRONZE_ANTIQUE`) bao quanh biên bản đồ
+   * khi bản đồ nội thất nhỏ được căn giữa trong khung nhìn lớn (`cameraX < 0 || cameraY < 0`).
+   */
+  private drawCenteredMapBorder(
+    cameraX: number,
+    cameraY: number,
+    mapWidthPx: number,
+    mapHeightPx: number
+  ): void {
+    const { ctx } = this;
+    const mx = Math.round(-cameraX);
+    const my = Math.round(-cameraY);
+    const mw = Math.round(mapWidthPx);
+    const mh = Math.round(mapHeightPx);
+
+    ctx.save();
+    ctx.lineWidth = 1;
+
+    // Khe rãnh tối ngăn cách nền với khung đồng
+    ctx.strokeStyle = PALETTE_12.LACQUER_VOID;
+    ctx.strokeRect(mx - 1.5, my - 1.5, mw + 3, mh + 3);
+
+    // Đường viền đồng cổ lớp trong (sát biên bản đồ)
+    ctx.strokeStyle = PALETTE_12.BRONZE_ANTIQUE;
+    ctx.strokeRect(mx - 0.5, my - 0.5, mw + 1, mh + 1);
+
+    // Đường viền đồng cổ lớp ngoài (cách 1px tạo gờ kiến trúc 2 lớp)
+    ctx.strokeStyle = PALETTE_12.BRONZE_ANTIQUE;
+    ctx.strokeRect(mx - 2.5, my - 2.5, mw + 5, mh + 5);
+
+    // Chốt góc vàng đồng sáng tại 4 góc khung
+    ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+    ctx.fillRect(mx - 3, my - 3, 2, 2);
+    ctx.fillRect(mx + mw + 1, my - 3, 2, 2);
+    ctx.fillRect(mx - 3, my + mh + 1, 2, 2);
+    ctx.fillRect(mx + mw + 1, my + mh + 1, 2, 2);
+
+    ctx.restore();
   }
 
   private drawEnvironmentalVfx(
@@ -481,9 +606,16 @@ export class PixelRenderer {
     cameraY: number,
     timeSec: number,
     isInterior: boolean,
-    reducedMotion: boolean
+    reducedMotion: boolean,
+    effectsQuality: EffectsQuality = 'full'
   ): void {
     const { ctx } = this;
+    const viewW = this.getViewWidth();
+    const viewH = this.getViewHeight();
+    const haloAlpha = effectsQuality === 'subtle' ? 0.1 : 0.18;
+    const haloRadius = effectsQuality === 'subtle' ? 20 : 24;
+    const ambientCount = effectsQuality === 'subtle' ? 5 : 10;
+
     ctx.save();
 
     // 1. Vầng sáng đèn lồng ấm (Warm Lantern & Lamp Pools) quanh Checkpoints và Puzzles
@@ -491,27 +623,34 @@ export class PixelRenderer {
       if (inter.kind !== 'checkpoint' && inter.kind !== 'puzzle') continue;
       const lx = Math.round(inter.x - cameraX);
       const ly = Math.round(inter.y - cameraY - 8);
-      if (lx < -32 || lx > INTERNAL_WIDTH + 32 || ly < -32 || ly > INTERNAL_HEIGHT + 32) continue;
-      const halo = ctx.createRadialGradient(lx, ly, 2, lx, ly, 24);
-      halo.addColorStop(0, 'rgba(212, 168, 79, 0.18)');
+      if (lx < -32 || lx > viewW + 32 || ly < -32 || ly > viewH + 32) continue;
+      const halo = ctx.createRadialGradient(lx, ly, 2, lx, ly, haloRadius);
+      halo.addColorStop(0, `rgba(212, 168, 79, ${haloAlpha})`);
       halo.addColorStop(1, 'rgba(212, 168, 79, 0)');
       ctx.fillStyle = halo;
-      ctx.fillRect(lx - 24, ly - 24, 48, 48);
+      ctx.fillRect(
+        lx - haloRadius,
+        ly - haloRadius,
+        haloRadius * 2,
+        haloRadius * 2
+      );
     }
 
     // 2. Hiệu ứng môi trường theo từng Thời kỳ Lịch sử (chỉ khi ngoài trời & không bật giảm chuyển động)
     if (!isInterior && !reducedMotion) {
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < ambientCount; i++) {
         const phase = (timeSec * 2.4 + i * 0.37) % 1;
         const rx = Math.round(((i * 97 + 44) % mapData.widthPx) - cameraX);
         const ry = Math.round(((i * 61 + 120) % mapData.heightPx) - cameraY);
-        if (rx < 4 || rx > INTERNAL_WIDTH - 4 || ry < 4 || ry > INTERNAL_HEIGHT - 4) continue;
+        if (rx < 4 || rx > viewW - 4 || ry < 4 || ry > viewH - 4) continue;
 
         if (mapData.eraId === '1930') {
           // 1930: Vòng gợn mưa 3-frame trên mặt đá Cửu Long (Hương Cảng)
           const radius = phase < 0.33 ? 1 : phase < 0.66 ? 2 : 3;
           ctx.fillStyle =
-            phase < 0.66 ? 'rgba(230, 229, 220, 0.35)' : 'rgba(212, 165, 93, 0.22)';
+            phase < 0.66
+              ? 'rgba(230, 229, 220, 0.35)'
+              : 'rgba(212, 165, 93, 0.22)';
           ctx.fillRect(rx - radius, ry, 1, 1);
           ctx.fillRect(rx + radius, ry, 1, 1);
           ctx.fillRect(rx, ry - 1, 1, 1);
@@ -552,8 +691,6 @@ export class PixelRenderer {
 
     ctx.save();
     ctx.lineWidth = 1;
-    ctx.font = '6px monospace';
-    ctx.textAlign = 'left';
 
     // 1. Obstacles (Collision walls/props)
     ctx.fillStyle = 'rgba(196, 58, 43, 0.32)';
@@ -562,7 +699,12 @@ export class PixelRenderer {
       const rx = Math.round(obs.x - camX);
       const ry = Math.round(obs.y - camY);
       ctx.fillRect(rx, ry, obs.width, obs.height);
-      ctx.strokeRect(rx + 0.5, ry + 0.5, Math.max(1, obs.width - 1), Math.max(1, obs.height - 1));
+      ctx.strokeRect(
+        rx + 0.5,
+        ry + 0.5,
+        Math.max(1, obs.width - 1),
+        Math.max(1, obs.height - 1)
+      );
     }
 
     // 2. Shelters
@@ -586,22 +728,29 @@ export class PixelRenderer {
     for (const occ of map.occluders) {
       const rx = Math.round(occ.x - camX);
       const ry = Math.round(occ.y - camY);
-      ctx.strokeRect(rx + 0.5, ry + 0.5, Math.max(1, occ.width - 1), Math.max(1, occ.height - 1));
+      ctx.strokeRect(
+        rx + 0.5,
+        ry + 0.5,
+        Math.max(1, occ.width - 1),
+        Math.max(1, occ.height - 1)
+      );
     }
 
-    // 4. Portals
+    // 4. Portals (chỉ vẽ khung hình học, nhãn văn bản hiển thị ở #dev-debug-readout)
     ctx.strokeStyle = '#4ADE80';
-    ctx.fillStyle = '#4ADE80';
     for (const p of map.portals) {
       const rx = Math.round(p.x - camX);
       const ry = Math.round(p.y - camY);
-      ctx.strokeRect(rx + 0.5, ry + 0.5, Math.max(1, p.width - 1), Math.max(1, p.height - 1));
-      ctx.fillText(p.destinationMap, rx + 2, ry - 2);
+      ctx.strokeRect(
+        rx + 0.5,
+        ry + 0.5,
+        Math.max(1, p.width - 1),
+        Math.max(1, p.height - 1)
+      );
     }
 
-    // 5. Spawns & Checkpoints
+    // 5. Spawns & Checkpoints (dấu chữ thập hình học)
     ctx.strokeStyle = '#38BDF8';
-    ctx.fillStyle = '#38BDF8';
     for (const sp of [...map.spawns, ...map.checkpoints]) {
       const sx = Math.round(sp.x - camX);
       const sy = Math.round(sp.y - camY);
@@ -611,7 +760,6 @@ export class PixelRenderer {
       ctx.moveTo(sx, sy - 4);
       ctx.lineTo(sx, sy + 4);
       ctx.stroke();
-      ctx.fillText(sp.id, sx + 5, sy - 2);
     }
 
     // 6. NPC approach radius & routes + Interactable radius
@@ -649,24 +797,96 @@ export class PixelRenderer {
     ctx.strokeStyle = '#F4E7C3';
     ctx.strokeRect(px - 6 + 0.5, py - 6 + 0.5, 11, 7);
 
-    // 8. Top-left debug badge
-    const badgeText = `DEBUG OVERLAY [F3]: ON | MAP: ${map.id} | POS: (${Math.round(
-      state.playerX
-    )}, ${Math.round(playerY)})`;
-    ctx.fillStyle = 'rgba(17, 14, 11, 0.85)';
-    ctx.fillRect(4, 4, 240, 11);
-    ctx.fillStyle = '#F4EFE4';
-    ctx.fillText(badgeText, 7, 12);
-
     ctx.restore();
   }
 
   private resolveNpcRole(npc: NpcMapPlacement): CharacterAtlasRole {
     const key = `${npc.npcId} ${npc.role}`.toLowerCase();
-    if (key.includes('courier') || key.includes('giao liên')) return 'courier';
-    if (key.includes('archivist') || key.includes('lưu trữ')) return 'archivist';
-    if (key.includes('observer') || key.includes('bến')) return 'observer';
+    if (
+      key.includes('guard') ||
+      key.includes('patrol') ||
+      key.includes('tuần tra')
+    ) {
+      return 'guard';
+    }
+    if (
+      key.includes('courier') ||
+      key.includes('liaison') ||
+      key.includes('messenger') ||
+      key.includes('signal') ||
+      key.includes('giao liên') ||
+      key.includes('liên lạc') ||
+      key.includes('thông tin')
+    ) {
+      return 'courier';
+    }
+    if (
+      key.includes('worker') ||
+      key.includes('observer') ||
+      key.includes('vendor') ||
+      key.includes('boatman') ||
+      key.includes('watchman') ||
+      key.includes('quartermaster') ||
+      key.includes('công nhân') ||
+      key.includes('phu') ||
+      key.includes('bến') ||
+      key.includes('lái đò') ||
+      key.includes('tiếp vận')
+    ) {
+      return 'observer';
+    }
+    if (
+      key.includes('archivist') ||
+      key.includes('scholar') ||
+      key.includes('archive') ||
+      key.includes('economist') ||
+      key.includes('lưu trữ') ||
+      key.includes('học giả')
+    ) {
+      return 'archivist';
+    }
     return 'historian';
+  }
+
+  /**
+   * Vẽ biểu tượng cảnh báo điểm ảnh (`!` hoặc `?`) sắc nét phía trên đầu lính tuần tra
+   * thay cho phông chữ nhỏ bị nhòe.
+   */
+  private drawPixelAlertIcon(
+    gx: number,
+    topY: number,
+    isAlert: boolean
+  ): void {
+    const { ctx } = this;
+    const bx = Math.round(gx - 4);
+    const by = Math.round(topY - 9);
+
+    ctx.fillStyle = PALETTE_12.LACQUER_VOID;
+    ctx.fillRect(bx, by, 8, 9);
+
+    ctx.fillStyle = isAlert
+      ? PALETTE_12.CRIMSON_VERMILION
+      : PALETTE_12.BRONZE_BRIGHT;
+    ctx.fillRect(bx, by, 8, 1);
+    ctx.fillRect(bx, by + 8, 8, 1);
+    ctx.fillRect(bx, by, 1, 9);
+    ctx.fillRect(bx + 7, by, 1, 9);
+
+    if (isAlert) {
+      // Dấu chấm than (!) 2px đậm rõ
+      ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+      ctx.fillRect(bx + 3, by + 2, 2, 3);
+      ctx.fillStyle = PALETTE_12.CRIMSON_VERMILION;
+      ctx.fillRect(bx + 3, by + 6, 2, 1);
+    } else {
+      // Dấu chấm hỏi (?) điểm ảnh
+      ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+      ctx.fillRect(bx + 2, by + 2, 4, 1);
+      ctx.fillRect(bx + 5, by + 3, 1, 1);
+      ctx.fillRect(bx + 3, by + 4, 2, 1);
+      ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+      ctx.fillRect(bx + 3, by + 6, 2, 1);
+    }
   }
 
   private drawTopDownPatrols(
@@ -675,24 +895,27 @@ export class PixelRenderer {
     cameraX: number,
     cameraY: number,
     timeSec: number,
-    patrolActors?: PatrolActorRenderState[]
+    patrolActors?: PatrolActorRenderState[],
+    reducedMotion = false
   ): void {
     const { ctx } = this;
+    const viewW = this.getViewWidth();
+    const viewH = this.getViewHeight();
 
     if (patrolActors && patrolActors.length > 0) {
       for (const guard of patrolActors) {
         const gx = Math.round(guard.x - cameraX);
         const gy = Math.round(guard.y - cameraY);
-        if (gx < -96 || gx > INTERNAL_WIDTH + 96 || gy < -96 || gy > INTERNAL_HEIGHT + 96) {
+        if (gx < -96 || gx > viewW + 96 || gy < -96 || gy > viewH + 96) {
           continue;
         }
 
         ctx.save();
         ctx.beginPath();
-        ctx.moveTo(gx, gy - 6);
+        ctx.moveTo(gx, gy - 8);
         ctx.arc(
           gx,
-          gy - 6,
+          gy - 8,
           guard.coneLength,
           guard.facingAngleRad - guard.coneAngleRad / 2,
           guard.facingAngleRad + guard.coneAngleRad / 2
@@ -713,7 +936,7 @@ export class PixelRenderer {
         ctx.fill();
         ctx.stroke();
 
-        // Chuyển góc radian sang hướng 4 chiều cho sprite lính tuần tra
+        // Chuyển góc radian sang hướng 4 chiều cho sprite lính tuần tra ('guard')
         const deg = ((guard.facingAngleRad * 180) / Math.PI + 360) % 360;
         const guardFacing: Facing4 =
           deg >= 45 && deg < 135
@@ -724,30 +947,35 @@ export class PixelRenderer {
                 ? 'up'
                 : 'right';
 
-        drawCharacter4Dir(ctx, 'observer', gx, gy, guardFacing, true, false, timeSec);
+        drawCharacter4Dir(
+          ctx,
+          'guard',
+          gx,
+          gy,
+          guardFacing,
+          !reducedMotion,
+          false,
+          timeSec,
+          reducedMotion
+        );
 
-        // Thanh nghi ngờ / Biểu tượng cảnh báo (? / !)
+        // Thanh nghi ngờ & Biểu tượng cảnh báo điểm ảnh (! / ?) trên mũ lính tuần tra
         if (guard.suspicionLevel > 0 || guard.alertState !== 'calm') {
+          const barY = gy - 26;
           ctx.fillStyle = PALETTE_12.LACQUER_VOID;
-          ctx.fillRect(gx - 7, gy - 24, 14, 3);
+          ctx.fillRect(gx - 7, barY, 14, 3);
           ctx.fillStyle =
             guard.alertState === 'alert'
               ? PALETTE_12.CRIMSON_VERMILION
               : PALETTE_12.BRONZE_BRIGHT;
           ctx.fillRect(
             gx - 6,
-            gy - 23,
+            barY + 1,
             Math.max(2, Math.round(12 * Math.min(1, guard.suspicionLevel))),
             1
           );
 
-          ctx.font = 'bold 8px monospace';
-          ctx.textAlign = 'center';
-          ctx.fillText(
-            guard.alertState === 'alert' ? '!' : '?',
-            gx,
-            gy - 26
-          );
+          this.drawPixelAlertIcon(gx, barY - 2, guard.alertState === 'alert');
         }
         ctx.restore();
       }
@@ -779,7 +1007,8 @@ export class PixelRenderer {
     }
 
     for (const h of chapter.hazards) {
-      const sweepX = h.xCenter + Math.sin(timeSec * h.speed + h.phaseOffset) * h.radius;
+      const sweepX =
+        h.xCenter + Math.sin(timeSec * h.speed + h.phaseOffset) * h.radius;
       const sx = Math.round(sweepX - cameraX);
       const sy = Math.round(GROUND_Y - 16 - cameraY);
       ctx.save();
@@ -798,80 +1027,105 @@ export class PixelRenderer {
     playerScreenX: number,
     playerScreenY: number,
     burst: number,
-    isInterior: boolean
+    isInterior: boolean,
+    effectsQuality: EffectsQuality = 'full'
   ): void {
     const { ctx } = this;
-    const cx = Math.max(0, Math.min(INTERNAL_WIDTH, playerScreenX));
-    const cy = Math.max(0, Math.min(INTERNAL_HEIGHT, playerScreenY - 8));
-    const grad = ctx.createRadialGradient(cx, cy, 18, cx, cy, isInterior ? 125 : 150 + burst * 50);
-    grad.addColorStop(0, 'rgba(212, 165, 93, 0.10)');
-    grad.addColorStop(0.65, 'rgba(17, 14, 11, 0.14)');
-    grad.addColorStop(1, 'rgba(17, 14, 11, 0.42)');
+    const viewW = this.getViewWidth();
+    const viewH = this.getViewHeight();
+    const scaleFactor = Math.max(
+      1,
+      Math.hypot(viewW, viewH) / Math.hypot(INTERNAL_WIDTH, INTERNAL_HEIGHT)
+    );
+    const outerRadius =
+      (isInterior ? 125 : 150 + burst * 50) * scaleFactor;
+    const innerRadius = Math.round(18 * scaleFactor);
+
+    const cx = Math.max(0, Math.min(viewW, playerScreenX));
+    const cy = Math.max(0, Math.min(viewH, playerScreenY - 10));
+    const grad = ctx.createRadialGradient(
+      cx,
+      cy,
+      innerRadius,
+      cx,
+      cy,
+      outerRadius
+    );
+    if (effectsQuality === 'subtle') {
+      grad.addColorStop(0, 'rgba(212, 165, 93, 0.06)');
+      grad.addColorStop(0.65, 'rgba(17, 14, 11, 0.10)');
+      grad.addColorStop(1, 'rgba(17, 14, 11, 0.28)');
+    } else {
+      grad.addColorStop(0, 'rgba(212, 165, 93, 0.10)');
+      grad.addColorStop(0.65, 'rgba(17, 14, 11, 0.14)');
+      grad.addColorStop(1, 'rgba(17, 14, 11, 0.42)');
+    }
     ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
+    ctx.fillRect(0, 0, viewW, viewH);
   }
 
-  private drawPromptBadge(x: number, y: number, text: string): void {
-    const { ctx } = this;
-    ctx.save();
-    ctx.font = 'bold 7px monospace';
-    ctx.textAlign = 'center';
-    const label = text.length > 26 ? `${text.slice(0, 25)}…` : text;
-    const w = Math.max(44, label.length * 4.4 + 10);
-    const bx = Math.round(Math.max(4, Math.min(INTERNAL_WIDTH - w - 4, x - w * 0.5)));
-    const by = Math.round(Math.max(4, Math.min(INTERNAL_HEIGHT - 14, y - 9)));
-
-    ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
-    ctx.fillRect(bx, by, Math.round(w), 10);
-    ctx.strokeStyle = PALETTE_12.BRONZE_BRIGHT;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(bx + 0.5, by + 0.5, Math.round(w) - 1, 9);
-    ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
-    ctx.fillText(label, Math.round(bx + w * 0.5), by + 7);
-    ctx.restore();
+  /**
+   * Giữ lại hàm nội bộ không hoạt động (no-op) cho tương thích ngược:
+   * Nhãn tương tác ngữ cảnh trong gameplay Top-Down nay được dựng trên DOM `#world-interaction-prompt`.
+   */
+  protected drawPromptBadge(_x: number, _y: number, _text: string): void {
+    // No-op: handled by crisp DOM overlay #world-interaction-prompt
   }
 
   private drawSkyAndChiaroscuro(
     chapter: ChapterData,
     burst: number,
-    timeSec: number
+    timeSec: number,
+    effectsQuality: EffectsQuality = 'full'
   ): void {
     const { ctx } = this;
+    const viewW = this.getViewWidth();
+    const viewH = this.getViewHeight();
+    const radiusScale = Math.max(1, viewW / INTERNAL_WIDTH);
+
     ctx.fillStyle = PALETTE_12.LACQUER_VOID;
-    ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
+    ctx.fillRect(0, 0, viewW, viewH);
 
     // Vầng sáng Chiaroscuro tâm khung hình
     const grad = ctx.createRadialGradient(
-      INTERNAL_WIDTH * 0.5,
-      INTERNAL_HEIGHT * 0.42,
-      8,
-      INTERNAL_WIDTH * 0.5,
-      INTERNAL_HEIGHT * 0.42,
-      155 + burst * 60
+      viewW * 0.5,
+      viewH * 0.42,
+      8 * radiusScale,
+      viewW * 0.5,
+      viewH * 0.42,
+      (155 + burst * 60) * radiusScale
     );
 
+    const alphaScale = effectsQuality === 'subtle' ? 0.65 : 1;
+
     if (burst > 0.1) {
-      grad.addColorStop(0, 'rgba(212, 165, 93, 0.48)');
-      grad.addColorStop(0.5, 'rgba(158, 51, 33, 0.25)');
+      grad.addColorStop(0, `rgba(212, 165, 93, ${(0.48 * alphaScale).toFixed(2)})`);
+      grad.addColorStop(0.5, `rgba(158, 51, 33, ${(0.25 * alphaScale).toFixed(2)})`);
       grad.addColorStop(1, 'rgba(17, 14, 11, 0)');
     } else if (chapter.id === '1945') {
-      grad.addColorStop(0, 'rgba(212, 165, 93, 0.26)');
-      grad.addColorStop(0.6, 'rgba(158, 51, 33, 0.12)');
+      grad.addColorStop(0, `rgba(212, 165, 93, ${(0.26 * alphaScale).toFixed(2)})`);
+      grad.addColorStop(0.6, `rgba(158, 51, 33, ${(0.12 * alphaScale).toFixed(2)})`);
       grad.addColorStop(1, 'rgba(17, 14, 11, 0)');
     } else {
-      grad.addColorStop(0, 'rgba(212, 165, 93, 0.20)');
-      grad.addColorStop(0.65, 'rgba(36, 29, 23, 0.15)');
+      grad.addColorStop(0, `rgba(212, 165, 93, ${(0.2 * alphaScale).toFixed(2)})`);
+      grad.addColorStop(0.65, `rgba(36, 29, 23, ${(0.15 * alphaScale).toFixed(2)})`);
       grad.addColorStop(1, 'rgba(17, 14, 11, 0)');
     }
 
     ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
+    ctx.fillRect(0, 0, viewW, viewH);
 
     // Vòng cầu thiên thể Da Vinci / Trăng cổ điển góc trên
     ctx.strokeStyle = 'rgba(212, 165, 93, 0.16)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.arc(260, 38, 22 + Math.sin(timeSec) * 1.5, 0, Math.PI * 2);
+    ctx.arc(
+      Math.round(viewW * 0.81),
+      38,
+      22 + Math.sin(timeSec) * 1.5,
+      0,
+      Math.PI * 2
+    );
     ctx.stroke();
   }
 
@@ -883,18 +1137,18 @@ export class PixelRenderer {
     timeSec: number
   ): void {
     const { ctx } = this;
+    const viewW = this.getViewWidth();
     const offset = Math.floor(cameraX * 0.22);
 
     ctx.fillStyle = PALETTE_12.LACQUER_DEEP;
 
     if (chapter.id === '1930') {
-      // Mái nhà cổ & bến cảng Cửu Long Hương Cảng
-      for (let i = 0; i < 12; i++) {
+      const cols = Math.ceil(viewW / 42) + 2;
+      for (let i = 0; i < cols; i++) {
         const bx = i * 42 - (offset % 42);
         const bh = 36 + ((i * 17) % 28);
         ctx.fillStyle = PALETTE_12.LACQUER_DEEP;
         ctx.fillRect(bx, GROUND_Y - bh, 34, bh);
-        // Cửa sổ đèn dầu vàng đồng
         if (i % 2 === 0) {
           ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
           ctx.fillRect(bx + 8, GROUND_Y - bh + 10, 4, 5);
@@ -902,8 +1156,8 @@ export class PixelRenderer {
         }
       }
     } else if (chapter.id === '1945') {
-      // Dãy núi Việt Bắc (Pác Bó - Tân Trào) nối về Quảng trường Ba Đình
-      for (let i = 0; i < 9; i++) {
+      const cols = Math.ceil(viewW / 56) + 2;
+      for (let i = 0; i < cols; i++) {
         const mx = i * 56 - (offset % 56);
         ctx.fillStyle = PALETTE_12.LACQUER_DEEP;
         ctx.beginPath();
@@ -913,8 +1167,8 @@ export class PixelRenderer {
         ctx.fill();
       }
     } else if (chapter.id === '1954_1975') {
-      // Đèo Pha Đin & Lòng chảo Điện Biên
-      for (let i = 0; i < 10; i++) {
+      const cols = Math.ceil(viewW / 52) + 2;
+      for (let i = 0; i < cols; i++) {
         const mx = i * 52 - (offset % 52);
         ctx.fillStyle = PALETTE_12.LACQUER_DEEP;
         ctx.beginPath();
@@ -924,23 +1178,25 @@ export class PixelRenderer {
         ctx.fill();
       }
     } else {
-      // Chương IV (1986 -> 2045): Kiến trúc đô thị tự động mọc cao lên khi thu thập mốc X, XI, XII!
       const unlockedCount =
         (collected.has('X') ? 1 : 0) +
         (collected.has('XI') ? 1 : 0) +
         (collected.has('XII') ? 1 : 0) +
         (burst > 0 ? 1 : 0);
 
-      for (let i = 0; i < 12; i++) {
+      const cols = Math.ceil(viewW / 38) + 2;
+      for (let i = 0; i < cols; i++) {
         const bx = i * 38 - (offset % 38);
         const baseH = 26 + ((i * 13) % 18);
         const modernBonus = unlockedCount * (10 + (i % 3) * 6);
         const totalH = Math.min(112, baseH + modernBonus);
 
-        ctx.fillStyle = unlockedCount >= 2 ? PALETTE_12.LACQUER_ELEVATED : PALETTE_12.LACQUER_DEEP;
+        ctx.fillStyle =
+          unlockedCount >= 2
+            ? PALETTE_12.LACQUER_ELEVATED
+            : PALETTE_12.LACQUER_DEEP;
         ctx.fillRect(bx, GROUND_Y - totalH, 28, totalH);
 
-        // Đèn tòa nhà thông minh 2045
         if (unlockedCount >= 1) {
           ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
           for (let wy = GROUND_Y - totalH + 6; wy < GROUND_Y - 12; wy += 8) {
@@ -948,7 +1204,6 @@ export class PixelRenderer {
             ctx.fillRect(bx + 16, wy, 3, 4);
           }
         }
-        // Đỉnh tháp công nghệ số 2045
         if (unlockedCount >= 3 && i % 3 === 0) {
           ctx.fillStyle = PALETTE_12.CRIMSON_VERMILION;
           ctx.fillRect(bx + 12, GROUND_Y - totalH - 8, 2, 8);
@@ -969,34 +1224,31 @@ export class PixelRenderer {
     timeSec: number
   ): void {
     const { ctx } = this;
+    const viewW = this.getViewWidth();
     const offset = Math.floor(cameraX * 0.55);
 
     if (chapter.id === '1945') {
-      // Đường dây truyền tin chiến khu Tân Trào
       ctx.strokeStyle = PALETTE_12.BRONZE_ANTIQUE;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      for (let x = 0; x <= INTERNAL_WIDTH; x += 16) {
+      for (let x = 0; x <= viewW; x += 16) {
         const sag = Math.sin((x + offset) * 0.05) * 4;
         if (x === 0) ctx.moveTo(x, 68 + sag);
         else ctx.lineTo(x, 68 + sag);
       }
       ctx.stroke();
 
-      // Xung tín hiệu điện báo chạy dọc dây
-      const pulseX = Math.floor((timeSec * 90) % INTERNAL_WIDTH);
+      const pulseX = Math.floor((timeSec * 90) % viewW);
       ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
       ctx.fillRect(pulseX, 66, 4, 3);
     } else if (chapter.id === '1986_2045') {
-      // Cầu cạn Metro 2045 khi đã mở khóa mốc XI hoặc XII
       if (collected.has('XI') || collected.has('XII') || burst > 0) {
         ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
-        ctx.fillRect(0, 88, INTERNAL_WIDTH, 4);
-        for (let px = 20 - (offset % 60); px < INTERNAL_WIDTH; px += 60) {
+        ctx.fillRect(0, 88, viewW, 4);
+        for (let px = 20 - (offset % 60); px < viewW; px += 60) {
           ctx.fillRect(px, 92, 5, GROUND_Y - 92);
         }
-        // Đoàn tàu điện lướt trên cầu cạn
-        const trainX = Math.floor(((timeSec * 55) % (INTERNAL_WIDTH + 90)) - 45);
+        const trainX = Math.floor(((timeSec * 55) % (viewW + 90)) - 45);
         ctx.fillStyle = PALETTE_12.PARCHMENT_WARM;
         ctx.fillRect(trainX, 81, 42, 7);
         ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
@@ -1011,37 +1263,37 @@ export class PixelRenderer {
     playerX: number
   ): void {
     const { ctx } = this;
+    const viewW = this.getViewWidth();
+    const viewH = this.getViewHeight();
 
-    // Mặt đường Sơn Mài & gạch cổ
     ctx.fillStyle = PALETTE_12.LACQUER_ELEVATED;
-    ctx.fillRect(0, GROUND_Y, INTERNAL_WIDTH, INTERNAL_HEIGHT - GROUND_Y);
+    ctx.fillRect(0, GROUND_Y, viewW, Math.max(32, viewH - GROUND_Y));
 
     ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
-    ctx.fillRect(0, GROUND_Y, INTERNAL_WIDTH, 2);
+    ctx.fillRect(0, GROUND_Y, viewW, 2);
 
     const tileOffset = Math.floor(cameraX) % 16;
     ctx.fillStyle = PALETTE_12.INK_SECONDARY;
-    for (let x = -tileOffset; x < INTERNAL_WIDTH; x += 16) {
+    for (let x = -tileOffset; x < viewW; x += 16) {
       ctx.fillRect(x, GROUND_Y + 6, 10, 2);
       ctx.fillRect(x + 6, GROUND_Y + 14, 10, 2);
     }
 
-    // Vẽ các Vùng Ẩn Nấp (Mái hiên Cửu Long / Bóng đa Tân Trào / Giao thông hào Điện Biên)
     for (const shelter of chapter.shelters) {
       const sx = Math.round(shelter.xStart - cameraX);
       const sw = Math.round(shelter.xEnd - shelter.xStart);
-      if (sx + sw < -20 || sx > INTERNAL_WIDTH + 20) continue;
+      if (sx + sw < -20 || sx > viewW + 20) continue;
 
       const playerInside = playerX >= shelter.xStart && playerX <= shelter.xEnd;
 
-      // Khung mái hiên / công sự
       ctx.fillStyle = playerInside
         ? 'rgba(212, 165, 93, 0.18)'
         : 'rgba(36, 29, 23, 0.72)';
       ctx.fillRect(sx, GROUND_Y - 32, sw, 32);
 
-      // Mái ngói cổ hoặc tán đa
-      ctx.fillStyle = playerInside ? PALETTE_12.BRONZE_BRIGHT : PALETTE_12.BRONZE_MUTED;
+      ctx.fillStyle = playerInside
+        ? PALETTE_12.BRONZE_BRIGHT
+        : PALETTE_12.BRONZE_MUTED;
       ctx.fillRect(sx - 3, GROUND_Y - 34, sw + 6, 4);
       ctx.fillRect(sx + 2, GROUND_Y - 32, 2, 32);
       ctx.fillRect(sx + sw - 4, GROUND_Y - 32, 2, 32);
@@ -1054,11 +1306,13 @@ export class PixelRenderer {
     timeSec: number
   ): void {
     const { ctx } = this;
+    const viewW = this.getViewWidth();
 
     for (const h of chapter.hazards) {
-      const sweepX = h.xCenter + Math.sin(timeSec * h.speed + h.phaseOffset) * h.radius;
+      const sweepX =
+        h.xCenter + Math.sin(timeSec * h.speed + h.phaseOffset) * h.radius;
       const screenX = Math.round(sweepX - cameraX);
-      if (screenX < -50 || screenX > INTERNAL_WIDTH + 50) continue;
+      if (screenX < -50 || screenX > viewW + 50) continue;
 
       ctx.save();
       ctx.beginPath();
@@ -1073,7 +1327,6 @@ export class PixelRenderer {
       ctx.fillStyle = grad;
       ctx.fill();
 
-      // Vệt đỏ cảnh báo trên mặt đất
       ctx.fillStyle = PALETTE_12.CRIMSON_VERMILION;
       ctx.fillRect(screenX - 18, GROUND_Y - 1, 36, 2);
       ctx.restore();
@@ -1084,78 +1337,61 @@ export class PixelRenderer {
     chapter: ChapterData,
     cameraX: number,
     collected: Set<RomanMilestoneId>,
-    nearby: MilestoneArtifact | null,
+    _nearby: MilestoneArtifact | null,
     timeSec: number
   ): void {
     const { ctx } = this;
+    const viewW = this.getViewWidth();
 
     for (const m of chapter.milestones) {
       const mx = Math.round(m.worldX - cameraX);
-      if (mx < -30 || mx > INTERNAL_WIDTH + 30) continue;
+      if (mx < -30 || mx > viewW + 30) continue;
 
       const isCollected = collected.has(m.roman);
-      const isNearby = nearby?.roman === m.roman;
 
-      // Bệ đá cổ vật
-      ctx.fillStyle = isCollected ? PALETTE_12.CRIMSON_SEAL : PALETTE_12.BRONZE_MUTED;
+      ctx.fillStyle = isCollected
+        ? PALETTE_12.CRIMSON_SEAL
+        : PALETTE_12.BRONZE_MUTED;
       ctx.fillRect(mx - 8, GROUND_Y - 10, 16, 10);
       ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
       ctx.fillRect(mx - 10, GROUND_Y - 11, 20, 2);
 
-      // Nhân chứng lịch sử đứng cạnh cột mốc
       drawNpcSprite(ctx, mx + 16, GROUND_Y, false);
-
-      // Cổ vật lơ lửng phía trên bệ
-      drawArtifactSprite(ctx, m.spriteType, mx, GROUND_Y - 22, isCollected, timeSec);
-
-      // Nhãn số La Mã (I - XII)
-      ctx.font = 'bold 7px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = isCollected ? PALETTE_12.PARCHMENT_LIGHT : PALETTE_12.BRONZE_BRIGHT;
-      ctx.fillText(isCollected ? `✓ ${m.roman}` : m.roman, mx, GROUND_Y - 34);
-
-      if (isNearby) {
-        ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
-        ctx.fillRect(mx - 18, GROUND_Y - 48, 36, 9);
-        ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
-        ctx.fillText('[E] KHÔI PHỤC', mx, GROUND_Y - 41);
-      }
+      drawArtifactSprite(
+        ctx,
+        m.spriteType,
+        mx,
+        GROUND_Y - 22,
+        isCollected,
+        timeSec
+      );
     }
   }
 
   private drawClimaxGate(
     chapter: ChapterData,
     cameraX: number,
-    nearGate: boolean,
+    _nearGate: boolean,
     burst: number,
     timeSec: number
   ): void {
     const { ctx } = this;
+    const viewW = this.getViewWidth();
     const gx = Math.round(chapter.climax.gateWorldX - cameraX);
-    if (gx < -40 || gx > INTERNAL_WIDTH + 40) return;
+    if (gx < -40 || gx > viewW + 40) return;
 
-    // Cổng Thời Gian Sơn Mài & Vàng Đồng
     ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
     ctx.fillRect(gx - 16, GROUND_Y - 54, 6, 54);
     ctx.fillRect(gx + 10, GROUND_Y - 54, 6, 54);
     ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
     ctx.fillRect(gx - 20, GROUND_Y - 58, 40, 6);
 
-    // Vết nứt không gian bên trong cổng
     const pulse = Math.sin(timeSec * 5) * 2;
-    ctx.fillStyle = burst > 0 ? PALETTE_12.PARCHMENT_LIGHT : PALETTE_12.CRIMSON_SEAL;
+    ctx.fillStyle =
+      burst > 0 ? PALETTE_12.PARCHMENT_LIGHT : PALETTE_12.CRIMSON_SEAL;
     ctx.fillRect(gx - 8, GROUND_Y - 48, 16, 46);
     ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
     ctx.fillRect(gx - 3 - pulse * 0.5, GROUND_Y - 44, 6 + pulse, 38);
-
-    if (nearGate) {
-      ctx.font = 'bold 7px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
-      ctx.fillRect(gx - 28, GROUND_Y - 70, 56, 10);
-      ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
-      ctx.fillText('[E] CỔNG THỜI GIAN', gx, GROUND_Y - 63);
-    }
   }
 
   private drawClimaxSetPiece(
@@ -1164,55 +1400,55 @@ export class PixelRenderer {
     timeSec: number
   ): void {
     const { ctx } = this;
+    const viewW = this.getViewWidth();
+    const viewH = this.getViewHeight();
+    const centerX = Math.round(viewW * 0.5);
+    const stageBaseY = Math.min(viewH - 24, Math.max(GROUND_Y, Math.round(viewH * 0.82)));
     const type = chapter.climax.setPieceType;
 
     ctx.save();
     if (type === 'kowloon_torch') {
-      // Đại cảnh Chương I: Ngọn đuốc Cương lĩnh 1930 rực cháy giữa đêm mưa
       const flameH = Math.round(35 + burst * 45 + Math.sin(timeSec * 14) * 5);
       ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
-      ctx.fillRect(145, GROUND_Y - flameH, 30, flameH);
+      ctx.fillRect(centerX - 15, stageBaseY - flameH, 30, flameH);
       ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
-      ctx.fillRect(152, GROUND_Y - flameH + 10, 16, flameH - 10);
+      ctx.fillRect(centerX - 8, stageBaseY - flameH + 10, 16, flameH - 10);
       ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
-      ctx.fillRect(156, GROUND_Y - flameH + 20, 8, flameH - 22);
+      ctx.fillRect(centerX - 4, stageBaseY - flameH + 20, 8, flameH - 22);
     } else if (type === 'badinh_flag') {
-      // Đại cảnh Chương II: Kéo Quốc kỳ tại Quảng trường Ba Đình 2/9/1945
-      const poleX = 160;
+      const poleX = centerX;
       ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
-      ctx.fillRect(poleX, 28, 3, GROUND_Y - 28);
-      const flagY = Math.round(GROUND_Y - 25 - burst * 92);
+      ctx.fillRect(poleX, 28, 3, stageBaseY - 28);
+      const flagY = Math.round(stageBaseY - 25 - burst * (stageBaseY - 56));
       ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
       ctx.fillRect(poleX + 3, flagY, 34, 22);
       ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
       ctx.fillRect(poleX + 16, flagY + 7, 8, 8);
     } else if (type === 'dienbien_tank') {
-      // Đại cảnh Chương III: Xe tăng tiến vào Dinh Độc Lập 30/4/1975
-      const tankX = Math.round(40 + burst * 175);
+      const tankX = Math.round(viewW * 0.12 + burst * viewW * 0.55);
       ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
-      ctx.fillRect(tankX, GROUND_Y - 12, 32, 12);
+      ctx.fillRect(tankX, stageBaseY - 12, 32, 12);
       ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
-      ctx.fillRect(tankX + 6, GROUND_Y - 20, 18, 8);
+      ctx.fillRect(tankX + 6, stageBaseY - 20, 18, 8);
       ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
-      ctx.fillRect(tankX + 24, GROUND_Y - 18, 14, 3);
-      // Lá cờ chiến thắng trên tháp pháo
+      ctx.fillRect(tankX + 24, stageBaseY - 18, 14, 3);
       ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
-      ctx.fillRect(tankX + 10, GROUND_Y - 32, 14, 9);
+      ctx.fillRect(tankX + 10, stageBaseY - 32, 14, 9);
       ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
-      ctx.fillRect(tankX + 15, GROUND_Y - 29, 4, 4);
+      ctx.fillRect(tankX + 15, stageBaseY - 29, 4, 4);
     } else if (type === 'doimoi_metro') {
-      // Đại cảnh Chương IV: Đoàn tàu cao tốc & Pháo hoa Kỷ nguyên 2045
-      const trainX = Math.round(-60 + burst * 280);
+      const trainX = Math.round(-60 + burst * (viewW - 40));
       ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
       ctx.fillRect(trainX, 78, 84, 10);
       ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
       ctx.fillRect(trainX, 83, 84, 3);
-      // Pháo hoa vàng đồng & đỏ son trên bầu trời 2045
+      const spacing = Math.max(48, Math.floor((viewW - 90) / 4));
       for (let f = 0; f < 5; f++) {
-        const fx = 55 + f * 52;
+        const fx = 45 + f * spacing;
         const fy = 34 + (f % 2) * 16;
         const r = Math.round((burst * 18 + f * 3) % 18);
-        ctx.fillStyle = f % 2 === 0 ? PALETTE_12.BRONZE_BRIGHT : PALETTE_12.CRIMSON_VERMILION;
+        ctx.fillStyle =
+          f % 2 === 0 ? PALETTE_12.BRONZE_BRIGHT : PALETTE_12.CRIMSON_VERMILION;
         ctx.fillRect(fx - r, fy, 2, 2);
         ctx.fillRect(fx + r, fy, 2, 2);
         ctx.fillRect(fx, fy - r, 2, 2);
@@ -1222,29 +1458,41 @@ export class PixelRenderer {
     ctx.restore();
   }
 
-  private drawWeatherParticles(chapter: ChapterData, timeSec: number): void {
+  private drawWeatherParticles(
+    chapter: ChapterData,
+    timeSec: number,
+    effectsQuality: EffectsQuality = 'full',
+    isTopDown = true
+  ): void {
     const { ctx } = this;
-    for (let i = 0; i < 28; i++) {
-      const px = Math.floor((i * 37 + timeSec * (chapter.id === '1930' ? -45 : 18)) % INTERNAL_WIDTH);
-      const py = Math.floor((i * 23 + timeSec * (chapter.id === '1930' ? 95 : 28)) % GROUND_Y);
-      const wrappedX = px < 0 ? px + INTERNAL_WIDTH : px;
+    const viewW = this.getViewWidth();
+    const viewH = this.getViewHeight();
+    const maxY = isTopDown ? viewH : GROUND_Y;
+    const particleCount = effectsQuality === 'subtle' ? 14 : 28;
+
+    for (let i = 0; i < particleCount; i++) {
+      const px = Math.floor(
+        (i * 53 + timeSec * (chapter.id === '1930' ? -45 : 18)) % viewW
+      );
+      const py = Math.floor(
+        (i * 31 + timeSec * (chapter.id === '1930' ? 95 : 28)) % maxY
+      );
+      const wrappedX = px < 0 ? px + viewW : px;
+      const wrappedY = py < 0 ? py + maxY : py;
 
       if (chapter.id === '1930') {
-        // Mưa đêm Cửu Long
         ctx.fillStyle = 'rgba(230, 229, 220, 0.32)';
-        ctx.fillRect(wrappedX, py, 1, 4);
+        ctx.fillRect(wrappedX, wrappedY, 1, 4);
       } else if (chapter.id === '1945') {
-        // Nắng thu Ba Đình
         ctx.fillStyle = 'rgba(212, 165, 93, 0.55)';
-        ctx.fillRect(wrappedX, py, 2, 2);
+        ctx.fillRect(wrappedX, wrappedY, 2, 2);
       } else if (chapter.id === '1954_1975') {
-        // Tàn lửa pháo Điện Biên
-        ctx.fillStyle = i % 2 === 0 ? PALETTE_12.CRIMSON_VERMILION : PALETTE_12.BRONZE_BRIGHT;
-        ctx.fillRect(wrappedX, py, 2, 1);
+        ctx.fillStyle =
+          i % 2 === 0 ? PALETTE_12.CRIMSON_VERMILION : PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(wrappedX, wrappedY, 2, 1);
       } else {
-        // Hạt dữ liệu Kỷ nguyên số 2045
         ctx.fillStyle = 'rgba(212, 165, 93, 0.65)';
-        ctx.fillRect(wrappedX, py, 1, 2);
+        ctx.fillRect(wrappedX, wrappedY, 1, 2);
       }
     }
   }
