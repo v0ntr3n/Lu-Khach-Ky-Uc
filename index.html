@@ -175,6 +175,8 @@
         --shadow-loading: inset 0 0 0 3px #110e0b, 0 18px 42px rgba(0, 0, 0, 0.85);
         --shadow-title: 0 3px 0 #110e0b, 0 8px 28px rgba(17, 14, 11, 0.95);
         --shadow-subtitle: 0 2px 10px rgba(17, 14, 11, 0.95);
+        --text-canvas-overlay: #f4efe4;
+        --shadow-location-label: 0 2px 0 #110e0b, 0 3px 12px rgba(17, 14, 11, 0.95);
       }
 
       [data-theme='light'] {
@@ -267,6 +269,8 @@
         --shadow-loading: inset 0 0 0 3px #dfd3b8, 0 18px 42px rgba(34, 28, 21, 0.38);
         --shadow-title: 0 3px 0 #110e0b, 0 8px 28px rgba(17, 14, 11, 0.95);
         --shadow-subtitle: 0 2px 10px rgba(17, 14, 11, 0.95);
+        --text-canvas-overlay: #fbf8f1;
+        --shadow-location-label: 0 2px 0 #110e0b, 0 3px 12px rgba(17, 14, 11, 0.95);
       }
 
       * {
@@ -311,11 +315,25 @@
 
       body.reduced-motion *,
       body.reduced-motion *::before,
-      body.reduced-motion *::after {
+      body.reduced-motion *::after,
+      body.is-reduced-motion *,
+      body.is-reduced-motion *::before,
+      body.is-reduced-motion *::after {
         animation-duration: 0.001ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.001ms !important;
         scroll-behavior: auto !important;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.001ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.001ms !important;
+          scroll-behavior: auto !important;
+        }
       }
 
       button,
@@ -455,23 +473,34 @@
         left: 14px;
       }
 
-      /* BIỂN HIỆU CHÀO MỪNG KHU VỰC (#region-entry-banner) */
+      /* INTRO ẢI & BIỂN HIỆU CHÀO MỪNG (#region-entry-banner) */
+      @keyframes stageIntroFadeIn {
+        0% {
+          opacity: 0;
+          transform: translate(-50%, -6px);
+        }
+        100% {
+          opacity: 1;
+          transform: translate(-50%, 0);
+        }
+      }
+
       #region-entry-banner {
         position: absolute;
-        top: 74px;
+        top: 10px;
         left: 50%;
         transform: translate(-50%, -6px);
         z-index: 210;
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 3px;
-        padding: 9px 24px;
-        background: var(--surface-hud);
-        border: 1.5px solid var(--border-strong);
-        border-top: 3px solid var(--accent-primary);
-        box-shadow: var(--shadow-toast), var(--shadow-inset);
+        gap: 2px;
+        padding: 2px 14px;
+        background: transparent;
+        border: none;
+        box-shadow: none;
         pointer-events: none;
+        text-align: center;
         opacity: 0;
         transition: opacity 0.25s ease-out, transform 0.25s ease-out;
       }
@@ -479,23 +508,31 @@
       #region-entry-banner.is-visible {
         opacity: 1;
         transform: translate(-50%, 0);
+        animation: stageIntroFadeIn 0.24s ease-out;
+      }
+
+      #region-entry-banner.is-fading-out {
+        opacity: 0;
+        transform: translate(-50%, -4px);
       }
 
       #region-entry-era {
         font-family: var(--font-mono);
         font-size: 0.76rem;
         font-weight: 600;
-        color: var(--text-accent);
+        color: var(--parchment-light);
+        text-shadow: var(--shadow-location-label);
         letter-spacing: 0.08em;
         text-transform: uppercase;
       }
 
       #region-entry-title {
         font-family: var(--font-display);
-        font-size: 1.28rem;
+        font-size: 1.42rem;
         font-weight: 700;
-        color: var(--text-primary);
-        letter-spacing: 0.03em;
+        color: var(--text-canvas-overlay);
+        text-shadow: var(--shadow-location-label);
+        letter-spacing: 0.08em;
       }
 
       /* ==========================================================================
@@ -510,49 +547,61 @@
 
       #hud-top-left {
         position: absolute;
-        top: 14px;
+        top: 12px;
         left: 16px;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 6px;
-        max-width: min(44vw, 440px);
+        right: 16px;
+        min-height: 28px;
+        pointer-events: none;
       }
 
       .hud-location-plaque {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
         display: inline-flex;
         align-items: center;
-        flex-wrap: wrap;
-        gap: 8px;
-        padding: 7px 14px;
-        background: var(--surface-hud);
-        border: 1px solid var(--border-default);
-        border-left: 3px solid var(--accent-primary);
-        box-shadow: var(--shadow-hud);
+        justify-content: center;
+        padding: 0;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        max-width: min(44vw, 520px);
+        pointer-events: none;
+        transition: opacity 0.2s ease;
       }
 
-      #stage-chapter-num {
-        font-family: var(--font-mono);
-        font-size: 0.82rem;
-        font-weight: 600;
-        color: var(--text-crimson);
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
+      #hud-layer.is-stage-intro-active .hud-location-plaque {
+        opacity: 0;
+        transition: none;
+        pointer-events: none;
       }
 
+      #stage-chapter-num,
       .hud-plaque-sep {
-        color: var(--text-accent);
-        font-size: 0.72rem;
+        display: none !important;
       }
 
       #stage-location-badge {
-        font-family: var(--font-ui);
-        font-size: 1rem;
-        font-weight: 600;
-        color: var(--text-primary);
+        font-family: var(--font-display);
+        font-size: 1.08rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        color: var(--text-canvas-overlay);
+        text-shadow: var(--shadow-location-label);
+        background: transparent;
+        border: none;
+        padding: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
       }
 
       #stage-shelter-status {
+        position: absolute;
+        top: 0;
+        left: 0;
         display: inline-flex;
         align-items: center;
         padding: 5px 12px;
@@ -692,44 +741,36 @@
         border: 1px solid var(--border-default);
         border-right: 3px solid var(--border-strong);
         box-shadow: var(--shadow-hud);
-        padding: 8px 14px;
+        padding: 6px 12px;
         display: flex;
-        flex-direction: column;
-        gap: 3px;
-        max-width: 410px;
+        align-items: center;
+        max-width: min(320px, 48vw);
       }
 
-      #hud-active-quest-title {
-        font-family: var(--font-mono);
-        font-size: 0.78rem;
-        font-weight: 600;
-        letter-spacing: 0.04em;
-        color: var(--text-accent);
+      #hud-objective-tracker.is-interact-ready {
+        border-color: var(--border-strong);
+        border-right-color: var(--accent-primary);
+      }
+
+      #hud-objective-tracker:hover {
+        background: var(--surface-hover);
+      }
+
+      #hud-active-quest-title,
+      #hud-active-objective-action,
+      #hud-active-objective-hint {
+        display: none !important;
       }
 
       #hud-active-objective-text {
         font-family: var(--font-ui);
-        font-size: 1rem;
+        font-size: 0.95rem;
         font-weight: 600;
-        line-height: 1.38;
+        line-height: 1.35;
         color: var(--text-primary);
-      }
-
-      #hud-active-objective-action {
-        font-family: var(--font-ui);
-        font-size: 0.94rem;
-        font-weight: 500;
-        line-height: 1.4;
-        color: var(--text-accent);
-        margin-top: 1px;
-      }
-
-      #hud-active-objective-hint {
-        font-family: var(--font-ui);
-        font-size: 0.90625rem;
-        line-height: 1.4;
-        color: var(--text-crimson);
-        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       /* ==========================================================================
@@ -3034,23 +3075,41 @@
         .theme-mode-group {
           grid-template-columns: 1fr;
         }
+        .hud-location-plaque {
+          max-width: min(38vw, 300px);
+        }
+        #stage-location-badge {
+          font-size: 0.95rem;
+        }
+        #region-entry-title {
+          font-size: clamp(1rem, 2.5vw, 1.35rem);
+          letter-spacing: 0.12em;
+        }
       }
 
       @media (max-height: 520px) and (orientation: landscape) {
         #hud-top-left {
           top: 8px;
           left: 10px;
+          right: 10px;
+        }
+        #region-entry-banner {
+          top: 6px;
         }
         #hud-top-right {
           top: 8px;
           right: 10px;
         }
         .hud-location-plaque {
-          padding: 4px 10px;
+          padding: 0;
+          max-width: min(38vw, 320px);
+        }
+        #stage-location-badge {
+          font-size: 0.92rem;
         }
         #hud-objective-tracker {
           padding: 5px 10px;
-          max-width: 320px;
+          max-width: 300px;
         }
         #hud-active-objective-hint {
           display: none;
@@ -3081,7 +3140,7 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-42A8WOZT.js"></script>
+    <script type="module" crossorigin src="./assets/index-rksZY_JX.js"></script>
   </head>
   <body>
     <div id="game-shell">
@@ -3100,15 +3159,15 @@
       <!-- 2. LỚP HUD NGỮ CẢNH TỐI GIẢN (Ẩn khi ở Menu Chính / Đang tải / Mở màn) -->
       <div id="hud-layer" hidden>
         <div id="region-entry-banner" role="status" aria-live="polite" hidden>
-          <span id="region-entry-era">CHƯƠNG I · HƯƠNG CẢNG 1930</span>
-          <strong id="region-entry-title">Quảng Trường Bến Cảng</strong>
+          <span id="region-entry-era" hidden>CHƯƠNG I · HƯƠNG CẢNG 1930</span>
+          <strong id="region-entry-title">ẢI 1 : Hương Cảng 1930</strong>
         </div>
 
         <div id="hud-top-left">
           <div class="hud-location-plaque">
-            <span id="stage-chapter-num">CHƯƠNG I · 1930</span>
-            <span class="hud-plaque-sep" aria-hidden="true">◆</span>
-            <span id="stage-location-badge">Quảng Trường Bến Cảng</span>
+            <span id="stage-chapter-num" hidden>CHƯƠNG I · 1930</span>
+            <span class="hud-plaque-sep" aria-hidden="true" hidden>◆</span>
+            <span id="stage-location-badge">Quảng Trường Bến Cảng Hương Cảng (1930)</span>
           </div>
           <span id="stage-shelter-status" hidden>◆ Ẩn mình trong bóng tối</span>
           <span id="stage-chapter-title" hidden></span>
@@ -3157,15 +3216,17 @@
 
             <div
               id="hud-objective-tracker"
+              role="button"
+              tabindex="0"
               aria-live="polite"
               title="Nhấp để mở Nhật ký Nhiệm vụ [J] và chọn mục tiêu dẫn đường"
             >
-              <div id="hud-active-quest-title">◆ Hội Nghị Hợp Nhất Cửu Long</div>
-              <div id="hud-active-objective-text">Bắt liên lạc tại Quảng Trường Bến Cảng</div>
-              <div id="hud-active-objective-action">
-                → Trò chuyện với Giao Liên Lâm Văn Bính gần cột đèn bến cảng [E]
+              <div id="hud-active-quest-title" hidden>◆ Hội Nghị Hợp Nhất Cửu Long</div>
+              <div id="hud-active-objective-text">Gặp Giao Liên · Bến Cảng</div>
+              <div id="hud-active-objective-action" hidden>
+                Gặp Giao Liên · Bến Cảng
               </div>
-              <div id="hud-active-objective-hint">
+              <div id="hud-active-objective-hint" hidden>
                 ▸ Gợi ý: Tiến tới đèn lồng cảng và nhấn [E]
               </div>
             </div>
