@@ -227,7 +227,7 @@ test.describe('M3 RPG Systems & UI — Browser E2E Suite', () => {
 
     const detailBox = page.locator('#inventory-item-detail');
     await expect(detailBox).toContainText('Sổ Vận Đơn Cửu Long & Báo Thanh Niên');
-    await expect(detailBox).toContainText('Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021)');
+    await expect(detailBox).not.toContainText('Giáo trình');
 
     await page.waitForTimeout(150);
     await page.screenshot({
