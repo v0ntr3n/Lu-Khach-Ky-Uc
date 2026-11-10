@@ -496,6 +496,10 @@ export class HudController {
     this.gameHud.showToast(message);
   }
 
+  public showRegionEntryBanner(zoneTitle: string, eraLabel: string): void {
+    this.gameHud.showRegionEntryBanner(zoneTitle, eraLabel);
+  }
+
   public openClimaxModal(chapter: ChapterData): void {
     if (typeof document === 'undefined') return;
     const modal = document.getElementById('climax-modal');

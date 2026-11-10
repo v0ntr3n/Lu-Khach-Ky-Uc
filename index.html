@@ -213,6 +213,49 @@
         left: 14px;
       }
 
+      /* BIỂN HIỆU CHÀO MỪNG KHU VỰC (#region-entry-banner) */
+      #region-entry-banner {
+        position: absolute;
+        top: 74px;
+        left: 50%;
+        transform: translate(-50%, -6px);
+        z-index: 210;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 3px;
+        padding: 9px 24px;
+        background: rgba(17, 14, 11, 0.94);
+        border: 1.5px solid var(--bronze-bright);
+        border-top: 3px solid var(--crimson-seal);
+        box-shadow: 0 10px 28px rgba(17, 14, 11, 0.88), inset 0 0 0 1px rgba(212, 165, 93, 0.2);
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+      }
+
+      #region-entry-banner.is-visible {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+
+      #region-entry-era {
+        font-family: var(--font-mono);
+        font-size: 0.76rem;
+        font-weight: 600;
+        color: var(--bronze-bright);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      #region-entry-title {
+        font-family: var(--font-display);
+        font-size: 1.28rem;
+        font-weight: 700;
+        color: var(--parchment-light);
+        letter-spacing: 0.03em;
+      }
+
       /* ==========================================================================
          2. LỚP HUD NGỮ CẢNH TỐI GIẢN (#hud-layer)
          ========================================================================== */
@@ -2327,6 +2370,11 @@
 
       <!-- 2. LỚP HUD NGỮ CẢNH TỐI GIẢN (Ẩn khi ở Menu Chính / Đang tải / Mở màn) -->
       <div id="hud-layer" hidden>
+        <div id="region-entry-banner" role="status" aria-live="polite" hidden>
+          <span id="region-entry-era">CHƯƠNG I · HƯƠNG CẢNG 1930</span>
+          <strong id="region-entry-title">Quảng Trường Bến Cảng</strong>
+        </div>
+
         <div id="hud-top-left">
           <div class="hud-location-plaque">
             <span id="stage-chapter-num">CHƯƠNG I · 1930</span>

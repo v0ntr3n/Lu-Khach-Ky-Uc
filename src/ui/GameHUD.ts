@@ -183,11 +183,11 @@ export class GameHUD {
       typeof screenY === 'number' && Number.isFinite(screenY) ? screenY : vh - 88;
 
     const halfBadgeW = Math.max(0, Math.ceil((promptEl.offsetWidth || 0) * 0.5));
-    const minX = Math.min(vw * 0.5, 16 + halfBadgeW);
-    const maxX = Math.max(vw * 0.5, vw - 16 - halfBadgeW);
+    const minX = Math.min(vw * 0.5, 32 + halfBadgeW);
+    const maxX = Math.max(vw * 0.5, vw - 32 - halfBadgeW);
 
-    const clampedX = Math.max(16, Math.min(vw - 16, Math.max(minX, Math.min(maxX, rawX))));
-    const clampedY = Math.max(64, Math.min(Math.max(64, vh - 32), rawY));
+    const clampedX = Math.max(32, Math.min(vw - 32, Math.max(minX, Math.min(maxX, rawX))));
+    const clampedY = Math.max(56, Math.min(Math.max(56, vh - 48), rawY));
 
     promptEl.style.left = `${Math.round(clampedX)}px`;
     promptEl.style.top = `${Math.round(clampedY)}px`;
@@ -285,6 +285,30 @@ export class GameHUD {
       (toast as unknown as { _timer?: number })._timer = window.setTimeout(() => {
         toast.classList.remove('is-visible');
       }, 3200);
+    }
+  }
+
+  public showRegionEntryBanner(zoneTitle: string, eraLabel: string): void {
+    if (typeof document === 'undefined') return;
+    const banner = document.getElementById('region-entry-banner');
+    const eraEl = document.getElementById('region-entry-era');
+    const titleEl = document.getElementById('region-entry-title');
+    if (!banner) return;
+
+    if (eraEl) eraEl.textContent = eraLabel;
+    if (titleEl) titleEl.textContent = zoneTitle;
+
+    banner.hidden = false;
+    banner.removeAttribute('hidden');
+    banner.classList.add('is-visible');
+
+    if (typeof window !== 'undefined') {
+      window.clearTimeout((banner as unknown as { _timer?: number })._timer);
+      (banner as unknown as { _timer?: number })._timer = window.setTimeout(() => {
+        banner.classList.remove('is-visible');
+        banner.hidden = true;
+        banner.setAttribute('hidden', '');
+      }, 2400);
     }
   }
 }
