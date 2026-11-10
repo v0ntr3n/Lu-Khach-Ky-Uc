@@ -1218,6 +1218,17 @@ function buildOldStreetRaw(): TiledMapJson {
   fillRect(ground, cols, rows, 0, 272, 768, 128, ts, 2);
   fillRect(ground, cols, rows, 352, 160, 96, 128, ts, 2);
 
+  const groundDetails = createGrid(cols, rows, 0);
+  fillRect(groundDetails, cols, rows, 0, 256, 768, 16, ts, 14);
+  fillRect(groundDetails, cols, rows, 0, 400, 768, 16, ts, 14);
+  fillRect(groundDetails, cols, rows, 368, 160, 64, 32, ts, 5);
+  fillRect(groundDetails, cols, rows, 160, 384, 96, 32, ts, 6);
+
+  const lowProps = createGrid(cols, rows, 0);
+  fillRect(lowProps, cols, rows, 144, 256, 32, 16, ts, 8);
+  fillRect(lowProps, cols, rows, 480, 256, 32, 16, ts, 8);
+  fillRect(lowProps, cols, rows, 576, 400, 32, 16, ts, 7);
+
   const structures = createGrid(cols, rows, 0);
   fillRect(structures, cols, rows, 64, 64, 256, 96, ts, 9);
   fillRect(structures, cols, rows, 352, 64, 128, 96, ts, 10);
@@ -1228,6 +1239,7 @@ function buildOldStreetRaw(): TiledMapJson {
   fillRect(foreground, cols, rows, 64, 48, 256, 24, ts, 12);
   fillRect(foreground, cols, rows, 352, 48, 128, 24, ts, 12);
   fillRect(foreground, cols, rows, 512, 48, 192, 24, ts, 12);
+  fillRect(foreground, cols, rows, 128, 448, 512, 16, ts, 12);
 
   const collision = createGrid(cols, rows, 0);
   fillRect(collision, cols, rows, 64, 64, 256, 96, ts, 16);
@@ -1262,6 +1274,8 @@ function buildOldStreetRaw(): TiledMapJson {
     ],
     layers: makeStandardLayers(cols, rows, {
       ground,
+      groundDetails,
+      lowProps,
       structures,
       foreground,
       collision,
@@ -1469,8 +1483,21 @@ function buildSmallPierRaw(): TiledMapJson {
   const ground = createGrid(cols, rows, 3);
   fillRect(ground, cols, rows, 0, 384, 640, 96, ts, 4);
 
+  const groundDetails = createGrid(cols, rows, 0);
+  fillRect(groundDetails, cols, rows, 0, 368, 640, 16, ts, 14);
+  fillRect(groundDetails, cols, rows, 496, 64, 64, 192, ts, 2);
+
+  const lowProps = createGrid(cols, rows, 0);
+  fillRect(lowProps, cols, rows, 96, 352, 32, 16, ts, 15);
+  fillRect(lowProps, cols, rows, 288, 352, 32, 16, ts, 15);
+  fillRect(lowProps, cols, rows, 464, 352, 32, 16, ts, 15);
+  fillRect(lowProps, cols, rows, 208, 176, 32, 16, ts, 7);
+
   const structures = createGrid(cols, rows, 0);
   fillRect(structures, cols, rows, 256, 160, 96, 64, ts, 10);
+
+  const foreground = createGrid(cols, rows, 0);
+  fillRect(foreground, cols, rows, 256, 144, 96, 16, ts, 12);
 
   const collision = createGrid(cols, rows, 0);
   fillRect(collision, cols, rows, 256, 160, 96, 64, ts, 16);
@@ -1503,7 +1530,10 @@ function buildSmallPierRaw(): TiledMapJson {
     ],
     layers: makeStandardLayers(cols, rows, {
       ground,
+      groundDetails,
+      lowProps,
       structures,
+      foreground,
       collision,
       lightOccluders: [
         {
@@ -1664,12 +1694,26 @@ function buildSafehouseInteriorRaw(): TiledMapJson {
   const ground = createGrid(cols, rows, 21);
   fillRect(ground, cols, rows, 192, 128, 128, 224, ts, 22);
 
+  const groundDetails = createGrid(cols, rows, 0);
+  fillRect(groundDetails, cols, rows, 208, 144, 96, 64, ts, 23);
+  fillRect(groundDetails, cols, rows, 224, 336, 64, 16, ts, 30);
+
+  const lowProps = createGrid(cols, rows, 0);
+  fillRect(lowProps, cols, rows, 64, 64, 96, 16, ts, 29);
+  fillRect(lowProps, cols, rows, 352, 64, 96, 16, ts, 29);
+  fillRect(lowProps, cols, rows, 224, 144, 32, 16, ts, 28);
+  fillRect(lowProps, cols, rows, 384, 240, 32, 32, ts, 24);
+
   const structures = createGrid(cols, rows, 0);
   fillRect(structures, cols, rows, 0, 0, 512, 48, ts, 25);
   fillRect(structures, cols, rows, 0, 48, 32, 336, ts, 25);
   fillRect(structures, cols, rows, 480, 48, 32, 336, ts, 25);
   fillRect(structures, cols, rows, 32, 352, 192, 32, ts, 25);
   fillRect(structures, cols, rows, 288, 352, 192, 32, ts, 25);
+
+  const foreground = createGrid(cols, rows, 0);
+  fillRect(foreground, cols, rows, 32, 112, 448, 16, ts, 27);
+  fillRect(foreground, cols, rows, 32, 272, 448, 16, ts, 27);
 
   const collision = createGrid(cols, rows, 0);
   fillRect(collision, cols, rows, 0, 0, 512, 48, ts, 32);
@@ -1705,7 +1749,10 @@ function buildSafehouseInteriorRaw(): TiledMapJson {
     ],
     layers: makeStandardLayers(cols, rows, {
       ground,
+      groundDetails,
+      lowProps,
       structures,
+      foreground,
       collision,
       interactables: [
         {
@@ -1802,10 +1849,23 @@ function buildShadowAlleyRaw(): TiledMapJson {
   fillRect(ground, cols, rows, 16, 224, 672, 96, ts, 2);
   fillRect(ground, cols, rows, 336, 224, 64, 256, ts, 2);
 
+  const groundDetails = createGrid(cols, rows, 0);
+  fillRect(groundDetails, cols, rows, 16, 208, 672, 16, ts, 14);
+  fillRect(groundDetails, cols, rows, 16, 320, 320, 16, ts, 14);
+  fillRect(groundDetails, cols, rows, 400, 320, 288, 16, ts, 14);
+
+  const lowProps = createGrid(cols, rows, 0);
+  fillRect(lowProps, cols, rows, 96, 176, 32, 16, ts, 8);
+  fillRect(lowProps, cols, rows, 320, 176, 32, 16, ts, 7);
+  fillRect(lowProps, cols, rows, 544, 176, 32, 16, ts, 8);
+
   const structures = createGrid(cols, rows, 0);
   fillRect(structures, cols, rows, 64, 48, 576, 64, ts, 9);
   fillRect(structures, cols, rows, 224, 160, 48, 48, ts, 10);
   fillRect(structures, cols, rows, 432, 160, 48, 48, ts, 10);
+
+  const foreground = createGrid(cols, rows, 0);
+  fillRect(foreground, cols, rows, 64, 32, 576, 16, ts, 12);
 
   const collision = createGrid(cols, rows, 0);
   fillRect(collision, cols, rows, 64, 48, 576, 64, ts, 16);
@@ -1839,7 +1899,10 @@ function buildShadowAlleyRaw(): TiledMapJson {
     ],
     layers: makeStandardLayers(cols, rows, {
       ground,
+      groundDetails,
+      lowProps,
       structures,
+      foreground,
       collision,
       lightOccluders: [
         {
@@ -2035,6 +2098,15 @@ function buildArchiveCourtyardRaw(): TiledMapJson {
   fillRect(ground, cols, rows, 32, 256, 640, 96, ts, 2);
   fillRect(ground, cols, rows, 320, 176, 96, 128, ts, 2);
 
+  const groundDetails = createGrid(cols, rows, 0);
+  fillRect(groundDetails, cols, rows, 304, 192, 96, 64, ts, 6);
+  fillRect(groundDetails, cols, rows, 32, 240, 640, 16, ts, 14);
+  fillRect(groundDetails, cols, rows, 32, 352, 640, 16, ts, 14);
+
+  const lowProps = createGrid(cols, rows, 0);
+  fillRect(lowProps, cols, rows, 144, 240, 32, 16, ts, 8);
+  fillRect(lowProps, cols, rows, 528, 240, 32, 16, ts, 8);
+
   const structures = createGrid(cols, rows, 0);
   fillRect(structures, cols, rows, 224, 64, 256, 112, ts, 9);
   fillRect(structures, cols, rows, 192, 320, 16, 16, ts, 11);
@@ -2077,6 +2149,8 @@ function buildArchiveCourtyardRaw(): TiledMapJson {
     ],
     layers: makeStandardLayers(cols, rows, {
       ground,
+      groundDetails,
+      lowProps,
       structures,
       foreground,
       collision,
@@ -2251,12 +2325,26 @@ function buildSecretArchiveRaw(): TiledMapJson {
   const ground = createGrid(cols, rows, 21);
   fillRect(ground, cols, rows, 176, 80, 160, 272, ts, 22);
 
+  const groundDetails = createGrid(cols, rows, 0);
+  fillRect(groundDetails, cols, rows, 192, 128, 128, 96, ts, 23);
+  fillRect(groundDetails, cols, rows, 224, 336, 64, 16, ts, 30);
+
+  const lowProps = createGrid(cols, rows, 0);
+  fillRect(lowProps, cols, rows, 48, 64, 112, 16, ts, 29);
+  fillRect(lowProps, cols, rows, 352, 64, 112, 16, ts, 29);
+  fillRect(lowProps, cols, rows, 80, 224, 32, 32, ts, 31);
+  fillRect(lowProps, cols, rows, 400, 224, 32, 32, ts, 31);
+
   const structures = createGrid(cols, rows, 0);
   fillRect(structures, cols, rows, 0, 0, 512, 48, ts, 25);
   fillRect(structures, cols, rows, 0, 48, 32, 336, ts, 25);
   fillRect(structures, cols, rows, 480, 48, 32, 336, ts, 25);
   fillRect(structures, cols, rows, 32, 352, 192, 32, ts, 25);
   fillRect(structures, cols, rows, 288, 352, 192, 32, ts, 25);
+
+  const foreground = createGrid(cols, rows, 0);
+  fillRect(foreground, cols, rows, 32, 96, 448, 16, ts, 27);
+  fillRect(foreground, cols, rows, 32, 272, 448, 16, ts, 27);
 
   const collision = createGrid(cols, rows, 0);
   fillRect(collision, cols, rows, 0, 0, 512, 48, ts, 32);
@@ -2292,7 +2380,10 @@ function buildSecretArchiveRaw(): TiledMapJson {
     ],
     layers: makeStandardLayers(cols, rows, {
       ground,
+      groundDetails,
+      lowProps,
       structures,
+      foreground,
       collision,
       interactables: [
         {
@@ -2432,6 +2523,17 @@ function buildTanTraoBanyanRaw(): TiledMapJson {
   const ground = createGrid(cols, rows, 1);
   fillRect(ground, cols, rows, 64, 224, 672, 160, ts, 2);
 
+  const groundDetails = createGrid(cols, rows, 0);
+  fillRect(groundDetails, cols, rows, 96, 176, 128, 64, ts, 17);
+  fillRect(groundDetails, cols, rows, 288, 160, 192, 64, ts, 6);
+  fillRect(groundDetails, cols, rows, 64, 208, 672, 16, ts, 14);
+  fillRect(groundDetails, cols, rows, 64, 384, 672, 16, ts, 14);
+
+  const lowProps = createGrid(cols, rows, 0);
+  fillRect(lowProps, cols, rows, 208, 208, 32, 16, ts, 8);
+  fillRect(lowProps, cols, rows, 544, 208, 32, 16, ts, 8);
+  fillRect(lowProps, cols, rows, 432, 368, 32, 16, ts, 7);
+
   const structures = createGrid(cols, rows, 0);
   fillRect(structures, cols, rows, 224, 64, 320, 96, ts, 9);
   fillRect(structures, cols, rows, 160, 192, 16, 16, ts, 11);
@@ -2471,6 +2573,8 @@ function buildTanTraoBanyanRaw(): TiledMapJson {
     ],
     layers: makeStandardLayers(cols, rows, {
       ground,
+      groundDetails,
+      lowProps,
       structures,
       foreground,
       collision,
@@ -2635,6 +2739,16 @@ function buildBaDinhSquareRaw(): TiledMapJson {
   const ground = createGrid(cols, rows, 1);
   fillRect(ground, cols, rows, 48, 224, 736, 160, ts, 2);
 
+  const groundDetails = createGrid(cols, rows, 0);
+  fillRect(groundDetails, cols, rows, 288, 160, 256, 64, ts, 18);
+  fillRect(groundDetails, cols, rows, 144, 240, 512, 32, ts, 18);
+  fillRect(groundDetails, cols, rows, 48, 208, 736, 16, ts, 14);
+  fillRect(groundDetails, cols, rows, 48, 384, 736, 16, ts, 14);
+
+  const lowProps = createGrid(cols, rows, 0);
+  fillRect(lowProps, cols, rows, 176, 208, 32, 16, ts, 8);
+  fillRect(lowProps, cols, rows, 608, 208, 32, 16, ts, 8);
+
   const structures = createGrid(cols, rows, 0);
   fillRect(structures, cols, rows, 288, 64, 256, 96, ts, 9);
 
@@ -2671,6 +2785,8 @@ function buildBaDinhSquareRaw(): TiledMapJson {
     ],
     layers: makeStandardLayers(cols, rows, {
       ground,
+      groundDetails,
+      lowProps,
       structures,
       foreground,
       collision,
@@ -2820,8 +2936,21 @@ function buildPhaDinPassRaw(): TiledMapJson {
   const ground = createGrid(cols, rows, 1);
   fillRect(ground, cols, rows, 64, 224, 704, 160, ts, 2);
 
+  const groundDetails = createGrid(cols, rows, 0);
+  fillRect(groundDetails, cols, rows, 64, 208, 704, 16, ts, 19);
+  fillRect(groundDetails, cols, rows, 64, 384, 704, 16, ts, 19);
+  fillRect(groundDetails, cols, rows, 320, 176, 192, 48, ts, 19);
+
+  const lowProps = createGrid(cols, rows, 0);
+  fillRect(lowProps, cols, rows, 160, 192, 64, 16, ts, 7);
+  fillRect(lowProps, cols, rows, 576, 192, 64, 16, ts, 7);
+  fillRect(lowProps, cols, rows, 448, 368, 32, 16, ts, 8);
+
   const structures = createGrid(cols, rows, 0);
   fillRect(structures, cols, rows, 192, 64, 384, 96, ts, 9);
+
+  const foreground = createGrid(cols, rows, 0);
+  fillRect(foreground, cols, rows, 192, 48, 384, 16, ts, 13);
 
   const collision = createGrid(cols, rows, 0);
   fillRect(collision, cols, rows, 192, 64, 384, 96, ts, 16);
@@ -2853,7 +2982,10 @@ function buildPhaDinPassRaw(): TiledMapJson {
     ],
     layers: makeStandardLayers(cols, rows, {
       ground,
+      groundDetails,
+      lowProps,
       structures,
+      foreground,
       collision,
       lightOccluders: [
         {
@@ -3010,8 +3142,20 @@ function buildSpring1975CorridorRaw(): TiledMapJson {
   const ground = createGrid(cols, rows, 1);
   fillRect(ground, cols, rows, 48, 208, 672, 160, ts, 2);
 
+  const groundDetails = createGrid(cols, rows, 0);
+  fillRect(groundDetails, cols, rows, 48, 192, 672, 16, ts, 19);
+  fillRect(groundDetails, cols, rows, 48, 368, 672, 16, ts, 19);
+  fillRect(groundDetails, cols, rows, 304, 160, 192, 48, ts, 18);
+
+  const lowProps = createGrid(cols, rows, 0);
+  fillRect(lowProps, cols, rows, 160, 192, 48, 16, ts, 7);
+  fillRect(lowProps, cols, rows, 544, 192, 48, 16, ts, 8);
+
   const structures = createGrid(cols, rows, 0);
   fillRect(structures, cols, rows, 224, 64, 320, 96, ts, 9);
+
+  const foreground = createGrid(cols, rows, 0);
+  fillRect(foreground, cols, rows, 224, 48, 320, 16, ts, 12);
 
   const collision = createGrid(cols, rows, 0);
   fillRect(collision, cols, rows, 224, 64, 320, 96, ts, 16);
@@ -3043,7 +3187,10 @@ function buildSpring1975CorridorRaw(): TiledMapJson {
     ],
     layers: makeStandardLayers(cols, rows, {
       ground,
+      groundDetails,
+      lowProps,
       structures,
+      foreground,
       collision,
       lightOccluders: [
         {
@@ -3195,8 +3342,20 @@ function buildDoiMoiAvenueRaw(): TiledMapJson {
   const ground = createGrid(cols, rows, 1);
   fillRect(ground, cols, rows, 48, 208, 672, 160, ts, 2);
 
+  const groundDetails = createGrid(cols, rows, 0);
+  fillRect(groundDetails, cols, rows, 48, 192, 672, 16, ts, 20);
+  fillRect(groundDetails, cols, rows, 48, 368, 672, 16, ts, 20);
+  fillRect(groundDetails, cols, rows, 304, 160, 160, 48, ts, 6);
+
+  const lowProps = createGrid(cols, rows, 0);
+  fillRect(lowProps, cols, rows, 144, 192, 32, 16, ts, 8);
+  fillRect(lowProps, cols, rows, 576, 192, 32, 16, ts, 8);
+
   const structures = createGrid(cols, rows, 0);
   fillRect(structures, cols, rows, 192, 64, 384, 96, ts, 9);
+
+  const foreground = createGrid(cols, rows, 0);
+  fillRect(foreground, cols, rows, 192, 48, 384, 16, ts, 12);
 
   const collision = createGrid(cols, rows, 0);
   fillRect(collision, cols, rows, 192, 64, 384, 96, ts, 16);
@@ -3228,7 +3387,10 @@ function buildDoiMoiAvenueRaw(): TiledMapJson {
     ],
     layers: makeStandardLayers(cols, rows, {
       ground,
+      groundDetails,
+      lowProps,
       structures,
+      foreground,
       collision,
       lightOccluders: [
         {
@@ -3385,8 +3547,20 @@ function buildNexus2045PlazaRaw(): TiledMapJson {
   const ground = createGrid(cols, rows, 1);
   fillRect(ground, cols, rows, 48, 208, 672, 160, ts, 2);
 
+  const groundDetails = createGrid(cols, rows, 0);
+  fillRect(groundDetails, cols, rows, 224, 160, 320, 64, ts, 20);
+  fillRect(groundDetails, cols, rows, 48, 192, 672, 16, ts, 20);
+  fillRect(groundDetails, cols, rows, 48, 368, 672, 16, ts, 20);
+
+  const lowProps = createGrid(cols, rows, 0);
+  fillRect(lowProps, cols, rows, 160, 192, 32, 16, ts, 8);
+  fillRect(lowProps, cols, rows, 576, 192, 32, 16, ts, 8);
+
   const structures = createGrid(cols, rows, 0);
   fillRect(structures, cols, rows, 224, 64, 320, 96, ts, 9);
+
+  const foreground = createGrid(cols, rows, 0);
+  fillRect(foreground, cols, rows, 224, 48, 320, 16, ts, 12);
 
   const collision = createGrid(cols, rows, 0);
   fillRect(collision, cols, rows, 224, 64, 320, 96, ts, 16);
@@ -3422,7 +3596,10 @@ function buildNexus2045PlazaRaw(): TiledMapJson {
     ],
     layers: makeStandardLayers(cols, rows, {
       ground,
+      groundDetails,
+      lowProps,
       structures,
+      foreground,
       collision,
       lightOccluders: [
         {

@@ -7,7 +7,7 @@
  */
 
 import { PALETTE_12 } from '../data/chronicles';
-import type { Facing4, MilestoneArtifact } from '../types/game';
+import type { EraId, Facing4, MilestoneArtifact, NormalizedMapData } from '../types/game';
 
 export const CHARACTER_SPRITE_WIDTH = 16;
 export const CHARACTER_SPRITE_HEIGHT = 22;
@@ -1769,22 +1769,96 @@ export function drawNpcSprite(
   );
 }
 
+export interface ZoneLandmarkSpec {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export const ZONE_LANDMARKS: Record<string, ZoneLandmarkSpec[]> = {
+  harbor_square: [
+    { id: 'lm_customs_clocktower', label: 'Tháp Đồng Hồ Hải Quan Cửu Long', x: 208, y: 56, width: 48, height: 80 },
+    { id: 'lm_harbor_crane', label: 'Cần Cẩu Bốc Xếp Bến Cảng', x: 688, y: 512, width: 48, height: 64 },
+    { id: 'lm_moored_sampans', label: 'Thuyền Tam Bản Neo Đậu Đêm', x: 240, y: 608, width: 96, height: 48 },
+  ],
+  warehouse_interior: [
+    { id: 'lm_manifest_scales', label: 'Cân Hàng & Giá Kiểm Kê Xuất Nhập Khẩu', x: 112, y: 96, width: 64, height: 48 },
+    { id: 'lm_tea_spice_bales', label: 'Kiện Trà & Hương Liệu Viễn Dương', x: 384, y: 96, width: 64, height: 48 },
+  ],
+  old_street: [
+    { id: 'lm_canton_archway', label: 'Cổng Vòm Đá Phố Cổ Cửu Long', x: 64, y: 240, width: 48, height: 64 },
+    { id: 'lm_shophouse_banners', label: 'Biển Hiệu Sơn Mài & Đèn Lồng Phố Cổ', x: 176, y: 64, width: 128, height: 64 },
+    { id: 'lm_herbal_tea_pavilion', label: 'Quán Trà Đèn Lồng Đỏ Bà Năm', x: 168, y: 392, width: 96, height: 48 },
+  ],
+  small_pier: [
+    { id: 'lm_pier_signal_mast', label: 'Cột Đèn Báo Hiệu Cảng Thơm', x: 128, y: 144, width: 32, height: 64 },
+    { id: 'lm_night_ferry_sampan', label: 'Thuyền Đò Đêm Cửu Long', x: 352, y: 344, width: 88, height: 44 },
+  ],
+  safehouse_interior: [
+    { id: 'lm_cipher_telegraph_wall', label: 'Bản Đồ Liên Lạc Bí Mật & Bàn Điện Báo', x: 176, y: 64, width: 144, height: 56 },
+    { id: 'lm_printing_stencil_rack', label: 'Khung In Truyền Đơn Đá', x: 80, y: 144, width: 48, height: 64 },
+  ],
+  shadow_alley: [
+    { id: 'lm_stone_overpass_arch', label: 'Vòm Đá Cổ Hẻm Tối', x: 112, y: 144, width: 64, height: 64 },
+    { id: 'lm_colonial_watch_post', label: 'Trạm Gác Đèn Dầu Thực Dân', x: 512, y: 128, width: 48, height: 56 },
+  ],
+  archive_courtyard: [
+    { id: 'lm_tam_quan_gate', label: 'Cổng Tam Quan Sân Lưu Trữ', x: 304, y: 56, width: 96, height: 88 },
+    { id: 'lm_bronze_incense_urn', label: 'Đỉnh Đồng & Bia Đá Cổ', x: 328, y: 208, width: 48, height: 40 },
+  ],
+  secret_archive: [
+    { id: 'lm_unification_conference_table', label: 'Bàn Hội Nghị Hợp Nhất 02/1930 & Cờ Đỏ Búa Liềm', x: 192, y: 72, width: 128, height: 72 },
+    { id: 'lm_secret_dossier_vault', label: 'Tủ Hồ Sơ Sơn Mài Khóa Đồng', x: 64, y: 72, width: 80, height: 56 },
+  ],
+  tan_trao_banyan: [
+    { id: 'lm_twin_banyan_tree', label: 'Cây Đa Tân Trào Cổ Thụ Đôi', x: 112, y: 136, width: 96, height: 88 },
+    { id: 'lm_dinh_tan_trao', label: 'Mái Đình Tân Trào Lịch Sử 08/1945', x: 240, y: 56, width: 288, height: 96 },
+  ],
+  ba_dinh_square: [
+    { id: 'lm_independence_tribune', label: 'Lễ Đài Độc Lập Ba Đình 02/09/1945', x: 304, y: 52, width: 224, height: 104 },
+    { id: 'lm_ba_dinh_flag_avenue', label: 'Hàng Cờ Đỏ Sao Vàng Quảng Trường Ba Đình', x: 144, y: 184, width: 512, height: 48 },
+  ],
+  pha_din_pass: [
+    { id: 'lm_pack_bicycle_convoy', label: 'Đoàn Xe Đạp Thồ Điện Biên Phủ', x: 160, y: 184, width: 128, height: 48 },
+    { id: 'lm_pha_din_command_bunker', label: 'Hầm Chỉ Huy & Lưới Ngụy Trang Đèo Pha Đin', x: 224, y: 64, width: 320, height: 88 },
+  ],
+  spring_1975_corridor: [
+    { id: 'lm_tank_column_1975', label: 'Đội Hình Xe Tăng Tiến Quân Mùa Xuân 1975', x: 144, y: 176, width: 144, height: 48 },
+    { id: 'lm_ho_chi_minh_campaign_hq', label: 'Sở Chỉ Huy Chiến Dịch Hồ Chí Minh', x: 240, y: 64, width: 288, height: 88 },
+  ],
+  doi_moi_avenue: [
+    { id: 'lm_doi_moi_arcade_hall', label: 'Phố Thương Mại & Bảng Tin Đổi Mới 1986', x: 208, y: 64, width: 352, height: 88 },
+    { id: 'lm_integration_clock_plaza', label: 'Đài Phun Nước & Biểu Tượng Hội Nhập', x: 320, y: 176, width: 96, height: 48 },
+  ],
+  nexus_2045_plaza: [
+    { id: 'lm_solar_lotus_arch_2045', label: 'Vòm Sen Năng Lượng Mặt Trời 2045', x: 224, y: 52, width: 320, height: 104 },
+    { id: 'lm_memory_holo_pylons', label: 'Trụ Quang Học Lưu Trữ Ký Ức Quốc Gia', x: 288, y: 176, width: 160, height: 56 },
+  ],
+};
+
 export function drawTopDownTile(
   ctx: CanvasRenderingContext2D,
   tileId: number,
   screenX: number,
   screenY: number,
-  isInterior = false
+  isInterior = false,
+  eraId: EraId = '1930',
+  timeSec = 0,
+  reducedMotion = false
 ): void {
   if (tileId <= 0) return;
   const x = Math.round(screenX);
   const y = Math.round(screenY);
+  const variant = ((Math.abs(x >> 4) * 13 + Math.abs(y >> 4) * 7) & 3);
 
   ctx.save();
   if (!isInterior) {
     switch (tileId) {
       case 1: {
-        // Cobblestone courtyard pavement (LACQUER_DEEP base with subtle stone mortar)
+        // Cobblestone courtyard / era ground base with deterministic micro-variations
         ctx.fillStyle = PALETTE_12.LACQUER_DEEP;
         ctx.fillRect(x, y, 16, 16);
         ctx.fillStyle = PALETTE_12.LACQUER_ELEVATED;
@@ -1792,13 +1866,22 @@ export function drawTopDownTile(
         ctx.fillRect(x + 8, y + 1, 7, 6);
         ctx.fillRect(x + 1, y + 8, 7, 7);
         ctx.fillRect(x + 9, y + 8, 6, 7);
-        ctx.fillStyle = PALETTE_12.INK_SECONDARY;
-        ctx.fillRect(x + 2, y + 2, 2, 1);
-        ctx.fillRect(x + 10, y + 10, 2, 1);
+        ctx.fillStyle =
+          eraId === '1945'
+            ? PALETTE_12.BRONZE_MUTED
+            : eraId === '1986_2045'
+              ? PALETTE_12.INK_PRIMARY
+              : PALETTE_12.INK_SECONDARY;
+        ctx.fillRect(x + 2 + (variant & 1), y + 2, 2, 1);
+        ctx.fillRect(x + 10 - (variant & 1), y + 10, 2, 1);
+        if (variant === 2) {
+          ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+          ctx.fillRect(x + 5, y + 12, 2, 1);
+        }
         break;
       }
       case 2: {
-        // Main stone street (LACQUER_ELEVATED with warm stone slab lines)
+        // Main stone street / avenue with subtle slab variation
         ctx.fillStyle = PALETTE_12.LACQUER_ELEVATED;
         ctx.fillRect(x, y, 16, 16);
         ctx.fillStyle = PALETTE_12.INK_SECONDARY;
@@ -1807,8 +1890,12 @@ export function drawTopDownTile(
         ctx.fillStyle = PALETTE_12.LACQUER_VOID;
         ctx.fillRect(x, y + 7, 16, 1);
         ctx.fillRect(x, y + 15, 16, 1);
-        ctx.fillRect(x + 8, y, 1, 7);
-        ctx.fillRect(x + 4, y + 8, 1, 7);
+        ctx.fillRect(x + (variant % 2 === 0 ? 8 : 6), y, 1, 7);
+        ctx.fillRect(x + (variant % 2 === 0 ? 4 : 10), y + 8, 1, 7);
+        if (eraId === '1986_2045' && variant === 1) {
+          ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+          ctx.fillRect(x + 7, y + 3, 2, 1);
+        }
         break;
       }
       case 3: {
@@ -1820,21 +1907,24 @@ export function drawTopDownTile(
           ctx.fillRect(x, y + py, 16, 1);
         }
         ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
-        ctx.fillRect(x + 2, y + 2, 4, 1);
-        ctx.fillRect(x + 9, y + 6, 5, 1);
+        ctx.fillRect(x + 2 + (variant & 1), y + 2, 4, 1);
+        ctx.fillRect(x + 9 - (variant & 1), y + 6, 5, 1);
         ctx.fillRect(x + 3, y + 10, 5, 1);
         break;
       }
       case 4: {
-        // Harbor dark water (LACQUER_VOID with BRONZE_BRIGHT / BRONZE_MUTED wave ripples)
+        // Harbor dark water (LACQUER_VOID with animated wave ripples)
+        const waveShift = reducedMotion
+          ? 0
+          : Math.round(Math.sin(timeSec * 2.4 + variant) * 1);
         ctx.fillStyle = PALETTE_12.LACQUER_VOID;
         ctx.fillRect(x, y, 16, 16);
         ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
-        ctx.fillRect(x + 2, y + 4, 6, 1);
-        ctx.fillRect(x + 7, y + 11, 6, 1);
+        ctx.fillRect(x + 2 + waveShift, y + 4, 6, 1);
+        ctx.fillRect(x + 7 - waveShift, y + 11, 6, 1);
         ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
-        ctx.fillRect(x + 4, y + 4, 2, 1);
-        ctx.fillRect(x + 9, y + 11, 2, 1);
+        ctx.fillRect(x + 4 + waveShift, y + 4, 2, 1);
+        ctx.fillRect(x + 9 - waveShift, y + 11, 2, 1);
         break;
       }
       case 5: {
@@ -1874,7 +1964,8 @@ export function drawTopDownTile(
         break;
       }
       case 8: {
-        // Street oil lantern / barrel prop
+        // Street oil lantern / barrel prop with subtle flame flicker
+        const flicker = !reducedMotion && Math.sin(timeSec * 5 + variant) > 0.3 ? 1 : 0;
         ctx.fillStyle = PALETTE_12.LACQUER_VOID;
         ctx.fillRect(x + 7, y + 6, 2, 9);
         ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
@@ -1882,7 +1973,7 @@ export function drawTopDownTile(
         ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
         ctx.fillRect(x + 6, y + 3, 4, 3);
         ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
-        ctx.fillRect(x + 7, y + 4, 2, 1);
+        ctx.fillRect(x + 7, y + 4 - flicker, 2, 1 + flicker);
         break;
       }
       case 9: {
@@ -1948,6 +2039,84 @@ export function drawTopDownTile(
         ctx.fillRect(x + 6, y + 4, 3, 2);
         break;
       }
+      case 14: {
+        // Stone curb & cobbled border strip (GroundDetails)
+        ctx.fillStyle = PALETTE_12.INK_PRIMARY;
+        ctx.fillRect(x, y, 16, 16);
+        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        ctx.fillRect(x, y, 16, 2);
+        ctx.fillRect(x, y + 14, 16, 2);
+        ctx.fillStyle = PALETTE_12.INK_SECONDARY;
+        ctx.fillRect(x + 2, y + 4, 5, 8);
+        ctx.fillRect(x + 9, y + 4, 5, 8);
+        break;
+      }
+      case 15: {
+        // Mooring bollard & coiled hemp rope (LowProps)
+        ctx.fillStyle = PALETTE_12.LACQUER_VOID;
+        ctx.fillRect(x + 4, y + 10, 8, 4);
+        ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+        ctx.fillRect(x + 5, y + 4, 6, 8);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(x + 4, y + 3, 8, 2);
+        ctx.fillStyle = PALETTE_12.PARCHMENT_WARM;
+        ctx.fillRect(x + 3, y + 8, 10, 2);
+        break;
+      }
+      case 17: {
+        // Tân Trào banyan root network & mossy stone slab (Era 1945)
+        ctx.fillStyle = PALETTE_12.LACQUER_DEEP;
+        ctx.fillRect(x, y, 16, 16);
+        ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+        ctx.fillRect(x + 1, y + 3, 14, 3);
+        ctx.fillRect(x + 4, y + 1, 3, 14);
+        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        ctx.fillRect(x + 2, y + 4, 10, 1);
+        ctx.fillRect(x + 5, y + 8, 8, 3);
+        break;
+      }
+      case 18: {
+        // Ba Đình ceremonial crimson & gold parade carpet (Era 1945)
+        ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+        ctx.fillRect(x, y, 16, 16);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(x, y, 16, 2);
+        ctx.fillRect(x, y + 14, 16, 2);
+        ctx.fillStyle = PALETTE_12.CRIMSON_VERMILION;
+        ctx.fillRect(x + 3, y + 5, 10, 6);
+        ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+        ctx.fillRect(x + 7, y + 7, 2, 2);
+        break;
+      }
+      case 19: {
+        // Pha Đin & Spring 1975 supply track / sandbag / camouflage mesh (Era 1954_1975)
+        ctx.fillStyle = PALETTE_12.INK_PRIMARY;
+        ctx.fillRect(x, y, 16, 16);
+        ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+        ctx.fillRect(x + 1, y + 2, 6, 5);
+        ctx.fillRect(x + 8, y + 2, 7, 5);
+        ctx.fillRect(x + 2, y + 9, 7, 5);
+        ctx.fillRect(x + 10, y + 9, 5, 5);
+        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        ctx.fillRect(x + 2, y + 3, 4, 2);
+        ctx.fillRect(x + 9, y + 3, 5, 2);
+        break;
+      }
+      case 20: {
+        // Đổi Mới & Nexus 2045 solar-glass & bronze inlay tile (Era 1986_2045)
+        ctx.fillStyle = PALETTE_12.INK_PRIMARY;
+        ctx.fillRect(x, y, 16, 16);
+        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        ctx.fillRect(x + 1, y + 1, 14, 14);
+        ctx.fillStyle = PALETTE_12.LACQUER_DEEP;
+        ctx.fillRect(x + 2, y + 2, 12, 12);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(x + 4, y + 4, 8, 2);
+        ctx.fillRect(x + 4, y + 10, 8, 2);
+        ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+        ctx.fillRect(x + 7, y + 7, 2, 2);
+        break;
+      }
       default: {
         ctx.fillStyle = PALETTE_12.INK_SECONDARY;
         ctx.fillRect(x, y, 16, 16);
@@ -1968,8 +2137,8 @@ export function drawTopDownTile(
           ctx.fillRect(x, y + py, 16, 1);
         }
         ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
-        ctx.fillRect(x + 2, y + 1, 5, 1);
-        ctx.fillRect(x + 9, y + 9, 5, 1);
+        ctx.fillRect(x + 2 + (variant & 1), y + 1, 5, 1);
+        ctx.fillRect(x + 9 - (variant & 1), y + 9, 5, 1);
         break;
       }
       case 2:
@@ -2078,10 +2247,384 @@ export function drawTopDownTile(
         ctx.fillRect(x + 4, y + 5, 8, 6);
         break;
       }
+      case 31: {
+        // Interior brass lamp & scroll rack
+        ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+        ctx.fillRect(x + 3, y + 4, 10, 10);
+        ctx.fillStyle = PALETTE_12.PARCHMENT_WARM;
+        ctx.fillRect(x + 5, y + 5, 6, 4);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(x + 7, y + 2, 2, 3);
+        break;
+      }
       default: {
         // Subtle floor tile fallback
         ctx.fillStyle = PALETTE_12.LACQUER_ELEVATED;
         ctx.fillRect(x, y, 16, 16);
+        break;
+      }
+    }
+  }
+  ctx.restore();
+}
+
+/**
+ * Vẽ các công trình biểu tượng (Focal Landmarks) đặc trưng cho từng khu vực trong 14 bản đồ,
+ * sử dụng bảng màu 12 sắc độ Sơn Mài & Giấy Dó (`PALETTE_12`).
+ */
+export function drawZoneLandmarks(
+  ctx: CanvasRenderingContext2D,
+  mapData: NormalizedMapData,
+  cameraX: number,
+  cameraY: number,
+  timeSec = 0,
+  reducedMotion = false
+): void {
+  const specs = ZONE_LANDMARKS[mapData.id] ?? [];
+  if (specs.length === 0) return;
+
+  const pulse = reducedMotion ? 0 : Math.round(Math.sin(timeSec * 3) * 1);
+
+  ctx.save();
+  for (const lm of specs) {
+    const lx = Math.round(lm.x - cameraX);
+    const ly = Math.round(lm.y - cameraY);
+
+    switch (lm.id) {
+      case 'lm_customs_clocktower': {
+        // Tháp Đồng Hồ Hải Quan Cửu Long (1930)
+        ctx.fillStyle = PALETTE_12.LACQUER_VOID;
+        ctx.fillRect(lx, ly, 48, 80);
+        ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+        ctx.fillRect(lx + 4, ly + 8, 40, 68);
+        ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+        ctx.fillRect(lx + 2, ly, 44, 10);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(lx + 14, ly + 18, 20, 20);
+        ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+        ctx.fillRect(lx + 16, ly + 20, 16, 16);
+        // Kim đồng hồ
+        ctx.fillStyle = PALETTE_12.LACQUER_VOID;
+        ctx.fillRect(lx + 23, ly + 22, 2, 7);
+        ctx.fillRect(lx + 23, ly + 27, 5, 2);
+        break;
+      }
+      case 'lm_harbor_crane': {
+        // Cần Cẩu Bốc Xếp Bến Cảng
+        ctx.fillStyle = PALETTE_12.LACQUER_VOID;
+        ctx.fillRect(lx + 8, ly + 44, 32, 16);
+        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        ctx.fillRect(lx + 18, ly + 8, 8, 40);
+        ctx.fillRect(lx + 6, ly + 6, 36, 6);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(lx + 36, ly + 12, 2, 20 + pulse);
+        ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+        ctx.fillRect(lx + 32, ly + 32 + pulse, 10, 8);
+        break;
+      }
+      case 'lm_moored_sampans': {
+        // Thuyền Tam Bản Neo Đậu Đêm
+        const bob = reducedMotion ? 0 : Math.round(Math.sin(timeSec * 2.2) * 1);
+        ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+        ctx.fillRect(lx + 4, ly + 14 + bob, 40, 14);
+        ctx.fillRect(lx + 52, ly + 18 - bob, 40, 14);
+        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        ctx.fillRect(lx + 12, ly + 8 + bob, 22, 8);
+        ctx.fillRect(lx + 60, ly + 12 - bob, 22, 8);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(lx + 36, ly + 12 + bob, 3, 3);
+        ctx.fillRect(lx + 84, ly + 16 - bob, 3, 3);
+        break;
+      }
+      case 'lm_manifest_scales':
+      case 'lm_tea_spice_bales': {
+        // Cân Hàng & Kiện Trà Kho Hàng Số 4
+        ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+        ctx.fillRect(lx + 4, ly + 8, 56, 32);
+        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        ctx.fillRect(lx + 8, ly + 12, 22, 24);
+        ctx.fillRect(lx + 34, ly + 12, 22, 24);
+        ctx.fillStyle = PALETTE_12.PARCHMENT_WARM;
+        ctx.fillRect(lx + 12, ly + 16, 14, 8);
+        ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+        ctx.fillRect(lx + 40, ly + 16, 10, 8);
+        break;
+      }
+      case 'lm_canton_archway': {
+        // Cổng Vòm Đá Phố Cổ Cửu Long
+        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        ctx.fillRect(lx + 2, ly + 8, 8, 52);
+        ctx.fillRect(lx + 38, ly + 8, 8, 52);
+        ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+        ctx.fillRect(lx, ly, 48, 12);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(lx + 10, ly + 3, 28, 6);
+        break;
+      }
+      case 'lm_shophouse_banners': {
+        // Biển Hiệu Sơn Mài & Đèn Lồng Phố Cổ
+        for (let offset = 16; offset < 120; offset += 32) {
+          ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+          ctx.fillRect(lx + offset, ly + 10, 10, 28);
+          ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+          ctx.fillRect(lx + offset + 2, ly + 14, 6, 18);
+        }
+        break;
+      }
+      case 'lm_herbal_tea_pavilion': {
+        // Quán Trà Đèn Lồng Đỏ Bà Năm
+        ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+        ctx.fillRect(lx + 8, ly + 8, 80, 32);
+        ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+        ctx.fillRect(lx + 12, ly + 4, 72, 8);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(lx + 20, ly + 16, 12, 8);
+        ctx.fillRect(lx + 56, ly + 16, 12, 8);
+        break;
+      }
+      case 'lm_pier_signal_mast': {
+        // Cột Đèn Báo Hiệu Cảng Thơm
+        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        ctx.fillRect(lx + 13, ly + 8, 6, 52);
+        ctx.fillStyle = PALETTE_12.CRIMSON_VERMILION;
+        ctx.fillRect(lx + 9, ly + 12, 14, 10);
+        ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+        ctx.fillRect(lx + 13, ly + 15, 6, 4);
+        break;
+      }
+      case 'lm_night_ferry_sampan': {
+        // Thuyền Đò Đêm Cửu Long
+        const bob = reducedMotion ? 0 : Math.round(Math.sin(timeSec * 2.5) * 1);
+        ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+        ctx.fillRect(lx + 4, ly + 12 + bob, 80, 18);
+        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        ctx.fillRect(lx + 22, ly + 4 + bob, 36, 12);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(lx + 68, ly + 8 + bob, 5, 5);
+        break;
+      }
+      case 'lm_cipher_telegraph_wall':
+      case 'lm_printing_stencil_rack': {
+        // Bản Đồ Liên Lạc Bí Mật & Bàn Điện Báo / Khung In
+        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        ctx.fillRect(lx + 4, ly + 6, lm.width - 8, 36);
+        ctx.fillStyle = PALETTE_12.PARCHMENT_WARM;
+        ctx.fillRect(lx + 10, ly + 10, lm.width - 20, 24);
+        ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+        ctx.fillRect(lx + 16, ly + 16, 12, 8);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(lx + 34, ly + 18, 16, 4);
+        break;
+      }
+      case 'lm_stone_overpass_arch':
+      case 'lm_colonial_watch_post': {
+        // Vòm Đá Cổ Hẻm Tối & Trạm Gác
+        ctx.fillStyle = PALETTE_12.INK_SECONDARY;
+        ctx.fillRect(lx + 2, ly + 4, lm.width - 4, lm.height - 8);
+        ctx.fillStyle = PALETTE_12.LACQUER_VOID;
+        ctx.fillRect(lx + 12, ly + 18, lm.width - 24, lm.height - 22);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(lx + 8, ly + 8, lm.width - 16, 3);
+        break;
+      }
+      case 'lm_tam_quan_gate': {
+        // Cổng Tam Quan Sân Lưu Trữ
+        ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+        ctx.fillRect(lx + 4, ly + 4, 88, 18);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(lx + 12, ly + 8, 72, 4);
+        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        ctx.fillRect(lx + 10, ly + 22, 10, 56);
+        ctx.fillRect(lx + 76, ly + 22, 10, 56);
+        break;
+      }
+      case 'lm_bronze_incense_urn': {
+        // Đỉnh Đồng & Bia Đá Cổ
+        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        ctx.fillRect(lx + 12, ly + 10, 24, 22);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(lx + 16, ly + 6, 16, 6);
+        ctx.fillStyle = PALETTE_12.PARCHMENT_WARM;
+        ctx.fillRect(lx + 22, ly + 2 - pulse, 4, 4);
+        break;
+      }
+      case 'lm_unification_conference_table': {
+        // Bàn Hội Nghị Hợp Nhất 02/1930 & Cờ Đỏ Búa Liềm
+        ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+        ctx.fillRect(lx + 36, ly + 4, 56, 22);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(lx + 60, ly + 10, 8, 8);
+        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        ctx.fillRect(lx + 16, ly + 36, 96, 28);
+        ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+        ctx.fillRect(lx + 28, ly + 42, 20, 12);
+        ctx.fillRect(lx + 76, ly + 42, 20, 12);
+        break;
+      }
+      case 'lm_secret_dossier_vault': {
+        // Tủ Hồ Sơ Sơn Mài Khóa Đồng
+        ctx.fillStyle = PALETTE_12.LACQUER_DEEP;
+        ctx.fillRect(lx + 4, ly + 6, 72, 44);
+        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        ctx.fillRect(lx + 8, ly + 10, 30, 36);
+        ctx.fillRect(lx + 42, ly + 10, 30, 36);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(lx + 34, ly + 24, 4, 6);
+        ctx.fillRect(lx + 42, ly + 24, 4, 6);
+        break;
+      }
+      case 'lm_twin_banyan_tree': {
+        // Cây Đa Tân Trào Cổ Thụ Đôi (08/1945)
+        ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+        ctx.fillRect(lx + 28, ly + 38, 16, 44);
+        ctx.fillRect(lx + 52, ly + 42, 14, 40);
+        ctx.fillStyle = PALETTE_12.INK_PRIMARY;
+        ctx.fillRect(lx + 4, ly + 4, 88, 42);
+        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        ctx.fillRect(lx + 14, ly + 10, 68, 28);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(lx + 26, ly + 16, 44, 12);
+        break;
+      }
+      case 'lm_dinh_tan_trao': {
+        // Mái Đình Tân Trào Lịch Sử 08/1945
+        ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+        ctx.fillRect(lx + 8, ly + 8, 272, 32);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(lx + 4, ly + 36, 280, 6);
+        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        for (let px = 28; px < 268; px += 44) {
+          ctx.fillRect(lx + px, ly + 42, 10, 46);
+        }
+        break;
+      }
+      case 'lm_independence_tribune': {
+        // Lễ Đài Độc Lập Ba Đình 02/09/1945
+        ctx.fillStyle = PALETTE_12.PARCHMENT_WARM;
+        ctx.fillRect(lx + 16, ly + 20, 192, 76);
+        ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+        ctx.fillRect(lx + 32, ly + 28, 160, 20);
+        ctx.fillRect(lx + 88, ly + 4, 48, 88);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(lx + 106, ly, 4, 24);
+        // Cờ đỏ sao vàng tung bay trên lễ đài
+        ctx.fillStyle = PALETTE_12.CRIMSON_VERMILION;
+        ctx.fillRect(lx + 110, ly + 2, 28, 16);
+        ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+        ctx.fillRect(lx + 121, ly + 7, 6, 6);
+        break;
+      }
+      case 'lm_ba_dinh_flag_avenue': {
+        // Hàng Cờ Đỏ Sao Vàng Quảng Trường Ba Đình
+        for (let px = 16; px < 496; px += 64) {
+          ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+          ctx.fillRect(lx + px, ly + 8, 3, 36);
+          ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+          ctx.fillRect(lx + px + 3, ly + 8 + pulse, 18, 11);
+          ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+          ctx.fillRect(lx + px + 10, ly + 12 + pulse, 4, 4);
+        }
+        break;
+      }
+      case 'lm_pack_bicycle_convoy': {
+        // Đoàn Xe Đạp Thồ Điện Biên Phủ (1954)
+        for (let px = 12; px < 116; px += 36) {
+          ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+          ctx.fillRect(lx + px, ly + 24, 8, 8);
+          ctx.fillRect(lx + px + 16, ly + 24, 8, 8);
+          ctx.fillStyle = PALETTE_12.PARCHMENT_WARM;
+          ctx.fillRect(lx + px + 4, ly + 12, 16, 12);
+          ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+          ctx.fillRect(lx + px + 8, ly + 8, 8, 4);
+        }
+        break;
+      }
+      case 'lm_pha_din_command_bunker': {
+        // Hầm Chỉ Huy & Lưới Ngụy Trang Đèo Pha Đin
+        ctx.fillStyle = PALETTE_12.INK_PRIMARY;
+        ctx.fillRect(lx + 12, ly + 12, 296, 64);
+        ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+        for (let px = 20; px < 292; px += 32) {
+          ctx.fillRect(lx + px, ly + 18, 24, 12);
+        }
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(lx + 140, ly + 36, 40, 24);
+        break;
+      }
+      case 'lm_tank_column_1975': {
+        // Đội Hình Xe Tăng Tiến Quân Mùa Xuân 1975
+        for (let px = 12; px < 120; px += 56) {
+          ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+          ctx.fillRect(lx + px, ly + 22, 36, 14);
+          ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+          ctx.fillRect(lx + px + 6, ly + 12, 20, 10);
+          ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+          ctx.fillRect(lx + px + 26, ly + 15, 16, 4);
+          ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+          ctx.fillRect(lx + px + 12, ly + 4, 12, 8);
+        }
+        break;
+      }
+      case 'lm_ho_chi_minh_campaign_hq': {
+        // Sở Chỉ Huy Chiến Dịch Hồ Chí Minh (1975)
+        ctx.fillStyle = PALETTE_12.LACQUER_DEEP;
+        ctx.fillRect(lx + 8, ly + 8, 272, 72);
+        ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+        ctx.fillRect(lx + 24, ly + 14, 240, 14);
+        ctx.fillStyle = PALETTE_12.PARCHMENT_WARM;
+        ctx.fillRect(lx + 96, ly + 34, 96, 36);
+        ctx.fillStyle = PALETTE_12.CRIMSON_VERMILION;
+        ctx.fillRect(lx + 116, ly + 42, 56, 6);
+        break;
+      }
+      case 'lm_doi_moi_arcade_hall': {
+        // Phố Thương Mại & Bảng Tin Đổi Mới 1986
+        ctx.fillStyle = PALETTE_12.LACQUER_DEEP;
+        ctx.fillRect(lx + 8, ly + 8, 336, 72);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(lx + 16, ly + 14, 320, 10);
+        for (let px = 28; px < 320; px += 56) {
+          ctx.fillStyle = PALETTE_12.PARCHMENT_WARM;
+          ctx.fillRect(lx + px, ly + 32, 36, 36);
+          ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+          ctx.fillRect(lx + px + 4, ly + 36, 28, 8);
+        }
+        break;
+      }
+      case 'lm_integration_clock_plaza': {
+        // Đài Phun Nước & Biểu Tượng Hội Nhập
+        ctx.fillStyle = PALETTE_12.INK_SECONDARY;
+        ctx.fillRect(lx + 12, ly + 8, 72, 32);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(lx + 20, ly + 14, 56, 20);
+        ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+        ctx.fillRect(lx + 42, ly + 10 - pulse, 12, 16);
+        break;
+      }
+      case 'lm_solar_lotus_arch_2045': {
+        // Vòm Sen Năng Lượng Mặt Trời 2045
+        ctx.fillStyle = PALETTE_12.LACQUER_DEEP;
+        ctx.fillRect(lx + 16, ly + 16, 288, 80);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(lx + 32, ly + 8, 256, 14);
+        ctx.fillStyle = PALETTE_12.CRIMSON_VERMILION;
+        ctx.fillRect(lx + 96, ly + 26, 128, 16);
+        ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+        for (let px = 48; px < 272; px += 44) {
+          ctx.fillRect(lx + px, ly + 48, 24, 36);
+        }
+        break;
+      }
+      case 'lm_memory_holo_pylons': {
+        // Trụ Quang Học Lưu Trữ Ký Ức Quốc Gia 2045
+        for (let px = 16; px < 148; px += 44) {
+          ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+          ctx.fillRect(lx + px, ly + 28, 20, 24);
+          ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+          ctx.fillRect(lx + px + 4, ly + 8 - pulse, 12, 20);
+          ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+          ctx.fillRect(lx + px + 7, ly + 12 - pulse, 6, 12);
+        }
         break;
       }
     }
