@@ -118,7 +118,7 @@ export const CH2_DISPATCH_NETWORK_PUZZLE: DossierPuzzleDefinition = {
     },
   ],
   progressiveHint:
-    'Gợi ý: Hãy chọn phương án chớp thời cơ Nhật đầu hàng Đồng minh (8/1945), trình tự giành chính quyền Hà Nội (19/8) -> Huế (23/8) -> Sài Gòn (25/8), và Tuyên ngôn Độc lập ngày 02/09/1945.',
+    'Hãy chọn phương án chớp thời cơ Nhật đầu hàng Đồng minh (8/1945), trình tự giành chính quyền Hà Nội (19/8) -> Huế (23/8) -> Sài Gòn (25/8), và Tuyên ngôn Độc lập ngày 02/09/1945.',
   textbookCitation:
     'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục II.3, tr. 95–124',
   provenance: {
@@ -240,7 +240,7 @@ export const CH3_SUPPLY_LOGISTICS_PUZZLE: DossierPuzzleDefinition = {
     },
   ],
   progressiveHint:
-    'Gợi ý: Hãy chọn phương châm "Đánh chắc, tiến chắc" tại Điện Biên Phủ (1954), đường lối hậu phương lớn miền Bắc – tiền tuyến lớn miền Nam (Đại hội III, 1960), và mệnh lệnh "Thần tốc, táo bạo, bất ngờ, chắc thắng" (Xuân 1975).',
+    'Hãy chọn phương châm "Đánh chắc, tiến chắc" tại Điện Biên Phủ (1954), đường lối hậu phương lớn miền Bắc – tiền tuyến lớn miền Nam (Đại hội III, 1960), và mệnh lệnh "Thần tốc, táo bạo, bất ngờ, chắc thắng" (Xuân 1975).',
   textbookCitation:
     'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương II, tr. 127–238',
   provenance: {
@@ -362,7 +362,7 @@ export const CH4_CAUSAL_POLICY_PUZZLE: DossierPuzzleDefinition = {
     },
   ],
   progressiveHint:
-    'Gợi ý: Hãy liên kết Đại hội VI (1986) xóa bỏ cơ chế quan liêu bao cấp -> Cương lĩnh 2011 phát triển kinh tế thị trường định hướng XHCN & hội nhập quốc tế -> Đại hội XIII (2021) đặt mục tiêu đến năm 2045 trở thành nước phát triển, thu nhập cao.',
+    'Hãy liên kết Đại hội VI (1986) xóa bỏ cơ chế quan liêu bao cấp -> Cương lĩnh 2011 phát triển kinh tế thị trường định hướng XHCN & hội nhập quốc tế -> Đại hội XIII (2021) đặt mục tiêu đến năm 2045 trở thành nước phát triển, thu nhập cao.',
   textbookCitation:
     'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương III, tr. 241–398',
   provenance: {
