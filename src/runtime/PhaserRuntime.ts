@@ -11,11 +11,15 @@
  */
 
 import type Phaser from 'phaser';
+import { QUEST_CATALOG } from '../systems/QuestSystem';
 import type {
   Facing4,
   InteractableDefinition,
   NormalizedMapData,
   NpcMapPlacement,
+  ObjectiveTargetResolution,
+  QuestObjective,
+  QuestTargetRef,
   Rect2D,
   Vec2,
 } from '../types/game';
@@ -92,80 +96,348 @@ export interface ObjectiveTargetPosition {
   y: number;
   isPortal: boolean;
   label: string;
+  targetId?: string;
+}
+
+export interface ResolveObjectiveTargetOptions {
+  isLocked?: boolean;
+  prerequisiteText?: string;
+  questFlags?: ReadonlySet<string>;
+}
+
+/**
+ * Phân giải mục tiêu nhiệm vụ theo định danh thực thể chuẩn tắc (`QuestTargetRef`),
+ * trả về trạng thái `resolved | locked | unavailable` rõ ràng và tuyệt đối không
+ * tự ý trỏ vào thực thể đầu tiên ngẫu nhiên khi không khớp ID.
+ */
+export function resolveObjectiveTarget(
+  currentMap: NormalizedMapData,
+  objectiveOrRef: QuestObjective | QuestTargetRef | null | undefined,
+  options: ResolveObjectiveTargetOptions = {}
+): ObjectiveTargetResolution {
+  if (!objectiveOrRef) {
+    return {
+      status: 'unavailable',
+      currentMapId: currentMap.id,
+      position: null,
+      nextActionText: 'Chưa có mục tiêu nhiệm vụ đang theo dõi.',
+      reason: 'no_objective',
+    };
+  }
+
+  const isQuestObj = 'id' in objectiveOrRef && 'title' in objectiveOrRef;
+  const objective = isQuestObj ? (objectiveOrRef as QuestObjective) : undefined;
+  const ref: QuestTargetRef | undefined = isQuestObj
+    ? objective?.targetRef
+    : (objectiveOrRef as QuestTargetRef);
+
+  const targetZoneId = ref?.zoneId ?? objective?.zoneId ?? '';
+  const defaultActionText =
+    objective?.nextActionText ??
+    objective?.hintText ??
+    objective?.title ??
+    'Tiến tới điểm mục tiêu nhiệm vụ.';
+
+  if (options.isLocked) {
+    const prereq =
+      options.prerequisiteText ||
+      'Mục tiêu này đang khóa. Hãy hoàn thành bước điều kiện trước đó.';
+    return {
+      status: 'locked',
+      objectiveId: objective?.id,
+      targetZoneId,
+      currentMapId: currentMap.id,
+      position: null,
+      nextActionText: prereq,
+      prerequisiteText: prereq,
+      reason: 'objective_locked',
+    };
+  }
+
+  if (!targetZoneId || targetZoneId.trim().length === 0 || !ref) {
+    return {
+      status: 'unavailable',
+      objectiveId: objective?.id,
+      targetZoneId,
+      currentMapId: currentMap.id,
+      position: null,
+      nextActionText: 'Mục tiêu nhiệm vụ chưa gắn định danh thực thể chuẩn tắc.',
+      reason: 'missing_target_ref',
+    };
+  }
+
+  // Trường hợp 1: Đang đứng tại đúng bản đồ mục tiêu (`currentMap.id === targetZoneId`)
+  if (currentMap.id === targetZoneId) {
+    if (ref.interactableId) {
+      const interactable = currentMap.interactables.find(
+        (it) => it.id === ref.interactableId
+      );
+      if (interactable) {
+        return {
+          status: 'resolved',
+          objectiveId: objective?.id,
+          targetZoneId,
+          currentMapId: currentMap.id,
+          targetEntityId: interactable.id,
+          targetKind: interactable.kind === 'npc' ? 'npc' : 'interactable',
+          position: {
+            x: interactable.x + (interactable.width ?? 16) * 0.5,
+            y: interactable.y + (interactable.height ?? 16) * 0.5,
+            isPortal: false,
+            label: interactable.label,
+            targetId: interactable.id,
+          },
+          nextActionText: defaultActionText,
+        };
+      }
+    }
+
+    if (ref.npcId) {
+      const npc = currentMap.npcs.find(
+        (n) => n.id === ref.npcId || n.npcId === ref.npcId
+      );
+      if (npc) {
+        return {
+          status: 'resolved',
+          objectiveId: objective?.id,
+          targetZoneId,
+          currentMapId: currentMap.id,
+          targetEntityId: npc.id,
+          targetKind: 'npc',
+          position: {
+            x: npc.x + 8,
+            y: npc.y + 8,
+            isPortal: false,
+            label: npc.name,
+            targetId: npc.id,
+          },
+          nextActionText: defaultActionText,
+        };
+      }
+    }
+
+    if (ref.portalId) {
+      const portal = currentMap.portals.find((p) => p.id === ref.portalId);
+      if (portal) {
+        if (
+          portal.requiresFlag &&
+          options.questFlags &&
+          !options.questFlags.has(portal.requiresFlag)
+        ) {
+          const prereq = `Cổng "${portal.label ?? portal.id}" đang khóa (cần hoàn thành bước điều kiện trước).`;
+          return {
+            status: 'locked',
+            objectiveId: objective?.id,
+            targetZoneId,
+            currentMapId: currentMap.id,
+            targetEntityId: portal.id,
+            targetKind: 'portal',
+            position: null,
+            nextActionText: prereq,
+            prerequisiteText: prereq,
+            reason: 'portal_locked',
+          };
+        }
+        return {
+          status: 'resolved',
+          objectiveId: objective?.id,
+          targetZoneId,
+          currentMapId: currentMap.id,
+          targetEntityId: portal.id,
+          targetKind: 'portal',
+          position: {
+            x: portal.x + portal.width * 0.5,
+            y: portal.y + portal.height * 0.5,
+            isPortal: true,
+            label: portal.label ?? portal.destinationMap,
+            targetId: portal.id,
+          },
+          nextActionText: defaultActionText,
+        };
+      }
+    }
+
+    return {
+      status: 'unavailable',
+      objectiveId: objective?.id,
+      targetZoneId,
+      currentMapId: currentMap.id,
+      targetEntityId: ref.interactableId ?? ref.npcId ?? ref.portalId,
+      position: null,
+      nextActionText: `Không tìm thấy mục tiêu "${ref.interactableId ?? ref.npcId ?? ref.portalId ?? ''}" tại khu vực hiện tại.`,
+      reason: 'entity_not_found_in_zone',
+    };
+  }
+
+  // Trường hợp 2: Mục tiêu nằm ở khu vực khác (`currentMap.id !== targetZoneId`)
+  const unlockedRoute = CHAPTER1_WORLD_GRAPH.findShortestRoute(
+    currentMap.id,
+    targetZoneId,
+    options.questFlags,
+    true
+  );
+
+  if (!unlockedRoute || unlockedRoute.length < 2) {
+    const anyRoute = CHAPTER1_WORLD_GRAPH.findShortestRoute(
+      currentMap.id,
+      targetZoneId,
+      undefined,
+      true
+    );
+    if (anyRoute && anyRoute.length >= 2) {
+      const prereq =
+        options.prerequisiteText ||
+        `Lối đi tới "${targetZoneId}" hiện đang khóa. Hãy hoàn thành nhiệm vụ điều kiện tại khu vực hiện tại trước.`;
+      return {
+        status: 'locked',
+        objectiveId: objective?.id,
+        targetZoneId,
+        currentMapId: currentMap.id,
+        position: null,
+        nextActionText: prereq,
+        prerequisiteText: prereq,
+        reason: 'route_locked_by_flag',
+      };
+    }
+
+    return {
+      status: 'unavailable',
+      objectiveId: objective?.id,
+      targetZoneId,
+      currentMapId: currentMap.id,
+      position: null,
+      nextActionText: `Không có tuyến đường liên thông tới khu vực "${targetZoneId}".`,
+      reason: 'no_interzone_route',
+    };
+  }
+
+  const nextZoneId = unlockedRoute[1];
+  const portal = currentMap.portals.find((p) => p.destinationMap === nextZoneId);
+  if (!portal) {
+    return {
+      status: 'unavailable',
+      objectiveId: objective?.id,
+      targetZoneId,
+      currentMapId: currentMap.id,
+      position: null,
+      nextActionText: `Chưa tìm thấy cổng chuyển cảnh sang "${nextZoneId}".`,
+      reason: 'portal_missing_on_map',
+    };
+  }
+
+  if (
+    portal.requiresFlag &&
+    options.questFlags &&
+    !options.questFlags.has(portal.requiresFlag)
+  ) {
+    const prereq =
+      options.prerequisiteText ||
+      `Cổng sang "${portal.label ?? nextZoneId}" đang khóa (cần điều kiện "${portal.requiresFlag}").`;
+    return {
+      status: 'locked',
+      objectiveId: objective?.id,
+      targetZoneId,
+      currentMapId: currentMap.id,
+      targetEntityId: portal.id,
+      targetKind: 'portal',
+      position: null,
+      nextActionText: prereq,
+      prerequisiteText: prereq,
+      reason: 'portal_requires_flag',
+    };
+  }
+
+  const portalLabel = portal.label ?? nextZoneId;
+  return {
+    status: 'resolved',
+    objectiveId: objective?.id,
+    targetZoneId,
+    currentMapId: currentMap.id,
+    targetEntityId: portal.id,
+    targetKind: 'portal',
+    position: {
+      x: portal.x + portal.width * 0.5,
+      y: portal.y + portal.height * 0.5,
+      isPortal: true,
+      label: portalLabel,
+      targetId: portal.id,
+    },
+    nextActionText: `Di chuyển qua cổng "${portalLabel}" để tiến tới mục tiêu (${defaultActionText})`,
+  };
 }
 
 /**
  * Xác định tọa độ chỉ dẫn không gian (Spatial Objective Marker) trên bản đồ hiện tại `currentMap`
- * hướng tới khu vực nhiệm vụ đang kích hoạt `activeObjectiveZoneId`:
- * - Nếu đang ở đúng bản đồ mục tiêu (`currentMap.id === activeObjectiveZoneId`):
- *   trả về tọa độ của chứng cứ (`evidence`), câu đố (`puzzle`), cổng Climax (`climax_gate`), hoặc NPC đầu tiên.
- * - Nếu đang ở bản đồ khác (`currentMap.id !== activeObjectiveZoneId`):
- *   dùng `CHAPTER1_WORLD_GRAPH.findShortestRoute` tìm bước kế tiếp `nextZoneId = route[1]`
- *   và trả về tâm của cổng (`portal`) dẫn sang `nextZoneId`.
+ * hướng tới mục tiêu nhiệm vụ `activeObjectiveOrZoneId`.
+ * Hỗ trợ truyền trực tiếp `QuestObjective`, `QuestTargetRef`, `objectiveId` (`obj_...`) hoặc `zoneId`.
  */
 export function getObjectiveTargetPosition(
   currentMap: NormalizedMapData,
-  activeObjectiveZoneId: string | null
+  activeObjectiveOrZoneId: QuestObjective | QuestTargetRef | string | null | undefined,
+  options: ResolveObjectiveTargetOptions = {}
 ): ObjectiveTargetPosition | null {
-  if (!activeObjectiveZoneId || activeObjectiveZoneId.trim().length === 0) {
+  if (!activeObjectiveOrZoneId) {
     return null;
   }
 
-  if (currentMap.id === activeObjectiveZoneId) {
-    const priorityInteractable =
-      currentMap.interactables.find(
-        (it) =>
-          it.kind === 'evidence' ||
-          it.kind === 'puzzle' ||
-          it.kind === 'climax_gate'
-      ) ??
-      currentMap.interactables.find((it) => it.kind === 'npc') ??
-      currentMap.interactables[0];
+  if (typeof activeObjectiveOrZoneId === 'object') {
+    const res = resolveObjectiveTarget(currentMap, activeObjectiveOrZoneId, options);
+    return res.status === 'resolved' ? res.position : null;
+  }
 
-    if (priorityInteractable) {
-      return {
-        x: priorityInteractable.x + (priorityInteractable.width ?? 16) * 0.5,
-        y: priorityInteractable.y + (priorityInteractable.height ?? 16) * 0.5,
-        isPortal: false,
-        label: priorityInteractable.label,
-      };
+  const trimmed = activeObjectiveOrZoneId.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  // 1. Nếu chuỗi truyền vào là objectiveId chuẩn tắc (ví dụ: 'obj_ch1_meet_liaison')
+  for (const quest of QUEST_CATALOG) {
+    const foundById = quest.objectives.find((o) => o.id === trimmed);
+    if (foundById) {
+      const res = resolveObjectiveTarget(currentMap, foundById, options);
+      return res.status === 'resolved' ? res.position : null;
     }
+  }
 
-    const firstNpc = currentMap.npcs[0];
-    if (firstNpc) {
-      return {
-        x: firstNpc.x + 8,
-        y: firstNpc.y + 8,
-        isPortal: false,
-        label: firstNpc.name,
-      };
+  // 2. Nếu chuỗi truyền vào là zoneId (ví dụ: 'harbor_square', 'warehouse_interior'):
+  // Tìm mục tiêu nhiệm vụ chính (hoặc phụ) tương ứng với zoneId đó và phân giải theo targetRef chuẩn tắc
+  const sortedQuests = [...QUEST_CATALOG].sort((a, b) =>
+    a.category === b.category ? 0 : a.category === 'main' ? -1 : 1
+  );
+  for (const quest of sortedQuests) {
+    const matchingObj = quest.objectives.find((o) => o.zoneId === trimmed && o.targetRef);
+    if (matchingObj) {
+      const res = resolveObjectiveTarget(currentMap, matchingObj, options);
+      if (res.status === 'resolved') {
+        return res.position;
+      }
     }
-
-    return null;
   }
 
-  const route = CHAPTER1_WORLD_GRAPH.findShortestRoute(
-    currentMap.id,
-    activeObjectiveZoneId
-  );
-  if (!route || route.length < 2) {
-    return null;
+  // 3. Nếu là một zoneId trong đồ thị liên thông chưa có mục tiêu trực tiếp (ví dụ: 'old_street', 'shadow_alley', 'archive_courtyard')
+  if (currentMap.id !== trimmed) {
+    const route = CHAPTER1_WORLD_GRAPH.findShortestRoute(
+      currentMap.id,
+      trimmed,
+      options.questFlags,
+      true
+    );
+    if (route && route.length >= 2) {
+      const nextZoneId = route[1];
+      const portal = currentMap.portals.find((p) => p.destinationMap === nextZoneId);
+      if (portal) {
+        return {
+          x: portal.x + portal.width * 0.5,
+          y: portal.y + portal.height * 0.5,
+          isPortal: true,
+          label: portal.label ?? nextZoneId,
+          targetId: portal.id,
+        };
+      }
+    }
   }
 
-  const nextZoneId = route[1];
-  const portal = currentMap.portals.find(
-    (p) => p.destinationMap === nextZoneId
-  );
-  if (!portal) {
-    return null;
-  }
-
-  return {
-    x: portal.x + portal.width * 0.5,
-    y: portal.y + portal.height * 0.5,
-    isPortal: true,
-    label: portal.label ?? nextZoneId,
-  };
+  return null;
 }
 
 export interface NpcRouteState {

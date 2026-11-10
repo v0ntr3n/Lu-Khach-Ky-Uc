@@ -118,6 +118,14 @@ export class HudController {
         this.handleSettingsPartialUpdate(partial);
       },
       onToggleFullscreen: () => this.handleToggleFullscreen(),
+      onReplayTutorial: () => {
+        if (!this.isMainMenuVisible()) {
+          this.settingsMenu.close();
+          this.restoreFocusAfterClose();
+          this.callbacks.onOverlayStateChange?.(false, 'settings');
+        }
+        this.callbacks.onReplayTutorial?.();
+      },
       onClose: () => {
         const mainMenuOpen = this.isMainMenuVisible();
         if (!mainMenuOpen) {
@@ -785,10 +793,15 @@ export class HudController {
   public updateRpgSystemsState(data: {
     quests: Array<{
       quest: QuestDefinition;
-      objectives: Array<{ objective: QuestObjective; status: QuestObjectiveStatus }>;
+      objectives: Array<{
+        objective: QuestObjective;
+        status: QuestObjectiveStatus;
+        prerequisiteText?: string;
+      }>;
     }>;
     activeObjective: { quest: QuestDefinition; objective: QuestObjective } | null;
     hintText: string;
+    nextActionText?: string;
     allEvidence: EvidenceItem[];
     collectedEvidenceIds: ReadonlySet<string>;
     settings: GameSettings;
@@ -800,7 +813,8 @@ export class HudController {
     this.gameHud.updateObjectiveTracker(
       data.activeObjective,
       data.hintText,
-      data.settings.showHints
+      data.settings.showHints,
+      data.nextActionText
     );
     this.journalPanel.updateState(
       data.quests,

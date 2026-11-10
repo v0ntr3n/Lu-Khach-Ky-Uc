@@ -22,6 +22,7 @@ export interface JournalQuestEntry {
   objectives: Array<{
     objective: QuestObjective;
     status: QuestObjectiveStatus;
+    prerequisiteText?: string;
   }>;
 }
 
@@ -328,11 +329,12 @@ export class JournalPanel {
         const badgeText = STATUS_BADGE[effStatus];
         const titleText =
           effStatus === 'locked'
-            ? 'Mục tiêu tiếp theo (Hoàn thành bước trước để mở khóa)'
+            ? `${item.objective.title} (Chưa mở khóa)`
             : item.objective.title;
         const descText =
           effStatus === 'locked'
-            ? 'Hãy hoàn thành mục tiêu hiện tại để tiếp tục dòng sự kiện lịch sử.'
+            ? item.prerequisiteText ||
+              'Hãy hoàn thành mục tiêu hiện tại để tiếp tục dòng sự kiện lịch sử.'
             : item.objective.description;
 
         objectivesHtml += `

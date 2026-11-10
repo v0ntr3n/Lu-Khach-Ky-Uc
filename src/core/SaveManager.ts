@@ -74,6 +74,7 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
   cameraZoom: 'normal',
   effectsQuality: 'full',
   presenterModeUnlocked: false,
+  tutorialCompleted: false,
 };
 
 export function normalizeSettings(raw?: Partial<GameSettings> | null): GameSettings {
@@ -106,6 +107,8 @@ export function normalizeSettings(raw?: Partial<GameSettings> | null): GameSetti
     effectsQuality,
     presenterModeUnlocked:
       typeof raw?.presenterModeUnlocked === 'boolean' ? raw.presenterModeUnlocked : false,
+    tutorialCompleted:
+      typeof raw?.tutorialCompleted === 'boolean' ? raw.tutorialCompleted : false,
   };
 }
 
@@ -135,6 +138,9 @@ export function normalizeEmbeddedSaveSettings(
   }
   if (raw && raw.presenterModeUnlocked !== undefined) {
     embedded.presenterModeUnlocked = full.presenterModeUnlocked;
+  }
+  if (raw && raw.tutorialCompleted !== undefined) {
+    embedded.tutorialCompleted = full.tutorialCompleted;
   }
 
   return embedded;

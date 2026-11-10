@@ -20,7 +20,10 @@ import {
 import { SoundSynth } from '../engine/SoundSynth';
 import { CameraController } from '../runtime/CameraController';
 import { getAllBuiltInMaps, getBuiltInMap } from '../runtime/MapLoader';
-import { computeEntityDepth } from '../runtime/PhaserRuntime';
+import {
+  computeEntityDepth,
+  resolveObjectiveTarget,
+} from '../runtime/PhaserRuntime';
 import { SceneTransition } from '../runtime/SceneTransition';
 import { DialogueSystem } from '../systems/DialogueSystem';
 import { EvidenceSystem } from '../systems/EvidenceSystem';
@@ -38,6 +41,7 @@ import type {
   GameSettings,
   MilestoneArtifact,
   NormalizedMapData,
+  ObjectiveTargetResolution,
   PatrolActorRenderState,
   PortalDefinition,
   Rect2D,
@@ -52,6 +56,7 @@ import { GameShell } from '../ui/GameShell';
 import { HudController } from '../ui/HudController';
 import { LoadingScreen } from '../ui/LoadingScreen';
 import { MainMenu } from '../ui/MainMenu';
+import { TutorialController } from '../ui/TutorialController';
 import { CollisionWorld } from '../world/CollisionWorld';
 import { GameStore } from './GameStore';
 import { InputManager } from './InputManager';
@@ -69,6 +74,7 @@ export class LuKhachKyUcGame {
   public readonly openingFracture: OpeningFractureController;
   public readonly hud: HudController;
   public readonly mainMenu: MainMenu;
+  public readonly tutorialController: TutorialController;
   public readonly interactionSystem: InteractionSystem;
   public readonly questSystem: QuestSystem;
   public readonly dialogueSystem: DialogueSystem;
@@ -208,11 +214,13 @@ export class LuKhachKyUcGame {
       },
       onToggleMap: () => {
         if (!this.canOpenGameplayHotkeyOverlay()) return;
+        this.tutorialController?.recordAction('map');
         this.syncHudWithState();
         this.hud.toggleWorldMapModal();
       },
       onToggleJournal: () => {
         if (!this.canOpenGameplayHotkeyOverlay()) return;
+        this.tutorialController?.recordAction('journal');
         this.syncHudWithState();
         this.hud.toggleJournalModal();
       },
@@ -223,6 +231,7 @@ export class LuKhachKyUcGame {
       },
       onTogglePause: () => {
         if (!this.canOpenGameplayHotkeyOverlay()) return;
+        this.tutorialController?.recordAction('hint');
         this.syncHudWithState();
         this.hud.togglePauseModal();
       },
@@ -239,6 +248,7 @@ export class LuKhachKyUcGame {
       },
       onToggleHints: () => {
         if (!this.isInGameplaySession()) return;
+        this.tutorialController?.recordAction('hint');
         const nextShowHints = !this.store.settings.showHints;
         this.updateSettings({ showHints: nextShowHints });
         this.hud.showToast(
@@ -266,8 +276,27 @@ export class LuKhachKyUcGame {
           this.hud.closeAllOverlays();
           return;
         }
+        this.tutorialController?.recordAction('hint');
         this.syncHudWithState();
         this.hud.togglePauseModal(true);
+      },
+    });
+
+    this.tutorialController = new TutorialController({
+      onTutorialCompletedChange: (completed: boolean) => {
+        this.updateSettings({ tutorialCompleted: completed });
+        if (completed) {
+          this.hud?.showToast(
+            '✓ Đã hoàn tất hướng dẫn tân thủ! Bạn có thể xem lại bất cứ lúc nào trong Cài đặt.'
+          );
+        }
+      },
+      onPlayUiSound: (kind) => {
+        if (kind === 'confirm') {
+          this.sound.playMenuConfirm();
+        } else {
+          this.sound.playMenuCancel();
+        }
       },
     });
 
@@ -283,6 +312,15 @@ export class LuKhachKyUcGame {
         return muted;
       },
       onOverlayStateChange: (isOpen: boolean, overlayMode: GameMode) => {
+        if (overlayMode === 'journal' && isOpen) {
+          this.tutorialController.recordAction('journal');
+        } else if (overlayMode === 'map' && isOpen) {
+          this.tutorialController.recordAction('map');
+        } else if (overlayMode === 'paused' && isOpen) {
+          this.tutorialController.recordAction('hint');
+        }
+        this.tutorialController.setOverlaySuppressed(isOpen);
+
         if (
           this.store.getLifecycle() === 'MAIN_MENU' ||
           this.store.getLifecycle() === 'LOADING'
@@ -315,6 +353,16 @@ export class LuKhachKyUcGame {
       onToggleFullscreen: () => this.toggleFullscreen(),
       onUpdateSettings: (partial: Partial<GameSettings>) => {
         this.updateSettings(partial);
+      },
+      onReplayTutorial: () => {
+        this.hud.closeAllOverlays();
+        if (this.isInGameplaySession()) {
+          this.store.setMode('exploring');
+          this.tutorialController.setGameplayVisible(true);
+          this.tutorialController.setOverlaySuppressed(false);
+        }
+        this.tutorialController.replay();
+        this.hud.showToast('◆ Đã mở lại Hướng dẫn Tân thủ từ Bước 1/5.');
       },
       onSubmitDossierPuzzle: (
         puzzleId: string,
@@ -486,6 +534,8 @@ export class LuKhachKyUcGame {
     this.hud.closeAllOverlays();
     this.hud.setHudVisible(false);
     this.hud.updateInteractionPrompt(null);
+    this.tutorialController.setGameplayVisible(false);
+    this.tutorialController.setOverlaySuppressed(false);
     this.input.clearKeys();
     this.store.setMode('main_menu');
     this.mainMenu.show(this.getSaveSummary(), this.store.settings.reducedMotion);
@@ -513,7 +563,10 @@ export class LuKhachKyUcGame {
     }
 
     this.sound.unlockAudio();
-    const preservedSettings = this.saveManager.normalizeSettings(this.store.settings);
+    const preservedSettings = this.saveManager.normalizeSettings({
+      ...this.store.settings,
+      tutorialCompleted: false,
+    });
 
     this.openingFracture.cancel();
     this.dialogueSystem.closeDialogue();
@@ -521,6 +574,7 @@ export class LuKhachKyUcGame {
     this.mainMenu.hide();
     this.hud.setHudVisible(false);
     this.hud.updateInteractionPrompt(null);
+    this.tutorialController.setGameplayVisible(false);
     this.input.clearKeys();
 
     this.saveManager.clearSave();
@@ -570,6 +624,9 @@ export class LuKhachKyUcGame {
         }
         this.store.setMode('exploring');
         this.input.clearKeys();
+        this.tutorialController.setGameplayVisible(true);
+        this.tutorialController.setOverlaySuppressed(false);
+        this.tutorialController.startIfFirstPlay(false);
         this.syncHudWithState();
       },
     });
@@ -597,6 +654,7 @@ export class LuKhachKyUcGame {
     this.mainMenu.hide();
     this.hud.setHudVisible(false);
     this.hud.updateInteractionPrompt(null);
+    this.tutorialController.setGameplayVisible(false);
     this.input.clearKeys();
 
     this.puzzleAttemptCounts.clear();
@@ -657,6 +715,11 @@ export class LuKhachKyUcGame {
         }
         this.store.setMode('exploring');
         this.input.clearKeys();
+        this.tutorialController.setGameplayVisible(true);
+        this.tutorialController.setOverlaySuppressed(false);
+        this.tutorialController.startIfFirstPlay(
+          Boolean(this.store.settings.tutorialCompleted ?? true)
+        );
         this.syncHudWithState();
       },
     });
@@ -1237,6 +1300,36 @@ export class LuKhachKyUcGame {
     this.togglePresenterMode();
   }
 
+  public getActiveObjectiveResolution(): ObjectiveTargetResolution {
+    const activeObjective = this.questSystem.getCurrentActiveObjective(
+      this.currentChapter.id,
+      this.store
+    );
+    if (!activeObjective) {
+      const nextLocked = this.questSystem.getNextLockedObjective(
+        this.currentChapter.id,
+        this.store
+      );
+      if (nextLocked) {
+        return resolveObjectiveTarget(this.currentMap, nextLocked.objective, {
+          isLocked: true,
+          prerequisiteText: this.questSystem.getPrerequisiteSummary(
+            nextLocked.objective,
+            this.store
+          ),
+          questFlags: this.store.questFlags,
+        });
+      }
+      return resolveObjectiveTarget(this.currentMap, null, {
+        questFlags: this.store.questFlags,
+      });
+    }
+
+    return resolveObjectiveTarget(this.currentMap, activeObjective.objective, {
+      questFlags: this.store.questFlags,
+    });
+  }
+
   public handleInteractAction(): boolean {
     if (!this.store.isWorldInputAllowed()) {
       return false;
@@ -1244,6 +1337,9 @@ export class LuKhachKyUcGame {
 
     const chapter = this.currentChapter;
     const candidate = this.findNearestInteractionCandidate();
+    if (candidate) {
+      this.tutorialController.recordAction('interact');
+    }
 
     // 1. Tương tác với Portal / Cửa ra vào
     if (candidate?.kind === 'portal' && candidate.portal) {
@@ -1307,6 +1403,7 @@ export class LuKhachKyUcGame {
     // 5. Tương tác với Cột mốc lịch sử hoặc NPC / Tư liệu gắn với cột mốc
     const nearbyMilestone = candidate?.milestone ?? this.findNearbyMilestone();
     if (nearbyMilestone) {
+      this.tutorialController.recordAction('interact');
       this.store.collectMilestone(nearbyMilestone.roman);
       if (nearbyMilestone.roman === 'I' && !this.store.isPresenterMode) {
         this.store.questFlags.add('ch1_met_liaison');
@@ -1386,6 +1483,7 @@ export class LuKhachKyUcGame {
       Math.abs(this.playerX - chapter.climax.gateWorldX) <= 38;
 
     if (nearClimaxGate) {
+      this.tutorialController.recordAction('interact');
       const check = this.store.canTriggerChapterClimax(chapter);
       if (!check.allowed) {
         this.hud.showToast(
@@ -1583,15 +1681,26 @@ export class LuKhachKyUcGame {
     const eraQuests = this.questSystem.getQuestsForEra(chapter.id);
     const questsWithStatus = eraQuests.map((quest) => ({
       quest,
-      objectives: quest.objectives.map((objective) => ({
-        objective,
-        status: this.questSystem.getObjectiveStatus(objective, this.store),
-      })),
+      objectives: quest.objectives.map((objective) => {
+        const status = this.questSystem.getObjectiveStatus(objective, this.store);
+        return {
+          objective,
+          status,
+          prerequisiteText:
+            status === 'locked'
+              ? this.questSystem.getPrerequisiteSummary(objective, this.store)
+              : undefined,
+        };
+      }),
     }));
     const activeObjective = this.questSystem.getCurrentActiveObjective(
       chapter.id,
       this.store
     );
+    const resolution = this.getActiveObjectiveResolution();
+    const nextActionText =
+      resolution.nextActionText ||
+      this.questSystem.getNextActionForActiveObjective(chapter.id, this.store);
     const hintText = this.questSystem.getHintForActiveObjective(
       chapter.id,
       this.store
@@ -1600,6 +1709,7 @@ export class LuKhachKyUcGame {
     this.hud.updateRpgSystemsState({
       quests: questsWithStatus,
       activeObjective,
+      nextActionText,
       hintText,
       allEvidence: [...this.evidenceSystem.getAllEvidence()],
       collectedEvidenceIds: this.store.collectedEvidence,
@@ -1785,6 +1895,8 @@ export class LuKhachKyUcGame {
       const dy = this.useLegacyRenderer ? 0 : moveVec.y * speed * dt;
 
       if (dx !== 0 || dy !== 0) {
+        const prevX = this.playerX;
+        const prevY = this.playerY;
         if (this.useLegacyRenderer) {
           this.playerX = Math.max(24, Math.min(chapter.worldWidth - 28, this.playerX + dx));
         } else {
@@ -1793,6 +1905,10 @@ export class LuKhachKyUcGame {
           this.playerX = resolved.x + 6;
           this.playerY = resolved.y + 6;
         }
+        this.tutorialController.recordMovementDelta(
+          this.playerX - prevX,
+          this.playerY - prevY
+        );
 
         if (Math.abs(moveVec.x) >= Math.abs(moveVec.y) && moveVec.x !== 0) {
           this.playerFacing = moveVec.x < 0 ? 'left' : 'right';
