@@ -467,7 +467,7 @@ export class AssetLoader {
 
     if (typeof Image !== 'undefined') {
       const img = new Image(desc.meta.size.w, desc.meta.size.h);
-      img.src = `/assets/atlases/${desc.meta.image}`;
+      img.src = `./assets/atlases/${desc.meta.image}`;
       this.textureCache.set(atlasId, img);
       return img;
     }
