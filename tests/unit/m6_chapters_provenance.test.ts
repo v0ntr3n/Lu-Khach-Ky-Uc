@@ -96,7 +96,7 @@ describe('M6 Additional Chapters (II–IV), Distinct Era Mechanics & Provenance 
 
       for (const p of puzzles) {
         expect(p.slots).toHaveLength(3);
-        expect(p.progressiveHint).toContain('Giáo trình 2021');
+        expect(p.progressiveHint).not.toContain('Giáo trình');
         expect(p.textbookCitation).toContain(
           'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021)'
         );
