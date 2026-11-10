@@ -660,15 +660,29 @@ export class MainMenu {
     ctx.fillStyle = PALETTE.lacquerElevated;
     ctx.fillRect(0, 108, BUFFER_W, WATER_Y - 108);
 
-    // Trăng lưỡi liềm mờ sau sương cảng (góc phải trên)
+    // Trăng lưỡi liềm cong mềm sau sương cảng (góc phải trên)
     const moonX = Math.round(338 - panX * 0.12);
-    const moonY = 34;
-    ctx.fillStyle = 'rgba(212, 165, 93, 0.12)';
-    ctx.fillRect(moonX - 10, moonY - 10, 22, 22);
+    const moonY = 30;
+    ctx.fillStyle = 'rgba(212, 165, 93, 0.07)';
+    ctx.fillRect(moonX - 8, moonY - 3, 20, 18);
+    ctx.fillRect(moonX - 5, moonY - 5, 14, 22);
     ctx.fillStyle = PALETTE.parchmentWarm;
-    ctx.fillRect(moonX - 4, moonY - 5, 9, 10);
-    ctx.fillStyle = PALETTE.lacquerVoid;
-    ctx.fillRect(moonX - 1, moonY - 5, 8, 9);
+    const crescentRows: ReadonlyArray<readonly [number, number]> = [
+      [3, 4],
+      [1, 4],
+      [0, 3],
+      [-1, 3],
+      [-1, 2],
+      [-1, 2],
+      [-1, 3],
+      [0, 3],
+      [1, 4],
+      [3, 5],
+      [5, 4],
+    ];
+    crescentRows.forEach(([dx, w], rowIdx) => {
+      ctx.fillRect(moonX + dx, moonY + rowIdx, w, 1);
+    });
 
     // 2. Dãy núi Cửu Long (Kowloon Ridge) xa mờ với parallax 0.22x
     const ridgeOffset = Math.round(-panX * 0.22);

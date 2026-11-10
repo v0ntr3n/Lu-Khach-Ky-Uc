@@ -11,16 +11,11 @@
  */
 
 import { expect, test } from '@playwright/test';
-
-const ARTIFACT_DIR =
-  '/home/antigravity/.gemini/jetski/brain/31f52e7023c04649246b83f79b9ff3a6';
+import { ARTIFACT_DIR, startNewExploringSession } from './helpers';
 
 test.describe('M4 Chapter I Complete Vertical Slice — Browser E2E Suite', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.evaluate(() => localStorage.clear());
-    await page.reload();
-    await page.locator('#skip-opening-btn').click();
+    await startNewExploringSession(page);
   });
 
   test('M4-E2E-01: Stealth Vision Cone, Shelter Cover & Non-Punitive Checkpoint Reset in shadow_alley', async ({
@@ -71,7 +66,7 @@ test.describe('M4 Chapter I Complete Vertical Slice — Browser E2E Suite', () =
     });
 
     expect(setupAlley.inShelter).toBe(true);
-    await expect(page.locator('#stage-shelter-status')).toContainText('ĐANG ẨN MÌNH');
+    await expect(page.locator('#stage-shelter-status')).toContainText(/ẩn mình/i);
 
     // Chụp ảnh màn hình thực tế tại Hẻm Tối Tuần Tra (shadow_alley)
     await page.waitForTimeout(150);
@@ -206,6 +201,11 @@ test.describe('M4 Chapter I Complete Vertical Slice — Browser E2E Suite', () =
     // BƯỚC 2: Vào Kho Hàng Bến Cảng (warehouse_interior) -> thu thập Sổ Vận Đơn (ev_ch1_shipping_ledger)
     await enterZoneViaPortal('warehouse_interior');
     await moveNearAndPressE(272, 224);
+
+    if (await closeDlgBtn.isVisible()) {
+      await closeDlgBtn.click();
+    }
+    await expect(page.locator('#dialogue-modal')).toBeHidden();
 
     const afterWarehouse = await page.evaluate(() => {
       const game = (

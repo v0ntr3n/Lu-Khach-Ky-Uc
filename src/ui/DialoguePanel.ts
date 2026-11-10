@@ -37,6 +37,11 @@ function setOptionalBlockText(el: HTMLElement | null, value: string): void {
   }
 }
 
+function formatQuotedSpeech(raw: string): string {
+  const trimmed = raw.trim().replace(/^[“"']+|[”"']+$/g, '').trim();
+  return `“${trimmed}”`;
+}
+
 export class DialoguePanel {
   private callbacks: DialoguePanelCallbacks;
 
@@ -123,7 +128,7 @@ export class DialoguePanel {
     if (speakerEl) speakerEl.textContent = node.speaker;
     if (roleEl) roleEl.textContent = node.role;
 
-    const formattedSpeech = `“${node.text}”`;
+    const formattedSpeech = formatQuotedSpeech(node.text);
     if (textEl) {
       textEl.textContent = formattedSpeech;
     } else if (bodyEl) {
@@ -164,7 +169,7 @@ export class DialoguePanel {
         `MỐC LA MÃ ${milestone.roman} (${milestone.year}) · ${milestone.title}`
       );
 
-      const line = node ? `“${node.text}”` : `“${milestone.dialogue}”`;
+      const line = formatQuotedSpeech(node ? node.text : milestone.dialogue);
       if (textEl) {
         textEl.textContent = line;
       } else if (bodyEl) {

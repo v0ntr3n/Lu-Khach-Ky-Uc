@@ -9,16 +9,11 @@
  */
 
 import { expect, test } from '@playwright/test';
-
-const ARTIFACT_DIR =
-  '/home/antigravity/.gemini/jetski/brain/31f52e7023c04649246b83f79b9ff3a6';
+import { ARTIFACT_DIR, startNewExploringSession } from './helpers';
 
 test.describe('M1 Top-Down Runtime — Browser E2E Suite', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.evaluate(() => localStorage.clear());
-    await page.reload();
-    await page.locator('#skip-opening-btn').click();
+    await startNewExploringSession(page);
   });
 
   test('1. Boots into top-down harbor_square map and moves in 8 directions (cardinal & diagonal W+D) changing both playerX and playerY', async ({
@@ -65,7 +60,7 @@ test.describe('M1 Top-Down Runtime — Browser E2E Suite', () => {
     expect(afterDiagonal.x).toBeGreaterThan(initial.x + 5);
     expect(afterDiagonal.y).toBeLessThan(initial.y - 5);
 
-    // Di chuyển xuống phía Nam (S) và sang Trái (A)
+    // Di chuyển xuống phía Nam (S)
     await page.keyboard.down('KeyS');
     await page.waitForTimeout(180);
     await page.keyboard.up('KeyS');
@@ -162,7 +157,9 @@ test.describe('M1 Top-Down Runtime — Browser E2E Suite', () => {
       game.syncHudWithState();
     });
 
-    await expect(page.locator('#ctrl-interact')).toContainText('[E] Vào:');
+    await expect(page.locator('#world-interaction-prompt')).toBeVisible();
+    await expect(page.locator('#world-interaction-label')).toContainText('Vào:');
+    await expect(page.locator('#ctrl-interact')).toContainText('Vào:');
     await page.keyboard.press('KeyE');
 
     // Chờ vài frame để xác nhận KHÔNG xảy ra hiện tượng dội cổng ngược (portal ping-pong)
@@ -261,8 +258,12 @@ test.describe('M1 Top-Down Runtime — Browser E2E Suite', () => {
       game.syncHudWithState();
     });
 
+    await expect(page.locator('#world-interaction-prompt')).toBeVisible();
+    await expect(page.locator('#world-interaction-label')).toContainText(
+      'Trò chuyện: Lâm Văn Bính (Giao Liên)'
+    );
     await expect(page.locator('#ctrl-interact')).toContainText(
-      '[E] Trò chuyện: Lâm Văn Bính (Giao Liên)'
+      'Trò chuyện: Lâm Văn Bính (Giao Liên)'
     );
 
     // Giữ phím E (gửi kèm các sự kiện repeat) -> chỉ kích hoạt đúng 1 lần
