@@ -1149,6 +1149,10 @@ export class LuKhachKyUcGame {
     );
     this.persistProgress();
     this.syncHudWithState();
+    this.hud.showRegionEntryBanner(
+      this.currentMap.title || this.currentChapter.locationLabel,
+      `${this.currentChapter.chapterNum} · ${this.currentChapter.years}`
+    );
     this.hud.showToast(`◆ Đã chuyển tới: ${this.currentMap.title}`);
     return true;
   }
@@ -1187,6 +1191,10 @@ export class LuKhachKyUcGame {
     this.input.clearKeys();
     this.persistProgress();
     this.syncHudWithState();
+    this.hud.showRegionEntryBanner(
+      this.currentMap.title || this.currentChapter.locationLabel,
+      `${this.currentChapter.chapterNum} · ${this.currentChapter.years}`
+    );
     this.hud.showToast(`◆ Đã dịch chuyển nhanh tới: ${this.currentMap.title}`);
     return true;
   }
@@ -1249,6 +1257,10 @@ export class LuKhachKyUcGame {
       this.persistProgress();
     }
     this.syncHudWithState();
+    this.hud.showRegionEntryBanner(
+      this.currentMap.title || this.currentChapter.locationLabel,
+      `${this.currentChapter.chapterNum} · ${this.currentChapter.years}`
+    );
     this.hud.showToast(
       `Đã bước qua vết nứt thời gian tới ${this.currentChapter.chapterNum} (${this.currentChapter.years})`
     );
@@ -1864,6 +1876,29 @@ export class LuKhachKyUcGame {
       this.hasPatrolScheduleBonus()
     );
     const routeState = this.getTrackedRouteState();
+    const activeQuestTargetIds = new Set<string>();
+    const optionalTargetIds = new Set<string>();
+    for (const q of this.questSystem.getQuestsForEra(this.currentChapter.id)) {
+      for (const obj of q.objectives) {
+        const status = this.questSystem.getObjectiveStatus(obj, this.store);
+        if (status === 'active' && obj.targetRef) {
+          const refId =
+            obj.targetRef.npcId ??
+            obj.targetRef.interactableId ??
+            obj.targetRef.portalId;
+          if (refId) {
+            if (q.category === 'main' && !obj.isOptional) {
+              activeQuestTargetIds.add(refId);
+            } else {
+              optionalTargetIds.add(refId);
+            }
+          }
+          if (obj.targetRef.milestoneId) {
+            activeQuestTargetIds.add(obj.targetRef.milestoneId);
+          }
+        }
+      }
+    }
 
     const renderState: RenderState = {
       chapter: this.currentChapter,
@@ -1883,6 +1918,17 @@ export class LuKhachKyUcGame {
       mapData: this.useLegacyRenderer ? undefined : this.currentMap,
       nearbyPrompt: candidate?.promptText ?? null,
       nearbyTargetPos: candidate ? { x: candidate.x, y: candidate.y } : null,
+      trackedTargetPos: routeState.resolution.position
+        ? { x: routeState.resolution.position.x, y: routeState.resolution.position.y }
+        : null,
+      trackedTargetId:
+        routeState.resolution.targetEntityId ??
+        routeState.resolution.position?.targetId ??
+        null,
+      activeQuestTargetIds,
+      optionalTargetIds,
+      routePoints: routeState.path?.points,
+      showHints: this.store.settings.showHints,
       debugOverlay: this.store.debugOverlayEnabled,
       patrolActors,
       reducedMotion: this.store.settings.reducedMotion,
@@ -2045,6 +2091,10 @@ export class LuKhachKyUcGame {
             );
             this.persistProgress();
             this.syncHudWithState();
+            this.hud.showRegionEntryBanner(
+              this.currentMap.title || this.currentChapter.locationLabel,
+              `${this.currentChapter.chapterNum} · ${this.currentChapter.years}`
+            );
             this.hud.showToast(`◆ Đã chuyển tới: ${this.currentMap.title}`);
             return;
           }

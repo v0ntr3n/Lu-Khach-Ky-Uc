@@ -53,6 +53,12 @@ export interface RenderState {
   mapData?: NormalizedMapData;
   nearbyPrompt?: string | null;
   nearbyTargetPos?: Vec2 | null;
+  trackedTargetPos?: Vec2 | null;
+  trackedTargetId?: string | null;
+  activeQuestTargetIds?: Set<string>;
+  optionalTargetIds?: Set<string>;
+  routePoints?: Vec2[];
+  showHints?: boolean;
   debugOverlay?: boolean;
   patrolActors?: PatrolActorRenderState[];
   reducedMotion?: boolean;
@@ -306,6 +312,37 @@ export class PixelRenderer {
       ctx.fillRect(px + 2, py + ph - 4, pw - 4, 2);
     }
 
+    // 2.5. Dấu chân dẫn đường A* trên mặt đất (Breadcrumb Chevrons) khi bật chỉ dẫn
+    if (
+      state.showHints !== false &&
+      state.routePoints &&
+      state.routePoints.length > 1
+    ) {
+      this.drawRouteBreadcrumbs(
+        state.routePoints,
+        cameraX,
+        cameraY,
+        viewW,
+        viewH,
+        timeSec,
+        reducedMotion
+      );
+    }
+
+    const isTrackedEntity = (id?: string, x?: number, y?: number): boolean => {
+      if (id && state.trackedTargetId && id === state.trackedTargetId) {
+        return true;
+      }
+      if (
+        state.trackedTargetPos &&
+        typeof x === 'number' &&
+        typeof y === 'number'
+      ) {
+        return Math.hypot(x - state.trackedTargetPos.x, y - state.trackedTargetPos.y) <= 18;
+      }
+      return false;
+    };
+
     // 3. Y-Depth Sorting: Structures, Landmarks, Interactables, Milestones, NPCs, và Traveler
     const depthQueue: Array<{ footY: number; draw: () => void }> = [];
 
@@ -350,6 +387,12 @@ export class PixelRenderer {
       const iy = Math.round(inter.y - cameraY);
       if (ix < -32 || ix > viewW + 32 || iy < -32 || iy > viewH + 32) continue;
 
+      const tracked = isTrackedEntity(inter.id, inter.x, inter.y);
+      const activeMain =
+        state.activeQuestTargetIds?.has(inter.id) ||
+        (inter.milestoneId ? state.activeQuestTargetIds?.has(inter.milestoneId) : false);
+      const optionalLore = state.optionalTargetIds?.has(inter.id) ?? false;
+
       if (inter.kind === 'climax_gate') {
         depthQueue.push({
           footY: inter.y + 8,
@@ -367,12 +410,25 @@ export class PixelRenderer {
             ctx.fillRect(ix - 8, iy - 28, 16, 26);
             ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
             ctx.fillRect(ix - 3, iy - 24, 6 + pulse, 20);
+            if (tracked || activeMain) {
+              this.drawOverheadQuestMarker(
+                ix,
+                iy - 38,
+                tracked ? 'tracked' : 'main',
+                timeSec,
+                reducedMotion
+              );
+            }
           },
         });
       } else if (inter.kind === 'puzzle') {
         depthQueue.push({
           footY: inter.y + 6,
           draw: () => {
+            if (tracked) {
+              ctx.fillStyle = 'rgba(212, 165, 93, 0.24)';
+              ctx.fillRect(ix - 14, iy - 2, 28, 6);
+            }
             // Bàn Kiểm Định Hồ Sơ Lịch Sử (Ornate Parchment Dossier Table & Gold Seal)
             ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
             ctx.fillRect(ix - 12, iy - 8, 24, 12);
@@ -384,6 +440,15 @@ export class PixelRenderer {
             ctx.fillRect(ix - 2, iy - 4, 4, 3);
             ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
             ctx.fillRect(ix - 1, iy - 13, 2, 4);
+            if (tracked || activeMain) {
+              this.drawOverheadQuestMarker(
+                ix,
+                iy - 18,
+                tracked ? 'tracked' : 'main',
+                timeSec,
+                reducedMotion
+              );
+            }
           },
         });
       } else if (inter.kind === 'evidence') {
@@ -396,6 +461,10 @@ export class PixelRenderer {
         depthQueue.push({
           footY: inter.y + 4,
           draw: () => {
+            if (tracked && !isDone) {
+              ctx.fillStyle = 'rgba(212, 165, 93, 0.26)';
+              ctx.fillRect(ix - 9, iy - 1, 18, 5);
+            }
             ctx.fillStyle = isDone ? PALETTE_12.CRIMSON_SEAL : PALETTE_12.BRONZE_MUTED;
             ctx.fillRect(ix - 7, iy - 5, 14, 7);
             drawArtifactSprite(
@@ -406,18 +475,14 @@ export class PixelRenderer {
               isDone,
               reducedMotion ? 0 : timeSec
             );
-            // Huy hiệu điểm ảnh sắc nét báo hiệu cột mốc (thay thế chữ 7px bị nhòe)
-            if (inter.milestoneId) {
-              if (isDone) {
-                ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
-                ctx.fillRect(ix - 3, iy - 24, 6, 5);
-                ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
-                ctx.fillRect(ix - 1, iy - 22, 2, 2);
-              } else {
-                ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
-                ctx.fillRect(ix - 1, iy - 25, 2, 5);
-                ctx.fillRect(ix - 2, iy - 23, 4, 1);
-              }
+            if (isDone) {
+              this.drawOverheadQuestMarker(ix, iy - 22, 'completed', timeSec, reducedMotion);
+            } else if (tracked) {
+              this.drawOverheadQuestMarker(ix, iy - 24, 'tracked', timeSec, reducedMotion);
+            } else if (activeMain || inter.milestoneId) {
+              this.drawOverheadQuestMarker(ix, iy - 23, 'main', timeSec, reducedMotion);
+            } else if (optionalLore) {
+              this.drawOverheadQuestMarker(ix, iy - 22, 'optional', timeSec, reducedMotion);
             }
           },
         });
@@ -427,6 +492,9 @@ export class PixelRenderer {
           draw: () => {
             ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
             ctx.fillRect(ix - 6, iy - 2, 12, 3);
+            if (tracked) {
+              this.drawOverheadQuestMarker(ix, iy - 12, 'tracked', timeSec, reducedMotion);
+            }
           },
         });
       } else if (inter.kind === 'checkpoint') {
@@ -454,9 +522,28 @@ export class PixelRenderer {
       if (nx < -28 || nx > viewW + 28 || ny < -28 || ny > viewH + 28) continue;
 
       const role = this.resolveNpcRole(npc);
+      const tracked =
+        isTrackedEntity(npc.id, npc.x, npc.y) ||
+        isTrackedEntity(npc.npcId, npc.x, npc.y);
+      const isMilestoneDone = npc.milestoneRoman
+        ? collectedMilestones.has(npc.milestoneRoman)
+        : false;
+      const activeMain =
+        state.activeQuestTargetIds?.has(npc.id) ||
+        state.activeQuestTargetIds?.has(npc.npcId) ||
+        (npc.milestoneRoman ? !isMilestoneDone : false);
+      const optionalLore =
+        state.optionalTargetIds?.has(npc.id) ||
+        state.optionalTargetIds?.has(npc.npcId) ||
+        Boolean(npc.dialogueId && !npc.milestoneRoman && !activeMain);
+
       depthQueue.push({
         footY: npc.y,
         draw: () => {
+          if (tracked && !isMilestoneDone) {
+            ctx.fillStyle = 'rgba(212, 165, 93, 0.28)';
+            ctx.fillRect(nx - 8, ny - 2, 16, 4);
+          }
           drawCharacter4Dir(
             ctx,
             role,
@@ -468,6 +555,15 @@ export class PixelRenderer {
             timeSec,
             reducedMotion
           );
+          if (isMilestoneDone) {
+            this.drawOverheadQuestMarker(nx, ny - 26, 'completed', timeSec, reducedMotion);
+          } else if (tracked) {
+            this.drawOverheadQuestMarker(nx, ny - 27, 'tracked', timeSec, reducedMotion);
+          } else if (activeMain) {
+            this.drawOverheadQuestMarker(nx, ny - 26, 'main', timeSec, reducedMotion);
+          } else if (optionalLore) {
+            this.drawOverheadQuestMarker(nx, ny - 25, 'optional', timeSec, reducedMotion);
+          }
         },
       });
     }
@@ -552,6 +648,19 @@ export class PixelRenderer {
       this.drawCenteredMapBorder(cameraX, cameraY, mapData.widthPx, mapData.heightPx);
     }
 
+    // 6.8. Mũi tên chỉ báo rìa màn hình khi mục tiêu đang theo dõi nằm ngoài khung nhìn camera
+    if (state.showHints !== false && state.trackedTargetPos) {
+      this.drawOffscreenTargetIndicator(
+        state.trackedTargetPos,
+        cameraX,
+        cameraY,
+        viewW,
+        viewH,
+        timeSec,
+        reducedMotion
+      );
+    }
+
     // 7. Đại cảnh Climax nếu kích hoạt
     if (climaxBurstProgress > 0) {
       this.drawClimaxSetPiece(chapter, climaxBurstProgress, timeSec);
@@ -578,6 +687,125 @@ export class PixelRenderer {
       ctx.fillRect(0, 0, viewW, viewH);
       ctx.restore();
     }
+  }
+
+  /**
+   * Vẽ chuỗi dấu dẫn đường A* bằng đồng sáng trên mặt đất (tối đa 7 bước phía trước Lữ Khách).
+   */
+  private drawRouteBreadcrumbs(
+    routePoints: Vec2[],
+    cameraX: number,
+    cameraY: number,
+    viewW: number,
+    viewH: number,
+    timeSec: number,
+    reducedMotion: boolean
+  ): void {
+    const { ctx } = this;
+    const maxSteps = Math.min(routePoints.length - 1, 8);
+    const activePulseIdx = reducedMotion ? 1 : Math.floor(timeSec * 4) % Math.max(1, maxSteps);
+
+    for (let i = 1; i <= maxSteps; i++) {
+      const pt = routePoints[i];
+      if (!pt) continue;
+      const sx = Math.round(pt.x - cameraX);
+      const sy = Math.round(pt.y - cameraY);
+      if (sx < -8 || sx > viewW + 8 || sy < -8 || sy > viewH + 8) continue;
+
+      const isLit = i === activePulseIdx + 1;
+      ctx.fillStyle = PALETTE_12.LACQUER_VOID;
+      ctx.fillRect(sx - 2, sy - 2, 4, 4);
+      ctx.fillStyle = isLit ? PALETTE_12.PARCHMENT_LIGHT : PALETTE_12.BRONZE_BRIGHT;
+      ctx.fillRect(sx - 1, sy - 1, 2, 2);
+    }
+  }
+
+  /**
+   * Vẽ huy hiệu trạng thái nhiệm vụ sắc nét phía trên đầu NPC và điểm tương tác:
+   * - `tracked`: Mũi tên vàng đồng sáng nhấp nhô (`▼`)
+   * - `main`: Hình thoi son - vàng đồng nhiệm vụ chính (`◆`)
+   * - `optional`: Hình thoi rỗng giấy dó - đồng cổ cho nhánh phụ / tư liệu (`◇`)
+   * - `completed`: Ấn chương đỏ son đã hoàn thành (`✓`)
+   */
+  private drawOverheadQuestMarker(
+    x: number,
+    y: number,
+    kind: 'tracked' | 'main' | 'optional' | 'completed',
+    timeSec: number,
+    reducedMotion: boolean
+  ): void {
+    const { ctx } = this;
+    const bob =
+      reducedMotion || kind === 'completed'
+        ? 0
+        : Math.round(Math.sin(timeSec * 4.5 + x * 0.05) * 1.5);
+    const my = y + bob;
+
+    if (kind === 'tracked') {
+      ctx.fillStyle = PALETTE_12.LACQUER_VOID;
+      ctx.fillRect(x - 4, my - 4, 8, 7);
+      ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+      ctx.fillRect(x - 3, my - 3, 6, 2);
+      ctx.fillRect(x - 2, my - 1, 4, 2);
+      ctx.fillRect(x - 1, my + 1, 2, 2);
+      ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+      ctx.fillRect(x - 1, my - 2, 2, 2);
+    } else if (kind === 'main') {
+      ctx.fillStyle = PALETTE_12.LACQUER_VOID;
+      ctx.fillRect(x - 3, my - 3, 6, 6);
+      ctx.fillStyle = PALETTE_12.CRIMSON_VERMILION;
+      ctx.fillRect(x - 2, my - 2, 4, 4);
+      ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+      ctx.fillRect(x - 1, my - 3, 2, 6);
+      ctx.fillRect(x - 3, my - 1, 6, 2);
+      ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+      ctx.fillRect(x - 1, my - 1, 2, 2);
+    } else if (kind === 'optional') {
+      ctx.fillStyle = PALETTE_12.LACQUER_VOID;
+      ctx.fillRect(x - 3, my - 3, 6, 6);
+      ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+      ctx.fillRect(x - 2, my - 2, 4, 4);
+      ctx.fillStyle = PALETTE_12.PARCHMENT_WARM;
+      ctx.fillRect(x - 1, my - 1, 2, 2);
+    } else {
+      ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+      ctx.fillRect(x - 3, my - 2, 6, 5);
+      ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+      ctx.fillRect(x - 1, my - 1, 2, 2);
+    }
+  }
+
+  /**
+   * Vẽ cọc tiêu chỉ hướng rìa màn hình khi mục tiêu đang theo dõi nằm ngoài khung nhìn camera.
+   */
+  private drawOffscreenTargetIndicator(
+    targetPos: Vec2,
+    cameraX: number,
+    cameraY: number,
+    viewW: number,
+    viewH: number,
+    timeSec: number,
+    reducedMotion: boolean
+  ): void {
+    const sx = Math.round(targetPos.x - cameraX);
+    const sy = Math.round(targetPos.y - cameraY);
+    if (sx >= 12 && sx <= viewW - 12 && sy >= 12 && sy <= viewH - 12) {
+      return;
+    }
+
+    const { ctx } = this;
+    const pulse = reducedMotion ? 0 : Math.round(Math.sin(timeSec * 5) * 1);
+    const edgeX = Math.max(14, Math.min(viewW - 14, sx)) + pulse;
+    const edgeY = Math.max(18, Math.min(viewH - 18, sy));
+
+    ctx.fillStyle = PALETTE_12.LACQUER_VOID;
+    ctx.fillRect(edgeX - 5, edgeY - 5, 10, 10);
+    ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+    ctx.fillRect(edgeX - 4, edgeY - 4, 8, 8);
+    ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+    ctx.fillRect(edgeX - 2, edgeY - 2, 4, 4);
+    ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+    ctx.fillRect(edgeX - 1, edgeY - 1, 2, 2);
   }
 
   /**
