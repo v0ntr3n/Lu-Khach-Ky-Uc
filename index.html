@@ -790,109 +790,228 @@
       }
 
       /* ==========================================================================
-         3. HỘP THOẠI SỬ LIỆU GIẤY DÓ NEO ĐÁY (#dialogue-modal)
+         3. HỘP THOẠI PIXEL RPG PHONG CÁCH EASTWARD (#dialogue-modal)
          ========================================================================== */
       #dialogue-modal {
         position: absolute;
         left: 50%;
-        bottom: 18px;
+        bottom: 16px;
         transform: translateX(-50%);
-        width: min(880px, calc(100vw - 32px));
-        max-height: min(72dvh, 640px);
+        width: min(740px, calc(100vw - 32px));
         z-index: 220;
         display: none;
+        flex-direction: column;
+        gap: 6px;
+        pointer-events: none;
       }
 
       #dialogue-modal.is-open {
-        display: block;
+        display: flex;
       }
 
-      #dialogue-parchment-card {
-        max-height: min(72dvh, 640px);
-        overflow-y: auto;
+      /* Tầng nổi phía trên thanh thoại: Ngăn Tư Liệu (trái) + Danh sách lựa chọn gọn (phải) */
+      .dialogue-floating-stack {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 12px;
+        width: 100%;
+        padding-bottom: 12px;
+        pointer-events: none;
+      }
+
+      #dialogue-lore-drawer {
+        width: min(410px, 100%);
         background: var(--parchment-warm);
         color: var(--ink-primary);
         border: 2px solid var(--bronze-antique);
-        box-shadow: inset 0 0 0 3px var(--parchment-warm),
-          inset 0 0 0 4px rgba(138, 90, 43, 0.45), 0 18px 44px rgba(17, 14, 11, 0.86);
-        padding: 16px 24px;
+        box-shadow: inset 0 0 0 2px var(--parchment-light),
+          0 12px 28px rgba(17, 14, 11, 0.9);
+        padding: 10px 14px;
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 5px;
+        max-height: 210px;
+        overflow-y: auto;
+        opacity: 1;
+        pointer-events: auto;
       }
 
-      .dialogue-top-row {
+      #dialogue-lore-drawer.is-collapsed {
+        max-height: 0;
+        opacity: 0;
+        overflow: hidden;
+        pointer-events: none;
+        padding: 0;
+        border-width: 0;
+        margin: 0;
+        box-shadow: none;
+      }
+
+      .dialogue-lore-header {
         display: flex;
-        justify-content: space-between;
         align-items: center;
-        flex-wrap: wrap;
-        gap: 10px;
-        border-bottom: 1px solid rgba(138, 90, 43, 0.36);
-        padding-bottom: 8px;
+        justify-content: space-between;
+        gap: 8px;
+        border-bottom: 1px solid rgba(138, 90, 43, 0.32);
+        padding-bottom: 4px;
       }
 
-      .dialogue-speaker-cluster {
-        display: flex;
-        align-items: baseline;
-        flex-wrap: wrap;
-        gap: 10px;
-      }
-
-      #dialogue-speaker {
-        font-family: var(--font-display);
-        font-size: 1.42rem;
+      .dialogue-lore-kicker {
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
         font-weight: 700;
+        letter-spacing: 0.08em;
         color: var(--crimson-seal);
-        letter-spacing: 0.01em;
-      }
-
-      #dialogue-role {
-        font-family: var(--font-ui);
-        font-size: 0.94rem;
-        font-weight: 500;
-        color: var(--ink-secondary);
+        text-transform: uppercase;
       }
 
       #dialogue-milestone-title {
         font-family: var(--font-display);
-        font-size: 1.24rem;
+        font-size: 1.04rem;
         font-weight: 700;
-        color: var(--ink-primary);
-      }
-
-      #dialogue-body-text {
-        font-family: var(--font-serif);
-        font-size: 1.22rem; /* ~19.5px desktop */
-        line-height: 1.65;
-        max-width: 68ch;
-        color: var(--ink-primary);
-        text-wrap: pretty;
+        color: var(--crimson-seal);
+        line-height: 1.3;
+        margin: 0;
       }
 
       #dialogue-significance {
         font-family: var(--font-serif);
-        font-size: 1rem;
-        line-height: 1.55;
+        font-size: 0.92rem;
+        line-height: 1.45;
         color: var(--ink-secondary);
         font-style: italic;
-        max-width: 68ch;
+        margin: 0;
       }
 
       #dialogue-citation {
         font-family: var(--font-ui);
-        font-size: 0.94rem;
+        font-size: 0.84rem;
         font-weight: 600;
-        color: var(--crimson-seal);
+        color: var(--ink-primary);
+        line-height: 1.38;
+      }
+
+      /* Khay lựa chọn nhánh hội thoại xếp gọn góc phải phía trên thanh thoại */
+      #dialogue-choices {
+        margin-left: auto;
+        width: min(310px, 100%);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        pointer-events: auto;
+      }
+
+      .dialogue-choice-btn {
+        width: 100%;
+        min-height: 36px;
+        justify-content: flex-start;
+        text-align: left;
+        padding: 7px 12px;
+        background: rgba(27, 22, 18, 0.96);
+        color: var(--parchment-light);
+        border: 1.5px solid var(--bronze-antique);
+        box-shadow: 0 6px 18px rgba(17, 14, 11, 0.85);
+        font-family: var(--font-ui);
+        font-size: 0.96rem;
+        font-weight: 500;
+        line-height: 1.3;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        cursor: pointer;
+        transition: transform 0.12s ease, background-color 0.12s ease,
+          border-color 0.12s ease;
+      }
+
+      .dialogue-choice-btn:hover,
+      .dialogue-choice-btn:focus-visible {
+        background: var(--crimson-seal);
+        border-color: var(--bronze-bright);
+        box-shadow: inset 3px 0 0 var(--bronze-bright),
+          0 8px 20px rgba(17, 14, 11, 0.92);
+        transform: translateX(-3px);
+      }
+
+      .choice-label {
+        flex: 1;
+      }
+
+      /* Thanh thoại Sơn Mài Đậm nhỏ gọn neo đáy (#dialogue-parchment-card) */
+      #dialogue-parchment-card {
+        position: relative;
+        background: var(--lacquer-deep);
+        color: var(--parchment-light);
+        border: 2px solid var(--bronze-bright);
+        box-shadow: inset 0 0 0 2px var(--lacquer-void),
+          inset 0 0 0 3px rgba(212, 165, 93, 0.36),
+          0 16px 38px rgba(17, 14, 11, 0.92);
+        padding: 22px 18px 12px 14px;
+        min-height: 118px;
+        max-height: 168px;
+        display: grid;
+        grid-template-columns: 84px 1fr;
+        gap: 14px;
+        align-items: center;
+        overflow: visible;
+        pointer-events: auto;
+      }
+
+      /* Thẻ tên Đỏ Son & Vàng Đồng nổi trên viền trên bên trái */
+      #dialogue-nameplate {
+        position: absolute;
+        top: -15px;
+        left: 14px;
+        z-index: 3;
+        display: inline-flex;
+        align-items: baseline;
+        gap: 8px;
+        padding: 3px 12px 4px;
+        background: var(--crimson-seal);
+        border: 1.5px solid var(--bronze-bright);
+        box-shadow: 0 4px 12px rgba(17, 14, 11, 0.88);
+        max-width: calc(100% - 240px);
+      }
+
+      #dialogue-speaker {
+        font-family: var(--font-display);
+        font-size: 1.12rem;
+        font-weight: 700;
+        color: var(--parchment-light);
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+      }
+
+      #dialogue-role {
+        font-family: var(--font-ui);
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: var(--bronze-bright);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Cụm huy hiệu nguồn sử liệu + nút mở ngăn Tư liệu nổi góc trên bên phải */
+      .dialogue-meta-bar {
+        position: absolute;
+        top: -14px;
+        right: 14px;
+        z-index: 3;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
       }
 
       .provenance-badge {
         display: inline-flex;
         align-items: center;
-        padding: 4px 10px;
+        padding: 2px 9px;
         font-family: var(--font-ui);
-        font-size: 0.84rem;
+        font-size: 0.76rem;
         font-weight: 600;
         letter-spacing: 0.02em;
+        box-shadow: 0 3px 10px rgba(17, 14, 11, 0.8);
       }
 
       .provenance-badge.is-historical_fact {
@@ -913,41 +1032,136 @@
         border: 1px solid var(--bronze-bright);
       }
 
-      #dialogue-choices {
-        display: flex;
-        flex-direction: column;
-        gap: 7px;
-        margin-top: 4px;
-      }
-
-      .dialogue-choice-btn {
-        width: 100%;
-        justify-content: flex-start;
-        text-align: left;
-        padding: 10px 14px;
-        background: var(--lacquer-deep);
-        color: var(--parchment-light);
+      #btn-toggle-dialogue-lore {
+        padding: 2px 9px;
+        min-height: 24px;
+        background: var(--lacquer-elevated);
+        color: var(--bronze-bright);
         border: 1px solid var(--bronze-antique);
+        box-shadow: 0 3px 10px rgba(17, 14, 11, 0.8);
         font-family: var(--font-ui);
-        font-size: 1.03125rem; /* 16.5px */
-        line-height: 1.45;
+        font-size: 0.76rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
       }
 
-      .dialogue-choice-btn:hover {
+      #btn-toggle-dialogue-lore:hover,
+      #btn-toggle-dialogue-lore.is-active {
         background: var(--crimson-seal);
+        color: var(--parchment-light);
         border-color: var(--bronze-bright);
       }
 
-      .choice-label {
-        flex: 1;
+      /* Khung chân dung Pixel Art 80×80px bên trái */
+      #dialogue-portrait-frame {
+        width: 84px;
+        height: 84px;
+        background: var(--lacquer-void);
+        border: 2px solid var(--bronze-antique);
+        box-shadow: inset 0 0 0 1px rgba(212, 165, 93, 0.35),
+          0 4px 12px rgba(0, 0, 0, 0.65);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
       }
 
-      .modal-footer {
+      #dialogue-portrait-canvas {
+        width: 80px;
+        height: 80px;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+        display: block;
+      }
+
+      /* Cột nội dung lời thoại ngắn gọn bên phải */
+      .dialogue-speech-column {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 6px;
+        min-height: 84px;
+        min-width: 0;
+      }
+
+      #dialogue-body-text {
+        font-family: var(--font-serif);
+        font-size: 1.1875rem; /* 19px desktop */
+        line-height: 1.48;
+        color: var(--parchment-light);
+        margin: 0;
+        text-wrap: pretty;
+        cursor: pointer;
+      }
+
+      .dialogue-bottom-bar {
         display: flex;
         justify-content: flex-end;
         align-items: center;
-        gap: 10px;
-        margin-top: 4px;
+        gap: 8px;
+        margin-top: auto;
+      }
+
+      #dialogue-page-indicator {
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        color: var(--bronze-bright);
+        margin-right: auto;
+      }
+
+      @keyframes dialogueNextBob {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(2px);
+        }
+      }
+
+      #btn-dialogue-next-page {
+        padding: 2px 10px;
+        min-height: 26px;
+        background: rgba(139, 30, 30, 0.45);
+        color: var(--bronze-bright);
+        border: 1px solid var(--bronze-bright);
+        font-family: var(--font-ui);
+        font-size: 0.82rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      #btn-dialogue-next-page .next-arrow-glyph {
+        display: inline-block;
+        animation: dialogueNextBob 0.9s steps(2, end) infinite;
+      }
+
+      body.is-reduced-motion #btn-dialogue-next-page .next-arrow-glyph {
+        animation: none;
+      }
+
+      #btn-close-dialogue {
+        padding: 2px 10px;
+        min-height: 26px;
+        background: var(--lacquer-elevated);
+        color: var(--parchment-warm);
+        border: 1px solid var(--bronze-muted);
+        font-family: var(--font-ui);
+        font-size: 1rem; /* 16px chuẩn kiểm thử M7 */
+        line-height: 1.2;
+        cursor: pointer;
+      }
+
+      #btn-close-dialogue:hover {
+        background: var(--crimson-seal);
+        color: var(--parchment-light);
+        border-color: var(--bronze-bright);
       }
 
       /* ==========================================================================
@@ -2358,7 +2572,7 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-Da1gwKB2.js"></script>
+    <script type="module" crossorigin src="./assets/index-B0oaFihJ.js"></script>
   </head>
   <body>
     <div id="game-shell">
@@ -2525,7 +2739,7 @@
         </div>
       </div>
 
-      <!-- 3. HỘP THOẠI GIẤY DÓ NEO ĐÁY MÀN HÌNH (Ẩn mặc định, chỉ mở khi đối thoại) -->
+      <!-- 3. HỘP THOẠI PIXEL RPG PHONG CÁCH EASTWARD NEO ĐÁY (Ẩn mặc định, chỉ mở khi đối thoại) -->
       <div
         id="dialogue-modal"
         role="dialog"
@@ -2533,27 +2747,72 @@
         aria-label="Hộp thoại nhân vật và sử liệu"
         hidden
       >
-        <article id="dialogue-parchment-card" aria-live="polite">
-          <div class="dialogue-top-row">
-            <div class="dialogue-speaker-cluster">
-              <span id="dialogue-speaker">Giao Liên Cửu Long</span>
-              <span id="dialogue-role">Cơ sở liên lạc Hương Cảng</span>
+        <div class="dialogue-floating-stack">
+          <aside
+            id="dialogue-lore-drawer"
+            class="is-collapsed"
+            aria-label="Ngăn tư liệu và trích dẫn sử học"
+          >
+            <div class="dialogue-lore-header">
+              <span class="dialogue-lore-kicker">◆ HỒ SƠ ĐỐI CHIẾU SỬ LIỆU</span>
             </div>
-            <span id="dialogue-provenance-badge" class="provenance-badge is-historical_fact">
-              ◆ Sử liệu xác thực (Giáo trình 2021)
-            </span>
-          </div>
-          <h3 id="dialogue-milestone-title" hidden></h3>
-          <p id="dialogue-body-text">
-            <span id="dialogue-text"></span>
-          </p>
-          <p id="dialogue-significance" hidden></p>
-          <div id="dialogue-citation" hidden></div>
+            <h3 id="dialogue-milestone-title" hidden></h3>
+            <p id="dialogue-significance" hidden></p>
+            <div id="dialogue-citation" hidden></div>
+          </aside>
+
           <div id="dialogue-choices" hidden></div>
-          <div class="modal-footer">
-            <button type="button" id="btn-close-dialogue" class="ctrl-btn">
-              ✕ Đóng [Esc]
+        </div>
+
+        <article id="dialogue-parchment-card" aria-live="polite">
+          <header id="dialogue-nameplate" class="dialogue-speaker-cluster">
+            <span id="dialogue-speaker">Giao Liên Cửu Long</span>
+            <span id="dialogue-role">Giao liên Cửu Long</span>
+          </header>
+
+          <div class="dialogue-meta-bar">
+            <span id="dialogue-provenance-badge" class="provenance-badge is-historical_fact">
+              ◆ Sử liệu Giáo trình 2021
+            </span>
+            <button
+              type="button"
+              id="btn-toggle-dialogue-lore"
+              aria-expanded="false"
+              aria-controls="dialogue-lore-drawer"
+              title="Mở/Đóng ngăn tư liệu sử học [Tab]"
+            >
+              📖 Tư liệu <kbd class="hud-keycap">Tab</kbd>
             </button>
+          </div>
+
+          <div id="dialogue-portrait-frame">
+            <canvas
+              id="dialogue-portrait-canvas"
+              width="40"
+              height="40"
+              aria-hidden="true"
+            ></canvas>
+          </div>
+
+          <div class="dialogue-speech-column">
+            <p id="dialogue-body-text" title="Nhấp hoặc bấm [Space] để xem câu tiếp theo">
+              <span id="dialogue-text"></span>
+            </p>
+            <div class="dialogue-bottom-bar modal-footer">
+              <span id="dialogue-page-indicator" hidden>Trang 1/1</span>
+              <button
+                type="button"
+                id="btn-dialogue-next-page"
+                class="ctrl-btn"
+                hidden
+              >
+                Tiếp <span class="next-arrow-glyph" aria-hidden="true">▼</span>
+                <kbd class="hud-keycap">Space</kbd>
+              </button>
+              <button type="button" id="btn-close-dialogue" class="ctrl-btn">
+                ✕ Đóng [Esc]
+              </button>
+            </div>
           </div>
         </article>
       </div>
