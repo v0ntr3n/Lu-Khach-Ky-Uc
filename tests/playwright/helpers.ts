@@ -4,10 +4,14 @@
  * của "Lữ Khách Ký Ức (1930 – 2045)" trên kiến trúc Fullscreen RPG Shell.
  */
 
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, type Page } from '@playwright/test';
 
-export const ARTIFACT_DIR =
-  '/home/antigravity/.gemini/jetski/brain/v1/default/jetski_remote_agents_3p/9794bb53-67ce-4471-a58e-ea7055d0c4ce';
+// Portable screenshot directory for local runs and GitHub Actions.
+// Do not put this inside Playwright's test-results outputDir, which is reset on start.
+export const ARTIFACT_DIR = join(process.cwd(), 'artifacts', 'playwright');
+mkdirSync(ARTIFACT_DIR, { recursive: true });
 
 /**
  * Xóa sạch localStorage và nạp lại ứng dụng vào trạng thái khởi động sạch tại #main-menu-screen.
