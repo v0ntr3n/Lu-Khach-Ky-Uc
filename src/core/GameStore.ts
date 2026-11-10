@@ -8,6 +8,7 @@
  */
 
 import type {
+  AppLifecycleState,
   ChapterData,
   EraId,
   Facing4,
@@ -23,6 +24,7 @@ import {
   DEFAULT_SAFE_MAP_ID,
   DEFAULT_SAFE_PLAYER_POS,
   DEFAULT_SAFE_SPAWN_ID,
+  normalizeEmbeddedSaveSettings,
 } from './SaveManager';
 
 export const ALL_ROMAN_MILESTONES: readonly RomanMilestoneId[] = [
@@ -40,7 +42,19 @@ export const ALL_ROMAN_MILESTONES: readonly RomanMilestoneId[] = [
   'XII',
 ];
 
+const IN_GAME_OVERLAY_MODES = new Set<GameMode>([
+  'dialogue',
+  'climax',
+  'lookup',
+  'journal',
+  'map',
+  'inventory',
+  'puzzle',
+  'presenter',
+]);
+
 export class GameStore {
+  public lifecycle: AppLifecycleState = 'PLAYING';
   public mode: GameMode = 'opening';
   public currentChapterIndex = 0;
   public isPresenterMode = false;
@@ -70,10 +84,46 @@ export class GameStore {
   public readonly completedObjectives = new Set<string>();
   public readonly completedQuests = new Set<string>();
   public readonly dialogueHistory = new Set<string>();
-  public settings: GameSettings = { ...DEFAULT_GAME_SETTINGS };
+  public settings: GameSettings = {
+    muted: DEFAULT_GAME_SETTINGS.muted,
+    reducedMotion: DEFAULT_GAME_SETTINGS.reducedMotion,
+    textScale: DEFAULT_GAME_SETTINGS.textScale,
+    showHints: DEFAULT_GAME_SETTINGS.showHints,
+  };
+
+  public setLifecycle(state: AppLifecycleState): void {
+    this.lifecycle = state;
+  }
+
+  public transitionLifecycle(state: AppLifecycleState): AppLifecycleState {
+    this.setLifecycle(state);
+    return this.lifecycle;
+  }
+
+  public getLifecycle(): AppLifecycleState {
+    return this.lifecycle;
+  }
 
   public setMode(mode: GameMode): void {
     this.mode = mode;
+    if (mode === 'boot') {
+      this.lifecycle = 'BOOT';
+    } else if (mode === 'main_menu') {
+      this.lifecycle = 'MAIN_MENU';
+    } else if (mode === 'loading') {
+      this.lifecycle = 'LOADING';
+    } else if (mode === 'opening') {
+      this.lifecycle = 'OPENING';
+    } else if (mode === 'paused') {
+      this.lifecycle = 'PAUSED';
+    } else if (mode === 'exploring') {
+      this.lifecycle = 'PLAYING';
+    } else if (
+      IN_GAME_OVERLAY_MODES.has(mode) &&
+      (this.lifecycle === 'PAUSED' || this.lifecycle === 'PLAYING')
+    ) {
+      this.lifecycle = 'PLAYING';
+    }
   }
 
   public getMode(): GameMode {
@@ -81,14 +131,18 @@ export class GameStore {
   }
 
   public isWorldInputAllowed(): boolean {
-    return this.mode === 'exploring';
+    return this.lifecycle === 'PLAYING' && this.mode === 'exploring';
+  }
+
+  public isGameplayActive(): boolean {
+    return this.lifecycle === 'PLAYING';
   }
 
   public updateSettings(partial: Partial<GameSettings>): GameSettings {
-    this.settings = {
+    this.settings = normalizeEmbeddedSaveSettings({
       ...this.settings,
       ...partial,
-    };
+    });
     return { ...this.settings };
   }
 
@@ -335,10 +389,7 @@ export class GameStore {
     }
 
     if (save.settings) {
-      this.settings = {
-        ...DEFAULT_GAME_SETTINGS,
-        ...save.settings,
-      };
+      this.settings = normalizeEmbeddedSaveSettings(save.settings);
     }
 
     this.currentMapId = save.currentMapId || DEFAULT_SAFE_MAP_ID;
