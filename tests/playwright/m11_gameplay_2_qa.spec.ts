@@ -15,7 +15,7 @@ test.describe('M11 — Gameplay 2.0 Quality Gate: Navigation, Accessibility, Per
     });
 
     await page.setViewportSize({ width: 1920, height: 1080 });
-    await page.goto('http://127.0.0.1:5173', { waitUntil: 'networkidle' });
+    await page.goto('/', { waitUntil: 'networkidle' });
 
     await page.evaluate(() => {
       window.localStorage.clear();
