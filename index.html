@@ -691,32 +691,7 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        max-width: 112px;
-      }
-
-      .minimap-header-actions {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-      }
-
-      #btn-minimap-open-map,
-      #btn-toggle-minimap {
-        min-height: 22px;
-        padding: 1px 6px;
-        background: var(--surface-subtle);
-        color: var(--text-primary);
-        border: 1px solid var(--border-default);
-        font-family: var(--font-mono);
-        font-size: 0.68rem;
-        cursor: pointer;
-      }
-
-      #btn-minimap-open-map:hover,
-      #btn-toggle-minimap:hover {
-        background: var(--accent-primary);
-        color: var(--text-on-accent);
-        border-color: var(--border-strong);
+        max-width: 100%;
       }
 
       #minimap-body {
@@ -3198,30 +3173,16 @@
             >
               <div class="minimap-header">
                 <span id="minimap-zone-title">Quảng Trường Bến Cảng</span>
-                <div class="minimap-header-actions">
-                  <button
-                    type="button"
-                    id="btn-minimap-open-map"
-                    title="Mở Sơ đồ liên thông khu vực [M]"
-                  >
-                    Bản đồ [M]
-                  </button>
-                  <button
-                    type="button"
-                    id="btn-toggle-minimap"
-                    aria-expanded="true"
-                    title="Thu gọn hoặc mở rộng bản đồ thu nhỏ [N]"
-                  >
-                    Ẩn [N]
-                  </button>
-                </div>
               </div>
               <div id="minimap-body">
                 <canvas
                   id="minimap-canvas"
                   width="168"
                   height="124"
-                  aria-label="Khung vẽ bản đồ thu nhỏ thời gian thực"
+                  role="button"
+                  tabindex="0"
+                  aria-label="Mở bản đồ khu vực. Nhấn Enter hoặc Space"
+                  title="Nhấp để mở bản đồ [M]"
                 ></canvas>
                 <div id="minimap-route-banner">
                   Theo dấu mục tiêu trên bản đồ

@@ -54,8 +54,10 @@ test.describe('M8 — Interactive Minimap, Click-to-Track Quests & Obstacle-Awar
     await page.keyboard.press('n');
     await expect(minimapPanel).not.toHaveClass(/is-collapsed/);
 
-    // 3. Nhấp vào khung Minimap mở Bản đồ Thế giới (#world-map-modal), sau đó đóng bằng Escape
-    await page.locator('#btn-minimap-open-map').click();
+    // 3. Xác nhận các nút thừa trong header đã được loại bỏ; nhấp trực tiếp vào #minimap-canvas (hoặc nhấn Enter khi focus) mở Bản đồ Thế giới (#world-map-modal), sau đó đóng bằng Escape
+    await expect(page.locator('#btn-minimap-open-map')).toHaveCount(0);
+    await expect(page.locator('#btn-toggle-minimap')).toHaveCount(0);
+    await page.locator('#minimap-canvas').click();
     await expect(page.locator('#world-map-modal')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.locator('#world-map-modal')).toBeHidden();

@@ -8,8 +8,8 @@
  * - Hiển thị vị trí & hướng nhìn 4 chiều của Lữ Khách, cổng chuyển khu vực (Portals),
  *   Đèn Báo An Toàn (Checkpoints), NPC, điểm mục tiêu nhiệm vụ đang theo dõi (Tracked Target)
  *   và đường dẫn A* nét đứt vàng đồng tránh vật cản (`TrackedRouteState.path.points`).
- * - Hỗ trợ phím tắt `[N]` hoặc nút thu gọn/mở rộng (`#btn-toggle-minimap`) và nhấp vào bản đồ thu nhỏ
- *   để mở Sơ Đồ Liên Thông Khu Vực (`WorldMapModal` — phím `[M]`).
+ * - Hỗ trợ phím tắt `[N]` để thu gọn/mở rộng và `[M]` để mở bản đồ lớn.
+ * - Nhấp bản đồ thu nhỏ hoặc nhấn Enter/Space khi canvas được focus để mở Sơ Đồ Liên Thông.
  */
 
 import type {
@@ -55,21 +55,16 @@ export class MiniMapPanel {
   private bindStaticEvents(): void {
     if (typeof document === 'undefined') return;
 
-    const toggleBtn = document.getElementById('btn-toggle-minimap');
-    toggleBtn?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.toggle();
-    });
-
-    const openMapBtn = document.getElementById('btn-minimap-open-map');
-    openMapBtn?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.callbacks.onOpenWorldMap?.();
-    });
-
     const canvas = document.getElementById('minimap-canvas');
     canvas?.addEventListener('click', () => {
       this.callbacks.onOpenWorldMap?.();
+    });
+    canvas?.addEventListener('keydown', (event: KeyboardEvent) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        event.stopPropagation();
+        this.callbacks.onOpenWorldMap?.();
+      }
     });
   }
 
@@ -99,7 +94,6 @@ export class MiniMapPanel {
     if (typeof document === 'undefined') return;
     const panel = document.getElementById('minimap-panel');
     const body = document.getElementById('minimap-body');
-    const toggleBtn = document.getElementById('btn-toggle-minimap');
 
     if (panel) {
       panel.classList.toggle('is-collapsed', this.isCollapsed);
@@ -112,10 +106,6 @@ export class MiniMapPanel {
       } else {
         body.removeAttribute('hidden');
       }
-    }
-    if (toggleBtn) {
-      toggleBtn.textContent = this.isCollapsed ? 'Mở [N]' : 'Ẩn [N]';
-      toggleBtn.setAttribute('aria-expanded', String(!this.isCollapsed));
     }
   }
 
