@@ -90,14 +90,15 @@ test.describe('M3 RPG Systems & UI — Browser E2E Suite', () => {
     await page.keyboard.press('KeyE');
 
     const provenanceBadge = page.locator('#dialogue-provenance-badge');
-    await expect(provenanceBadge).toBeVisible();
-    await expect(provenanceBadge).toContainText('Giáo trình 2021');
+    await expect(provenanceBadge).toBeHidden();
+    await expect(provenanceBadge).toHaveAttribute('data-provenance-type', 'historical_fact');
+    await expect(page.locator('#dialogue-citation')).toBeHidden();
 
     const choiceButtons = page.locator('.dialogue-choice-btn');
     await expect(choiceButtons.first()).toBeVisible();
     expect(await choiceButtons.count()).toBeGreaterThanOrEqual(2);
 
-    // Chụp ảnh nghiệm thu hộp thoại đa lựa chọn & nhãn sử liệu
+    // Chụp ảnh nghiệm thu hộp thoại đa lựa chọn, không có badge trích dẫn
     await page.waitForTimeout(150);
     await page.screenshot({
       path: `${ARTIFACT_DIR}/m3_dialogue_choices.png`,
