@@ -304,10 +304,131 @@
         display: flex;
         align-items: flex-start;
         gap: 10px;
-        max-width: min(52vw, 520px);
+        max-width: min(56vw, 540px);
+      }
+
+      #hud-right-stack {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 8px;
+      }
+
+      #minimap-panel {
+        pointer-events: auto;
+        background: rgba(27, 22, 18, 0.95);
+        border: 1px solid var(--bronze-antique);
+        border-right: 3px solid var(--bronze-bright);
+        box-shadow: 0 6px 18px rgba(17, 14, 11, 0.78);
+        padding: 6px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        width: 186px;
+      }
+
+      #minimap-panel.is-collapsed {
+        width: auto;
+      }
+
+      .minimap-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+      }
+
+      #minimap-zone-title {
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--bronze-bright);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 112px;
+      }
+
+      .minimap-header-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      #btn-minimap-open-map,
+      #btn-toggle-minimap {
+        min-height: 22px;
+        padding: 1px 6px;
+        background: var(--lacquer-void);
+        color: var(--parchment-light);
+        border: 1px solid var(--bronze-antique);
+        font-family: var(--font-mono);
+        font-size: 0.68rem;
+        cursor: pointer;
+      }
+
+      #btn-minimap-open-map:hover,
+      #btn-toggle-minimap:hover {
+        background: var(--crimson-seal);
+        border-color: var(--bronze-bright);
+      }
+
+      #minimap-body {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      #minimap-canvas {
+        width: 168px;
+        height: 124px;
+        display: block;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+        cursor: pointer;
+        border: 1px solid rgba(138, 90, 43, 0.55);
+      }
+
+      #minimap-route-banner {
+        font-family: var(--font-ui);
+        font-size: 0.76rem;
+        line-height: 1.3;
+        color: var(--parchment-warm);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .journal-objective-row.is-active {
+        cursor: pointer;
+        transition: background-color 0.14s ease, border-color 0.14s ease;
+      }
+
+      .journal-objective-row.is-active:hover,
+      .journal-objective-row.is-tracked {
+        border-color: var(--crimson-seal) !important;
+        box-shadow: inset 3px 0 0 var(--crimson-seal);
+      }
+
+      .journal-track-pill {
+        margin-left: auto;
+        padding: 2px 8px;
+        background: var(--lacquer-deep);
+        color: var(--parchment-light);
+        border: 1px solid var(--bronze-antique);
+        font-family: var(--font-ui);
+        font-size: 0.78rem;
+        font-weight: 600;
+      }
+
+      .journal-track-pill.is-tracked {
+        background: var(--crimson-seal);
+        border-color: var(--bronze-bright);
       }
 
       #hud-objective-tracker {
+        pointer-events: auto;
+        cursor: pointer;
         background: rgba(27, 22, 18, 0.94);
         border: 1px solid var(--bronze-antique);
         border-right: 3px solid var(--bronze-bright);
@@ -2218,14 +2339,58 @@
         </div>
 
         <div id="hud-top-right">
-          <div id="hud-objective-tracker" aria-live="polite">
-            <div id="hud-active-quest-title">◆ Hội Nghị Hợp Nhất Cửu Long</div>
-            <div id="hud-active-objective-text">Bắt liên lạc tại Quảng Trường Bến Cảng</div>
-            <div id="hud-active-objective-action">
-              → Trò chuyện với Giao Liên Lâm Văn Bính gần cột đèn bến cảng [E]
-            </div>
-            <div id="hud-active-objective-hint">
-              ▸ Gợi ý: Tiến tới đèn lồng cảng và nhấn [E]
+          <div id="hud-right-stack">
+            <aside
+              id="minimap-panel"
+              aria-label="Bản đồ thu nhỏ và đường dẫn nhiệm vụ"
+              data-minimap-visible="true"
+            >
+              <div class="minimap-header">
+                <span id="minimap-zone-title">Quảng Trường Bến Cảng</span>
+                <div class="minimap-header-actions">
+                  <button
+                    type="button"
+                    id="btn-minimap-open-map"
+                    title="Mở Sơ đồ liên thông khu vực [M]"
+                  >
+                    Bản đồ [M]
+                  </button>
+                  <button
+                    type="button"
+                    id="btn-toggle-minimap"
+                    aria-expanded="true"
+                    title="Thu gọn hoặc mở rộng bản đồ thu nhỏ [N]"
+                  >
+                    Ẩn [N]
+                  </button>
+                </div>
+              </div>
+              <div id="minimap-body">
+                <canvas
+                  id="minimap-canvas"
+                  width="168"
+                  height="124"
+                  aria-label="Khung vẽ bản đồ thu nhỏ thời gian thực"
+                ></canvas>
+                <div id="minimap-route-banner">
+                  Tại khu vực: Giao Liên Lâm Văn Bính
+                </div>
+              </div>
+            </aside>
+
+            <div
+              id="hud-objective-tracker"
+              aria-live="polite"
+              title="Nhấp để mở Nhật ký Nhiệm vụ [J] và chọn mục tiêu dẫn đường"
+            >
+              <div id="hud-active-quest-title">◆ Hội Nghị Hợp Nhất Cửu Long</div>
+              <div id="hud-active-objective-text">Bắt liên lạc tại Quảng Trường Bến Cảng</div>
+              <div id="hud-active-objective-action">
+                → Trò chuyện với Giao Liên Lâm Văn Bính gần cột đèn bến cảng [E]
+              </div>
+              <div id="hud-active-objective-hint">
+                ▸ Gợi ý: Tiến tới đèn lồng cảng và nhấn [E]
+              </div>
             </div>
           </div>
 

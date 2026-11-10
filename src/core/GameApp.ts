@@ -56,8 +56,10 @@ import { GameShell } from '../ui/GameShell';
 import { HudController } from '../ui/HudController';
 import { LoadingScreen } from '../ui/LoadingScreen';
 import { MainMenu } from '../ui/MainMenu';
+import { MiniMapPanel } from '../ui/MiniMapPanel';
 import { TutorialController } from '../ui/TutorialController';
 import { CollisionWorld } from '../world/CollisionWorld';
+import { RoutePlanner, type TrackedRouteState } from '../world/GridPathfinder';
 import { GameStore } from './GameStore';
 import { InputManager } from './InputManager';
 import { SaveManager } from './SaveManager';
@@ -74,6 +76,8 @@ export class LuKhachKyUcGame {
   public readonly openingFracture: OpeningFractureController;
   public readonly hud: HudController;
   public readonly mainMenu: MainMenu;
+  public readonly miniMap: MiniMapPanel;
+  public readonly routePlanner: RoutePlanner;
   public readonly tutorialController: TutorialController;
   public readonly interactionSystem: InteractionSystem;
   public readonly questSystem: QuestSystem;
@@ -142,6 +146,7 @@ export class LuKhachKyUcGame {
     this.evidenceSystem = new EvidenceSystem();
     this.inventorySystem = new InventorySystem(this.evidenceSystem);
     this.stealthSystem = new StealthSystem();
+    this.routePlanner = new RoutePlanner();
 
     this.allMaps = getAllBuiltInMaps();
     this.currentMap = getBuiltInMap('harbor_square');
@@ -203,6 +208,18 @@ export class LuKhachKyUcGame {
     );
     this.syncCameraBoundsAndSnap();
 
+    this.miniMap = new MiniMapPanel({
+      onToggleMinimap: (visible) => {
+        this.updateSettings({ showMinimap: visible });
+      },
+      onOpenWorldMap: () => {
+        if (!this.canOpenGameplayHotkeyOverlay()) return;
+        this.tutorialController?.recordAction('map');
+        this.syncHudWithState();
+        this.hud.toggleWorldMapModal(true);
+      },
+    });
+
     this.input = new InputManager({
       onInteract: () => {
         if (!this.isInGameplaySession()) return;
@@ -255,6 +272,15 @@ export class LuKhachKyUcGame {
           nextShowHints
             ? '◆ Đã bật hiển thị Gợi ý Nhiệm vụ [H].'
             : '○ Đã tắt hiển thị Gợi ý Nhiệm vụ [H].'
+        );
+      },
+      onToggleMinimap: () => {
+        if (!this.isInGameplaySession()) return;
+        const visible = this.miniMap.toggle();
+        this.hud.showToast(
+          visible
+            ? '◆ Đã mở Bản đồ thu nhỏ [N].'
+            : '○ Đã thu gọn Bản đồ thu nhỏ [N].'
         );
       },
       onToggleFullscreen: () => {
@@ -363,6 +389,9 @@ export class LuKhachKyUcGame {
         }
         this.tutorialController.replay();
         this.hud.showToast('◆ Đã mở lại Hướng dẫn Tân thủ từ Bước 1/5.');
+      },
+      onTrackObjective: (objectiveId: string | null) => {
+        this.trackObjective(objectiveId);
       },
       onSubmitDossierPuzzle: (
         puzzleId: string,
@@ -1300,6 +1329,36 @@ export class LuKhachKyUcGame {
     this.togglePresenterMode();
   }
 
+  public trackObjective(objectiveId: string | null): boolean {
+    if (objectiveId) {
+      const lookup = this.questSystem.getObjectiveById(objectiveId);
+      if (!lookup) {
+        return false;
+      }
+      const status = this.questSystem.getObjectiveStatus(lookup.objective, this.store);
+      if (status !== 'active') {
+        this.hud.showToast(
+          status === 'completed'
+            ? '✓ Mục tiêu này đã hoàn thành.'
+            : '◆ Mục tiêu này đang khóa, hãy hoàn tất điều kiện tiên quyết trước.'
+        );
+        return false;
+      }
+      this.store.trackedObjectiveId = objectiveId;
+      this.routePlanner.invalidate();
+      this.persistProgress();
+      this.syncHudWithState();
+      this.hud.showToast(`▼ Đang dẫn đường: ${lookup.objective.title}`);
+      return true;
+    }
+
+    this.store.trackedObjectiveId = null;
+    this.routePlanner.invalidate();
+    this.persistProgress();
+    this.syncHudWithState();
+    return true;
+  }
+
   public getActiveObjectiveResolution(): ObjectiveTargetResolution {
     const activeObjective = this.questSystem.getCurrentActiveObjective(
       this.currentChapter.id,
@@ -1328,6 +1387,22 @@ export class LuKhachKyUcGame {
     return resolveObjectiveTarget(this.currentMap, activeObjective.objective, {
       questFlags: this.store.questFlags,
     });
+  }
+
+  public getTrackedRouteState(): TrackedRouteState {
+    const activeObjective = this.questSystem.getCurrentActiveObjective(
+      this.currentChapter.id,
+      this.store
+    );
+    const resolution = this.getActiveObjectiveResolution();
+    return this.routePlanner.computeTrackedRoute(
+      this.currentMap,
+      this.playerX,
+      this.playerY,
+      activeObjective?.objective ?? null,
+      resolution,
+      this.store.questFlags
+    );
   }
 
   public handleInteractAction(): boolean {
@@ -1648,6 +1723,14 @@ export class LuKhachKyUcGame {
     const chapter = this.currentChapter;
     this.questSystem.evaluateProgress(this.store, chapter.id);
 
+    if (
+      this.store.trackedObjectiveId &&
+      this.store.completedObjectives.has(this.store.trackedObjectiveId)
+    ) {
+      this.store.trackedObjectiveId = null;
+      this.routePlanner.invalidate();
+    }
+
     const candidate = this.findNearestInteractionCandidate();
     const nearby = candidate?.milestone ?? this.findNearbyMilestone();
     const patrolActors = this.stealthSystem.getRenderStates(
@@ -1709,6 +1792,7 @@ export class LuKhachKyUcGame {
     this.hud.updateRpgSystemsState({
       quests: questsWithStatus,
       activeObjective,
+      trackedObjectiveId: activeObjective?.objective.id ?? null,
       nextActionText,
       hintText,
       allEvidence: [...this.evidenceSystem.getAllEvidence()],
@@ -1716,6 +1800,8 @@ export class LuKhachKyUcGame {
       settings: this.store.settings,
       isPresenterMode: this.store.isPresenterMode,
     });
+
+    this.miniMap.setVisible(this.store.settings.showMinimap !== false, false);
   }
 
   private updateNpcRoutes(dt: number): void {
@@ -1777,6 +1863,7 @@ export class LuKhachKyUcGame {
     const patrolActors = this.stealthSystem.getRenderStates(
       this.hasPatrolScheduleBonus()
     );
+    const routeState = this.getTrackedRouteState();
 
     const renderState: RenderState = {
       chapter: this.currentChapter,
@@ -1804,6 +1891,19 @@ export class LuKhachKyUcGame {
     };
 
     this.renderer.render(renderState);
+
+    this.miniMap.render({
+      map: this.currentMap,
+      playerX: this.playerX,
+      playerY: this.playerY,
+      playerFacing: this.playerFacing,
+      routeState,
+      unlockedCheckpoints: this.store.unlockedCheckpoints,
+      collectedMilestones: this.store.getActiveMilestones(),
+      discoveredMaps: this.store.discoveredMaps,
+      timeSec,
+      reducedMotion: this.store.settings.reducedMotion,
+    });
   }
 
   private readonly gameLoop = (nowMs: number): void => {

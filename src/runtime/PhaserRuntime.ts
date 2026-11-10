@@ -353,6 +353,8 @@ export function resolveObjectiveTarget(
     objectiveId: objective?.id,
     targetZoneId,
     currentMapId: currentMap.id,
+    isCrossZone: true,
+    nextPortalZoneId: nextZoneId,
     targetEntityId: portal.id,
     targetKind: 'portal',
     position: {

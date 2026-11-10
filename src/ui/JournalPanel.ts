@@ -28,6 +28,7 @@ export interface JournalQuestEntry {
 
 export interface JournalPanelCallbacks {
   onClose?: () => void;
+  onSelectObjective?: (objectiveId: string) => void;
 }
 
 const STATUS_BADGE: Record<QuestObjectiveStatus, string> = {
@@ -41,6 +42,7 @@ export class JournalPanel {
   private activeTab: JournalTabId = 'quests';
   private quests: JournalQuestEntry[] = [];
   private activeObjective: { quest: QuestDefinition; objective: QuestObjective } | null = null;
+  private trackedObjectiveId: string | null = null;
   private hintText = '';
   private isPresenterMode = false;
 
@@ -166,12 +168,15 @@ export class JournalPanel {
     quests: JournalQuestEntry[],
     activeObjective: { quest: QuestDefinition; objective: QuestObjective } | null,
     hintText: string,
-    isPresenterMode = false
+    isPresenterMode = false,
+    trackedObjectiveId: string | null = null
   ): void {
     this.quests = quests;
     this.activeObjective = activeObjective;
     this.hintText = hintText;
     this.isPresenterMode = isPresenterMode;
+    this.trackedObjectiveId =
+      trackedObjectiveId ?? activeObjective?.objective.id ?? null;
     this.render();
   }
 
@@ -291,7 +296,7 @@ export class JournalPanel {
     if (bannerEl) {
       if (this.activeObjective) {
         bannerEl.innerHTML = `
-          <div class="journal-banner-label">◆ MỤC TIÊU ĐANG THỰC HIỆN</div>
+          <div class="journal-banner-label">▼ MỤC TIÊU ĐANG DẪN ĐƯỜNG TRÊN BẢN ĐỒ</div>
           <strong class="journal-banner-title">${this.activeObjective.quest.title} — ${this.activeObjective.objective.title}</strong>
           <p class="journal-banner-desc">${this.activeObjective.objective.description}</p>
           ${
@@ -311,6 +316,9 @@ export class JournalPanel {
     if (!listEl) return;
     listEl.innerHTML = '';
 
+    const activeTrackedId =
+      this.trackedObjectiveId ?? this.activeObjective?.objective.id ?? null;
+
     for (const entry of this.quests) {
       const { quest, objectives } = entry;
       const card = document.createElement('div');
@@ -326,7 +334,11 @@ export class JournalPanel {
         const effStatus: QuestObjectiveStatus = this.isPresenterMode
           ? 'completed'
           : item.status;
-        const badgeText = STATUS_BADGE[effStatus];
+        const isTracked =
+          effStatus === 'active' && item.objective.id === activeTrackedId;
+        const badgeText = isTracked
+          ? '▼ ĐANG DẪN ĐƯỜNG'
+          : STATUS_BADGE[effStatus];
         const titleText =
           effStatus === 'locked'
             ? `${item.objective.title} (Chưa mở khóa)`
@@ -336,12 +348,21 @@ export class JournalPanel {
             ? item.prerequisiteText ||
               'Hãy hoàn thành mục tiêu hiện tại để tiếp tục dòng sự kiện lịch sử.'
             : item.objective.description;
+        const trackCta =
+          effStatus === 'active'
+            ? `<span class="journal-track-pill ${isTracked ? 'is-tracked' : ''}">${
+                isTracked ? '▼ Đang theo dõi trên Minimap' : '▸ Nhấp để dẫn đường'
+              }</span>`
+            : '';
 
         objectivesHtml += `
-          <li class="journal-objective-row is-${effStatus}" data-objective-id="${item.objective.id}">
+          <li class="journal-objective-row is-${effStatus}${isTracked ? ' is-tracked' : ''}" data-objective-id="${item.objective.id}" ${
+            effStatus === 'active' ? 'tabindex="0" role="button"' : ''
+          }>
             <div class="journal-obj-top">
-              <span class="journal-status-badge is-${effStatus}">${badgeText}</span>
+              <span class="journal-status-badge is-${effStatus}${isTracked ? ' is-tracked' : ''}">${badgeText}</span>
               <strong>${titleText}</strong>
+              ${trackCta}
             </div>
             <p class="journal-obj-desc">${descText}</p>
           </li>
@@ -365,6 +386,23 @@ export class JournalPanel {
             : ''
         }
       `;
+
+      card
+        .querySelectorAll<HTMLElement>('.journal-objective-row.is-active')
+        .forEach((rowEl) => {
+          const objId = rowEl.dataset.objectiveId;
+          if (!objId) return;
+          rowEl.addEventListener('click', () => {
+            this.callbacks.onSelectObjective?.(objId);
+          });
+          rowEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              this.callbacks.onSelectObjective?.(objId);
+            }
+          });
+        });
+
       listEl.appendChild(card);
     }
   }

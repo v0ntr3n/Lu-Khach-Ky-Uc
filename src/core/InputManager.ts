@@ -13,6 +13,7 @@ export interface InputCallbacks {
   onEscape?: () => void;
   onToggleJournal?: () => void;
   onToggleMap?: () => void;
+  onToggleMinimap?: () => void;
   onToggleInventory?: () => void;
   onTogglePause?: () => void;
   onToggleDebugOverlay?: () => void;
@@ -40,6 +41,7 @@ const ACTION_KEYS = new Set<string>([
   'q',
   'j',
   'm',
+  'n',
   'i',
   'h',
   'f',
@@ -170,6 +172,9 @@ export class InputManager {
       } else if (key === 'm') {
         e.preventDefault();
         this.callbacks.onToggleMap?.();
+      } else if (key === 'n') {
+        e.preventDefault();
+        this.callbacks.onToggleMinimap?.();
       } else if (key === 'i') {
         e.preventDefault();
         this.callbacks.onToggleInventory?.();

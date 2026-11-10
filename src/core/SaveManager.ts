@@ -75,6 +75,7 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
   effectsQuality: 'full',
   presenterModeUnlocked: false,
   tutorialCompleted: false,
+  showMinimap: true,
 };
 
 export function normalizeSettings(raw?: Partial<GameSettings> | null): GameSettings {
@@ -109,6 +110,8 @@ export function normalizeSettings(raw?: Partial<GameSettings> | null): GameSetti
       typeof raw?.presenterModeUnlocked === 'boolean' ? raw.presenterModeUnlocked : false,
     tutorialCompleted:
       typeof raw?.tutorialCompleted === 'boolean' ? raw.tutorialCompleted : false,
+    showMinimap:
+      typeof raw?.showMinimap === 'boolean' ? raw.showMinimap : true,
   };
 }
 
@@ -141,6 +144,9 @@ export function normalizeEmbeddedSaveSettings(
   }
   if (raw && raw.tutorialCompleted !== undefined) {
     embedded.tutorialCompleted = full.tutorialCompleted;
+  }
+  if (raw && raw.showMinimap !== undefined) {
+    embedded.showMinimap = full.showMinimap;
   }
 
   return embedded;
@@ -319,6 +325,10 @@ export class SaveManager {
             completedObjectiveIds: Array.isArray(parsed.completedObjectiveIds)
               ? parsed.completedObjectiveIds
               : [],
+            ...(typeof parsed.trackedObjectiveId === 'string' ||
+            parsed.trackedObjectiveId === null
+              ? { trackedObjectiveId: parsed.trackedObjectiveId }
+              : {}),
             dialogueHistory: Array.isArray(parsed.dialogueHistory)
               ? parsed.dialogueHistory
               : [],
