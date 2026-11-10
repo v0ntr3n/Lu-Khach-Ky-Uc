@@ -599,9 +599,7 @@
       }
 
       #stage-shelter-status {
-        position: absolute;
-        top: 0;
-        left: 0;
+        position: static;
         display: inline-flex;
         align-items: center;
         padding: 5px 12px;
@@ -641,11 +639,20 @@
         max-width: min(56vw, 540px);
       }
 
-      #hud-right-stack {
+      #hud-left-stack {
+        position: absolute;
+        top: 40px;
+        left: 0;
         display: flex;
         flex-direction: column;
-        align-items: flex-end;
-        gap: 8px;
+        align-items: flex-start;
+        gap: 6px;
+        width: min(224px, calc(100vw - 24px));
+        pointer-events: none;
+      }
+
+      #hud-left-stack > * {
+        pointer-events: auto;
       }
 
       #minimap-panel {
@@ -658,7 +665,7 @@
         display: flex;
         flex-direction: column;
         gap: 4px;
-        width: 186px;
+        width: min(224px, calc(100vw - 24px));
       }
 
       #minimap-panel.is-collapsed {
@@ -715,8 +722,9 @@
       }
 
       #minimap-canvas {
-        width: 168px;
-        height: 124px;
+        width: 100%;
+        height: auto;
+        aspect-ratio: 168 / 124;
         display: block;
         image-rendering: pixelated;
         image-rendering: crisp-edges;
@@ -741,10 +749,11 @@
         border: 1px solid var(--border-default);
         border-right: 3px solid var(--border-strong);
         box-shadow: var(--shadow-hud);
-        padding: 6px 12px;
+        padding: 6px 9px;
         display: flex;
         align-items: center;
-        max-width: min(320px, 48vw);
+        width: min(224px, calc(100vw - 24px));
+        min-width: 0;
       }
 
       #hud-objective-tracker.is-interact-ready {
@@ -3107,9 +3116,11 @@
         #stage-location-badge {
           font-size: 0.92rem;
         }
+        #hud-left-stack {
+          top: 36px;
+        }
         #hud-objective-tracker {
-          padding: 5px 10px;
-          max-width: 300px;
+          padding: 5px 8px;
         }
         #hud-active-objective-hint {
           display: none;
@@ -3168,13 +3179,9 @@
             <span class="hud-plaque-sep" aria-hidden="true" hidden>◆</span>
             <span id="stage-location-badge">Quảng Trường Bến Cảng Hương Cảng (1930)</span>
           </div>
-          <span id="stage-shelter-status" hidden>◆ Ẩn mình trong bóng tối</span>
-          <span id="stage-chapter-title" hidden></span>
-          <span id="stage-mechanic-hint" hidden></span>
-        </div>
 
-        <div id="hud-top-right">
-          <div id="hud-right-stack">
+          <!-- Minimap + active quest stay together at the top-left. -->
+          <div id="hud-left-stack">
             <aside
               id="minimap-panel"
               aria-label="Bản đồ thu nhỏ và đường dẫn nhiệm vụ"
@@ -3208,7 +3215,7 @@
                   aria-label="Khung vẽ bản đồ thu nhỏ thời gian thực"
                 ></canvas>
                 <div id="minimap-route-banner">
-                  Tại khu vực: Giao Liên Lâm Văn Bính
+                  Theo dấu mục tiêu trên bản đồ
                 </div>
               </div>
             </aside>
@@ -3229,8 +3236,14 @@
                 ▸ Gợi ý: Tiến tới đèn lồng cảng và nhấn [E]
               </div>
             </div>
+            <span id="stage-shelter-status" hidden>◆ Ẩn mình trong bóng tối</span>
           </div>
 
+          <span id="stage-chapter-title" hidden></span>
+          <span id="stage-mechanic-hint" hidden></span>
+        </div>
+
+        <div id="hud-top-right">
           <button
             type="button"
             id="btn-open-pause"
@@ -3335,8 +3348,8 @@
 
         <article id="dialogue-parchment-card" aria-live="polite">
           <header id="dialogue-nameplate" class="dialogue-speaker-cluster">
-            <span id="dialogue-speaker">Giao Liên Cửu Long</span>
-            <span id="dialogue-role">Giao liên Cửu Long</span>
+            <span id="dialogue-speaker">Anh Bính</span>
+            <span id="dialogue-role">Giao liên</span>
           </header>
 
           <div class="dialogue-meta-bar">
