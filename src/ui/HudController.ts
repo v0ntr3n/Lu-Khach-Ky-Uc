@@ -316,9 +316,16 @@ export class HudController {
     closePresenterBtn?.addEventListener('click', () => this.togglePresenterDrawer(false));
 
     const objectiveTrackerEl = document.getElementById('hud-objective-tracker');
-    objectiveTrackerEl?.addEventListener('click', () => {
+    const openObjectiveJournal = () => {
       if (this.pausePanel.isOpen()) this.pausePanel.toggle(false);
       this.toggleJournalModal(true, 'quests');
+    };
+    objectiveTrackerEl?.addEventListener('click', openObjectiveJournal);
+    objectiveTrackerEl?.addEventListener('keydown', (event: KeyboardEvent) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        openObjectiveJournal();
+      }
     });
 
     debugBtn?.addEventListener('click', () => {
