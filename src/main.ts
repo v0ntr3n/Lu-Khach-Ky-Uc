@@ -10,6 +10,11 @@ import { GameStore } from './core/GameStore';
 import { InputManager } from './core/InputManager';
 import { SaveManager } from './core/SaveManager';
 import { InteractionSystem } from './systems/InteractionSystem';
+import { FullscreenManager } from './ui/FullscreenManager';
+import { GameShell } from './ui/GameShell';
+import { LoadingScreen } from './ui/LoadingScreen';
+import { MainMenu } from './ui/MainMenu';
+import { SettingsMenu } from './ui/SettingsMenu';
 
 declare global {
   interface Window {
@@ -17,7 +22,18 @@ declare global {
   }
 }
 
-export { GameStore, InputManager, InteractionSystem, LuKhachKyUcGame, SaveManager };
+export {
+  FullscreenManager,
+  GameShell,
+  GameStore,
+  InputManager,
+  InteractionSystem,
+  LoadingScreen,
+  LuKhachKyUcGame,
+  MainMenu,
+  SaveManager,
+  SettingsMenu,
+};
 
 function bootstrapGame(): void {
   if (typeof document === 'undefined' || !document.getElementById('pixel-canvas')) {
