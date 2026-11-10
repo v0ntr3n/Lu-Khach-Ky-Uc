@@ -3823,12 +3823,19 @@ export function getAllBuiltInMaps(): Record<string, NormalizedMapData> {
   return out;
 }
 
+function resolveMapChapterDir(id: string): string {
+  if (id === 'tan_trao_banyan' || id === 'ba_dinh_square') return 'ch2';
+  if (id === 'pha_din_pass' || id === 'spring_1975_corridor') return 'ch3';
+  if (id === 'doi_moi_avenue' || id === 'nexus_2045_plaza') return 'ch4';
+  return 'ch1';
+}
+
 /**
  * Nạp bản đồ bất đồng bộ từ URL Tiled (.tmj) hoặc dùng bản tích hợp sẵn khi chạy offline / unit test.
  */
 export async function fetchAndParseMap(
   id: string,
-  url = `./maps/ch1/${id}.tmj`
+  url = `./maps/${resolveMapChapterDir(id)}/${id}.tmj`
 ): Promise<NormalizedMapData> {
   if (typeof fetch === 'function') {
     try {
