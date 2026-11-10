@@ -134,10 +134,64 @@ export async function runMapValidationCli(
     });
   }
 
-  const { QuestSystem } = await import('../src/systems/QuestSystem.ts');
+  const { QuestSystem, QUEST_CATALOG } = await import('../src/systems/QuestSystem.ts');
+  const { GridPathfinder } = await import('../src/world/GridPathfinder.ts');
+  const { resolveObjectiveTarget } = await import('../src/runtime/PhaserRuntime.ts');
+
   const questTargetRes = new QuestSystem().validateAllObjectiveTargets(parsedFromDisk);
   if (!questTargetRes.valid) {
     errors.push(...questTargetRes.errors);
+  }
+
+  // Kiểm định khả năng dẫn đường A* (GridPathfinder) tới toàn bộ Portal & Mục tiêu Nhiệm vụ trên 14 bản đồ
+  let astarRoutesChecked = 0;
+  for (const [id, norm] of Object.entries(parsedFromDisk)) {
+    const pathfinder = new GridPathfinder(norm);
+    const defaultSpawn =
+      norm.spawns.find((s) => s.id === norm.defaultSpawnId) ?? norm.spawns[0];
+    if (!defaultSpawn) continue;
+
+    for (const portal of norm.portals) {
+      const targetX = portal.x + portal.width * 0.5;
+      const targetY = portal.y + portal.height * 0.5;
+      const pathRes = pathfinder.findPath(
+        { x: defaultSpawn.x, y: defaultSpawn.y },
+        { x: targetX, y: targetY }
+      );
+      astarRoutesChecked++;
+      if (!pathRes.reachable || pathRes.points.length < 2) {
+        errors.push(
+          `[${id}] Portal "${portal.id}" is unreachable via A* GridPathfinder from default spawn "${defaultSpawn.id}".`
+        );
+      }
+    }
+  }
+
+  for (const quest of QUEST_CATALOG) {
+    for (const obj of quest.objectives) {
+      const targetZoneId = obj.targetRef?.zoneId ?? obj.zoneId;
+      const norm = parsedFromDisk[targetZoneId];
+      if (!norm) continue;
+      const defaultSpawn =
+        norm.spawns.find((s) => s.id === norm.defaultSpawnId) ?? norm.spawns[0];
+      if (!defaultSpawn) continue;
+      const resolved = resolveObjectiveTarget(norm, obj);
+      if (!resolved.position) {
+        errors.push(`[${quest.id}/${obj.id}] Missing resolved position on zone "${targetZoneId}".`);
+        continue;
+      }
+      const pathfinder = new GridPathfinder(norm);
+      const pathRes = pathfinder.findPath(
+        { x: defaultSpawn.x, y: defaultSpawn.y },
+        { x: resolved.position.x, y: resolved.position.y }
+      );
+      astarRoutesChecked++;
+      if (!pathRes.reachable || pathRes.points.length < 2) {
+        errors.push(
+          `[${quest.id}/${obj.id}] Target "${resolved.position.label}" on "${targetZoneId}" is unreachable via A* from spawn "${defaultSpawn.id}".`
+        );
+      }
+    }
   }
 
   const graphRes = CHAPTER1_WORLD_GRAPH.validateWorldGraph(parsedFromDisk);
@@ -156,6 +210,9 @@ export async function runMapValidationCli(
     console.log(
       `QuestTargetRef Integrity (15 Objectives Across Chapters I–IV): ${questTargetRes.valid ? 'PASS' : 'FAIL'}`
     );
+    console.log(
+      `A* GridPathfinder Reachability (${astarRoutesChecked} Routes Verified): ${errors.length === 0 ? 'PASS' : 'FAIL'}`
+    );
     if (errors.length > 0) {
       console.error('\nValidation Errors:');
       for (const err of errors) {
@@ -163,7 +220,7 @@ export async function runMapValidationCli(
       }
     } else {
       console.log(
-        `\n✓ All ${tableRows.length} Tiled maps, WorldGraph routes, and QuestTargetRef links validated with 0 errors.`
+        `\n✓ All ${tableRows.length} Tiled maps, WorldGraph routes, QuestTargetRef links, and ${astarRoutesChecked} A* paths validated with 0 errors.`
       );
     }
   }
