@@ -527,7 +527,7 @@ export class HudController {
 
     if (titleA) titleA.textContent = chapter.climax.stepATitle;
     if (promptA) promptA.textContent = chapter.climax.stepAPrompt;
-    if (citeA) citeA.textContent = `◆ Nguồn đối chiếu: ${chapter.climax.stepACitation}`;
+    if (citeA) { citeA.textContent = ''; citeA.hidden = true; }
 
     optionsContainer.innerHTML = '';
     chapter.climax.options.forEach((opt, idx) => {
@@ -564,7 +564,7 @@ export class HudController {
 
     if (titleB) titleB.textContent = chapter.climax.stepBTitle;
     if (subB) subB.textContent = chapter.climax.stepBSubtitle;
-    if (citeB) citeB.textContent = `◆ Nguồn đối chiếu: ${chapter.climax.stepBCitation}`;
+    if (citeB) { citeB.textContent = ''; citeB.hidden = true; }
 
     actionBtn.textContent = chapter.climax.stepBActionLabel;
     actionBtn.onclick = () => {
@@ -897,7 +897,7 @@ export class HudController {
           <strong>${entry.question}</strong>
         </div>
         <p class="lookup-entry-answer">${entry.answer}</p>
-        <div class="lookup-entry-cite">◆ Nguồn đối chiếu: ${entry.citation}</div>
+        
       `;
       container.appendChild(card);
     }
