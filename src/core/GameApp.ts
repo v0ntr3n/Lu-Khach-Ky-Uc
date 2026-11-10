@@ -1748,6 +1748,8 @@ export class LuKhachKyUcGame {
       this.hasPatrolScheduleBonus()
     );
     const stealthAlertState = this.getCurrentStealthAlertState(patrolActors);
+    const showStealthStatus =
+      this.currentMap.id === 'shadow_alley' || stealthAlertState !== 'calm';
 
     this.hud.renderSidebarCodex(
       chapter,
@@ -1756,8 +1758,8 @@ export class LuKhachKyUcGame {
     );
     this.hud.updateStageHeader(
       chapter,
-      this.isPlayerInShelter(),
-      stealthAlertState
+      showStealthStatus && this.isPlayerInShelter(),
+      showStealthStatus ? stealthAlertState : 'calm'
     );
     this.hud.updateMapLocationBadge(
       this.currentMap.title || chapter.locationLabel,
@@ -2161,11 +2163,13 @@ export class LuKhachKyUcGame {
       this.hasPatrolScheduleBonus()
     );
     const stealthAlertState = this.getCurrentStealthAlertState(patrolActors);
+    const showStealthStatus =
+      this.currentMap.id === 'shadow_alley' || stealthAlertState !== 'calm';
 
     this.hud.updateStageHeader(
       chapter,
-      this.isPlayerInShelter(),
-      stealthAlertState
+      showStealthStatus && this.isPlayerInShelter(),
+      showStealthStatus ? stealthAlertState : 'calm'
     );
     this.hud.updateMapLocationBadge(
       this.currentMap.title || chapter.locationLabel,

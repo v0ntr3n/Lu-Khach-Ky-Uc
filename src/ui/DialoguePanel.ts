@@ -92,6 +92,76 @@ export function splitDialogueIntoPages(raw: string): string[] {
   return pages.length > 0 ? pages : [formatQuotedSpeech(cleaned)];
 }
 
+export const DIALOGUE_NAMEPLATE_MAP: Readonly<
+  Record<string, { name: string; role: string }>
+> = {
+  // Chương I · Hương Cảng 1930
+  'Giao Liên Lâm Văn Bính': { name: 'Anh Bính', role: 'Giao liên' },
+  'Bác Công Nhân Bến Cảng': { name: 'Bác Công Nhân', role: 'Bến cảng' },
+  'Người Gác Đèn Bến Cảng': { name: 'Người Gác Đèn', role: 'Hoa tiêu' },
+  'Thủ Kho Lưu Trữ Cửu Long': { name: 'Thủ Kho', role: 'Kho Số 4' },
+  'Bà Hàng Nước Phố Cổ': { name: 'Bà Hàng Nước', role: 'Phố Cổ' },
+  'Giao Liên Trần Thị Liên': { name: 'Chị Liên', role: 'Giao liên' },
+  'Lão Chèo Đò Bến Thuyền': { name: 'Lão Chèo Đò', role: 'Bến thuyền' },
+  'Ông Từ Giữ Kho Lưu Trữ': { name: 'Ông Từ', role: 'Kho lưu trữ' },
+  'Giao Liên Cơ Sở Hương Cảng': { name: 'Giao Liên Cơ Sở', role: 'Hương Cảng' },
+  'Ký Lục Viên Hội Nghị Hợp Nhất': { name: 'Ký Lục Viên', role: 'Hội nghị 1930' },
+  'Chiến Sĩ Tự Vệ Đỏ Nghệ Tĩnh': { name: 'Tự Vệ Đỏ', role: 'Nghệ Tĩnh 1930' },
+
+  // Chương II · Tân Trào – Ba Đình 1945
+  'Giao Liên Việt Minh Hoàng Quốc Bảo': { name: 'Anh Bảo', role: 'Việt Minh' },
+  'Đội Viên Tự Vệ Thành Hoàng Diệu': { name: 'Tự Vệ Hoàng Diệu', role: 'Ba Đình 1945' },
+  'Cán Bộ Mặt Trận Việt Minh': { name: 'Cán Bộ Việt Minh', role: 'Pác Bó' },
+  'Chiến Sĩ Giải Phóng Quân': { name: 'Giải Phóng Quân', role: 'Tân Trào 1945' },
+  'Đội Viên Tự Vệ Thủ Đô': { name: 'Tự Vệ Thủ Đô', role: 'Ba Đình 1945' },
+
+  // Chương III · Điện Biên – Mùa Xuân 1975
+  'Đội Trưởng Dân Công Hậu Cần': { name: 'Đội Trưởng Dân Công', role: 'Đèo Pha Đin' },
+  'Chiến Sĩ Thông Tin Chiến Dịch Hồ Chí Minh': {
+    name: 'Chiến Sĩ Thông Tin',
+    role: 'Mùa Xuân 1975',
+  },
+  'Dân Công Hỏa Tuyến Điện Biên': { name: 'Dân Công Hỏa Tuyến', role: 'Điện Biên 1954' },
+  'Chiến Sĩ Đường Hồ Chí Minh': { name: 'Chiến Sĩ Trường Sơn', role: 'Đường 559' },
+  'Chiến Sĩ Xe Tăng Chiến Dịch Hồ Chí Minh': {
+    name: 'Chiến Sĩ Xe Tăng',
+    role: 'Mùa Xuân 1975',
+  },
+
+  // Chương IV · Đổi Mới – Kỷ Nguyên Số 2045
+  'Chuyên Gia Nghiên Cứu Đổi Mới': { name: 'Chuyên Gia Đổi Mới', role: 'Chính sách 1986' },
+  'Giám Tuyển Lưu Trữ Quốc Gia 2045': { name: 'Giám Tuyển Ký Ức', role: 'Lưu trữ 2045' },
+  'Kiến Trúc Sư Kinh Tế Đổi Mới': { name: 'Chuyên Gia Kinh Tế', role: 'Đổi Mới 1986' },
+  'Chuyên Gia Hội Nhập & Công Nghiệp Hóa': {
+    name: 'Chuyên Gia Hội Nhập',
+    role: 'Công nghiệp hóa',
+  },
+  'Lữ Khách Lưu Trữ Quốc Gia 2045': { name: 'Lữ Khách Ký Ức', role: 'Kỷ nguyên 2045' },
+};
+
+/**
+ * Keep complete character identities in story data, while the dialogue
+ * nameplate uses short, readable labels like an RPG.
+ */
+export function getDialogueNameplate(
+  speaker: string,
+  role: string
+): { name: string; role: string } {
+  const readableName = speaker.trim();
+  const readableRole = role.trim();
+  const mapped = DIALOGUE_NAMEPLATE_MAP[readableName];
+  if (mapped) {
+    return mapped;
+  }
+  return {
+    name: readableName,
+    role:
+      readableRole.toLocaleLowerCase('vi') === readableName.toLocaleLowerCase('vi')
+        ? ''
+        : readableRole,
+  };
+}
+
 export class DialoguePanel {
   private callbacks: DialoguePanelCallbacks;
   private pages: string[] = [];
@@ -377,8 +447,15 @@ export class DialoguePanel {
     const sigEl = document.getElementById('dialogue-significance');
     const citeEl = document.getElementById('dialogue-citation');
 
-    if (speakerEl) speakerEl.textContent = node.speaker;
-    if (roleEl) roleEl.textContent = node.role;
+    const displayIdentity = getDialogueNameplate(node.speaker, node.role);
+    if (speakerEl) {
+      speakerEl.textContent = displayIdentity.name;
+      speakerEl.title = node.speaker;
+    }
+    if (roleEl) {
+      roleEl.textContent = displayIdentity.role;
+      roleEl.hidden = !displayIdentity.role;
+    }
 
     this.currentArchetype = resolveDialoguePortraitArchetype(
       node.speaker,
@@ -417,8 +494,15 @@ export class DialoguePanel {
 
       const speaker = node?.speaker ?? milestone.npcSpeaker;
       const role = node?.role ?? milestone.npcRole;
-      if (speakerEl) speakerEl.textContent = speaker;
-      if (roleEl) roleEl.textContent = role;
+      const displayIdentity = getDialogueNameplate(speaker, role);
+      if (speakerEl) {
+        speakerEl.textContent = displayIdentity.name;
+        speakerEl.title = speaker;
+      }
+      if (roleEl) {
+        roleEl.textContent = displayIdentity.role;
+        roleEl.hidden = !displayIdentity.role;
+      }
 
       this.currentArchetype = resolveDialoguePortraitArchetype(
         speaker,
