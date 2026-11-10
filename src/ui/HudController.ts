@@ -838,7 +838,8 @@ export class HudController {
       data.activeObjective,
       data.hintText,
       data.isPresenterMode,
-      data.trackedObjectiveId ?? null
+      data.trackedObjectiveId ?? null,
+      data.settings.showHints
     );
     this.inventoryPanel.updateState(
       data.allEvidence,

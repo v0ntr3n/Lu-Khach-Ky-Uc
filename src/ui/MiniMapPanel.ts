@@ -119,13 +119,64 @@ export class MiniMapPanel {
     }
   }
 
+  public getActiveTheme(): 'light' | 'dark' {
+    if (typeof document !== 'undefined') {
+      const attr =
+        document.documentElement.dataset.theme || document.body?.dataset.theme;
+      if (attr === 'light') return 'light';
+    }
+    return 'dark';
+  }
+
+  private getPalette(theme: 'light' | 'dark') {
+    if (theme === 'light') {
+      return {
+        bgFrame: '#D8CBB0',
+        ground: '#EFE7D6',
+        shelterFill: 'rgba(49, 107, 74, 0.30)',
+        obstacleFill: '#A89172',
+        obstacleStroke: '#786042',
+        borderStroke: '#7A4E22',
+        portalFill: '#1B6B85',
+        checkpointUnlocked: '#2D7A47',
+        checkpointLocked: '#8A5A2B',
+        npcFill: '#3B2E22',
+        routeStroke: '#8F2918',
+        targetFill: '#9E3321',
+        targetPortalFill: '#1B6B85',
+        targetStroke: '#221C15',
+        playerFill: '#8F2918',
+        playerStroke: '#FBF8F1',
+      };
+    }
+    return {
+      bgFrame: '#191410',
+      ground: '#2A221B',
+      shelterFill: 'rgba(66, 122, 91, 0.38)',
+      obstacleFill: '#4A3828',
+      obstacleStroke: '#6E5239',
+      borderStroke: '#8A5A2B',
+      portalFill: '#63B3ED',
+      checkpointUnlocked: '#68D391',
+      checkpointLocked: '#8A5A2B',
+      npcFill: '#F2E6D0',
+      routeStroke: '#E8B86D',
+      targetFill: '#C84B31',
+      targetPortalFill: '#63B3ED',
+      targetStroke: '#F6EAD4',
+      playerFill: '#F6EAD4',
+      playerStroke: '#9E3321',
+    };
+  }
+
   private getOrCreateTerrainCanvas(
     map: NormalizedMapData,
     width: number,
-    height: number
+    height: number,
+    theme: 'light' | 'dark'
   ): HTMLCanvasElement | null {
     if (typeof document === 'undefined') return null;
-    const key = `${map.id}:${width}x${height}:${map.obstacles.length}:${map.shelters.length}`;
+    const key = `${theme}:${map.id}:${width}x${height}:${map.obstacles.length}:${map.shelters.length}`;
     const existing = this.terrainCache.get(key);
     if (existing) {
       return existing;
@@ -139,19 +190,20 @@ export class MiniMapPanel {
       return null;
     }
 
+    const palette = this.getPalette(theme);
     const sx = width / Math.max(1, map.widthPx);
     const sy = height / Math.max(1, map.heightPx);
 
-    // Nền Sơn Mài Đen Thẫm
-    ctx.fillStyle = '#191410';
+    // Khung nền bản đồ theo chế độ Sáng (Giấy Dó) / Tối (Sơn Mài)
+    ctx.fillStyle = palette.bgFrame;
     ctx.fillRect(0, 0, width, height);
 
     // Lưới mặt đất đi được
-    ctx.fillStyle = '#2A221B';
+    ctx.fillStyle = palette.ground;
     ctx.fillRect(2, 2, width - 4, height - 4);
 
     // Vùng ẩn nấp an toàn (Shelters)
-    ctx.fillStyle = 'rgba(66, 122, 91, 0.38)';
+    ctx.fillStyle = palette.shelterFill;
     for (const shelter of map.shelters) {
       if (shelter.bounds) {
         ctx.fillRect(
@@ -164,8 +216,8 @@ export class MiniMapPanel {
     }
 
     // Khối kiến trúc / vật cản (Obstacles)
-    ctx.fillStyle = '#4A3828';
-    ctx.strokeStyle = '#6E5239';
+    ctx.fillStyle = palette.obstacleFill;
+    ctx.strokeStyle = palette.obstacleStroke;
     ctx.lineWidth = 1;
     for (const obs of map.obstacles) {
       const ox = Math.round(obs.x * sx);
@@ -176,7 +228,7 @@ export class MiniMapPanel {
     }
 
     // Khung viền đồng cổ
-    ctx.strokeStyle = '#8A5A2B';
+    ctx.strokeStyle = palette.borderStroke;
     ctx.lineWidth = 1;
     ctx.strokeRect(0.5, 0.5, width - 1, height - 1);
 
@@ -227,6 +279,8 @@ export class MiniMapPanel {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    const theme = this.getActiveTheme();
+    const palette = this.getPalette(theme);
     const width = canvas.width || 168;
     const height = canvas.height || 124;
     const sx = width / Math.max(1, map.widthPx);
@@ -234,16 +288,16 @@ export class MiniMapPanel {
 
     ctx.clearRect(0, 0, width, height);
 
-    const cachedTerrain = this.getOrCreateTerrainCanvas(map, width, height);
+    const cachedTerrain = this.getOrCreateTerrainCanvas(map, width, height, theme);
     if (cachedTerrain) {
       try {
         ctx.drawImage(cachedTerrain, 0, 0);
       } catch {
-        ctx.fillStyle = '#191410';
+        ctx.fillStyle = palette.bgFrame;
         ctx.fillRect(0, 0, width, height);
       }
     } else {
-      ctx.fillStyle = '#191410';
+      ctx.fillStyle = palette.bgFrame;
       ctx.fillRect(0, 0, width, height);
     }
 
@@ -251,7 +305,7 @@ export class MiniMapPanel {
     for (const portal of map.portals) {
       const px = Math.round((portal.x + portal.width * 0.5) * sx);
       const py = Math.round((portal.y + portal.height * 0.5) * sy);
-      ctx.fillStyle = '#63B3ED';
+      ctx.fillStyle = palette.portalFill;
       ctx.fillRect(px - 2, py - 2, 5, 5);
     }
 
@@ -261,7 +315,9 @@ export class MiniMapPanel {
       const cy = Math.round(cp.y * sy);
       const isUnlocked =
         unlockedCheckpoints.has(cp.id) || unlockedCheckpoints.has(map.id);
-      ctx.fillStyle = isUnlocked ? '#68D391' : '#8A5A2B';
+      ctx.fillStyle = isUnlocked
+        ? palette.checkpointUnlocked
+        : palette.checkpointLocked;
       ctx.fillRect(cx - 2, cy - 2, 4, 4);
     }
 
@@ -269,7 +325,7 @@ export class MiniMapPanel {
     for (const npc of map.npcs) {
       const nx = Math.round(npc.x * sx);
       const ny = Math.round(npc.y * sy);
-      ctx.fillStyle = '#F2E6D0';
+      ctx.fillStyle = palette.npcFill;
       ctx.fillRect(nx - 1, ny - 1, 3, 3);
     }
 
@@ -277,7 +333,7 @@ export class MiniMapPanel {
     const routePoints: readonly Vec2[] = routeState?.path.points ?? [];
     if (routePoints.length >= 2) {
       ctx.save();
-      ctx.strokeStyle = '#E8B86D';
+      ctx.strokeStyle = palette.routeStroke;
       ctx.lineWidth = 2;
       if (typeof ctx.setLineDash === 'function') {
         ctx.setLineDash([4, 2]);
@@ -302,8 +358,10 @@ export class MiniMapPanel {
       ctx.save();
       ctx.translate(tx, ty);
       ctx.rotate(Math.PI / 4);
-      ctx.fillStyle = targetPos.isPortal ? '#63B3ED' : '#C84B31';
-      ctx.strokeStyle = '#F6EAD4';
+      ctx.fillStyle = targetPos.isPortal
+        ? palette.targetPortalFill
+        : palette.targetFill;
+      ctx.strokeStyle = palette.targetStroke;
       ctx.lineWidth = 1;
       ctx.fillRect(-r * 0.5, -r * 0.5, r, r);
       ctx.strokeRect(-r * 0.5, -r * 0.5, r, r);
@@ -326,8 +384,8 @@ export class MiniMapPanel {
             : -Math.PI * 0.5;
     ctx.rotate(angle);
 
-    ctx.fillStyle = '#F6EAD4';
-    ctx.strokeStyle = '#9E3321';
+    ctx.fillStyle = palette.playerFill;
+    ctx.strokeStyle = palette.playerStroke;
     ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.moveTo(4.5, 0);

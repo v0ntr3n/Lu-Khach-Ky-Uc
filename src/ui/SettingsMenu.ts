@@ -5,19 +5,29 @@
  * Toàn màn hình, Giảm chuyển động, Chất lượng hiệu ứng thời tiết, Gợi ý HUD và Chế độ Giảng viên.
  */
 
-import type { CameraZoomPreset, EffectsQuality, GameSettings } from '../types/game';
+import type {
+  CameraZoomPreset,
+  EffectiveTheme,
+  EffectsQuality,
+  GameSettings,
+  ThemeMode,
+} from '../types/game';
+import { ThemeManager } from './ThemeManager';
 
 export interface SettingsMenuCallbacks {
   onUpdateSettings?: (partial: Partial<GameSettings>) => void;
   onToggleFullscreen?: () => Promise<boolean> | boolean;
   onReplayTutorial?: () => void;
+  onThemeResolved?: (effectiveTheme: EffectiveTheme, mode: ThemeMode) => void;
   onClose?: () => void;
 }
 
 const VALID_ZOOM_PRESETS = new Set<CameraZoomPreset>(['wide', 'normal', 'close']);
+const VALID_THEME_MODES = new Set<ThemeMode>(['system', 'light', 'dark']);
 
 export class SettingsMenu {
   private callbacks: SettingsMenuCallbacks;
+  public readonly themeManager: ThemeManager;
   private settings: GameSettings = {
     muted: false,
     masterVolume: 0.85,
@@ -27,12 +37,17 @@ export class SettingsMenu {
     cameraZoom: 'normal',
     effectsQuality: 'full',
     presenterModeUnlocked: false,
+    themeMode: 'system',
   };
   private isFullscreen = false;
   private lastTriggerEl: HTMLElement | null = null;
 
   constructor(callbacks: SettingsMenuCallbacks = {}) {
     this.callbacks = callbacks;
+    this.themeManager = new ThemeManager(this.settings.themeMode ?? 'system');
+    this.themeManager.onChange((effective, mode) => {
+      this.callbacks.onThemeResolved?.(effective, mode);
+    });
     this.bindStaticEvents();
     this.syncUI();
   }
@@ -100,6 +115,17 @@ export class SettingsMenu {
         this.settings.cameraZoom = raw;
         this.syncUI();
         this.callbacks.onUpdateSettings?.({ cameraZoom: raw });
+      });
+    });
+
+    document.querySelectorAll<HTMLButtonElement>('[data-theme-mode]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const raw = btn.dataset.themeMode as ThemeMode | undefined;
+        if (!raw || !VALID_THEME_MODES.has(raw)) return;
+        this.settings.themeMode = raw;
+        this.themeManager.setThemeMode(raw, true);
+        this.syncUI();
+        this.callbacks.onUpdateSettings?.({ themeMode: raw });
       });
     });
 
@@ -240,12 +266,14 @@ export class SettingsMenu {
       cameraZoom: settings.cameraZoom ?? 'normal',
       effectsQuality: settings.effectsQuality ?? 'full',
       presenterModeUnlocked: settings.presenterModeUnlocked ?? false,
+      themeMode: settings.themeMode ?? 'system',
     };
     if (typeof isFullscreen === 'boolean') {
       this.isFullscreen = isFullscreen;
     } else if (typeof document !== 'undefined') {
       this.isFullscreen = Boolean(document.fullscreenElement);
     }
+    this.themeManager.setThemeMode(this.settings.themeMode ?? 'system', false);
     this.syncUI();
   }
 
@@ -256,6 +284,13 @@ export class SettingsMenu {
     document.body.classList.toggle('reduced-motion', this.settings.reducedMotion);
     document.body.classList.toggle('text-scale-large', isLargeText);
     document.documentElement.classList.toggle('text-scale-large', isLargeText);
+
+    const activeThemeMode: ThemeMode = this.settings.themeMode ?? 'system';
+    document.querySelectorAll<HTMLButtonElement>('[data-theme-mode]').forEach((btn) => {
+      const isSelected = btn.dataset.themeMode === activeThemeMode;
+      btn.classList.toggle('is-active', isSelected);
+      btn.setAttribute('aria-pressed', String(isSelected));
+    });
 
     const muteBtn = document.getElementById('toggle-mute-audio');
     if (muteBtn) {
