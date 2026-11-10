@@ -62,6 +62,7 @@ export class MiniMapPanel {
     canvas?.addEventListener('keydown', (event: KeyboardEvent) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
+        event.stopPropagation();
         this.callbacks.onOpenWorldMap?.();
       }
     });
