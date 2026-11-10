@@ -10,6 +10,7 @@ import type { CameraZoomPreset, EffectsQuality, GameSettings } from '../types/ga
 export interface SettingsMenuCallbacks {
   onUpdateSettings?: (partial: Partial<GameSettings>) => void;
   onToggleFullscreen?: () => Promise<boolean> | boolean;
+  onReplayTutorial?: () => void;
   onClose?: () => void;
 }
 
@@ -160,6 +161,14 @@ export class SettingsMenu {
       this.settings.presenterModeUnlocked = nextUnlocked;
       this.syncUI();
       this.callbacks.onUpdateSettings?.({ presenterModeUnlocked: nextUnlocked });
+    });
+
+    const replayTutorialBtn = document.getElementById('btn-replay-tutorial');
+    replayTutorialBtn?.addEventListener('click', () => {
+      this.settings.tutorialCompleted = false;
+      this.syncUI();
+      this.callbacks.onUpdateSettings?.({ tutorialCompleted: false });
+      this.callbacks.onReplayTutorial?.();
     });
   }
 

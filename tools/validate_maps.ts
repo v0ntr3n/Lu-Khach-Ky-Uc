@@ -134,6 +134,12 @@ export async function runMapValidationCli(
     });
   }
 
+  const { QuestSystem } = await import('../src/systems/QuestSystem.ts');
+  const questTargetRes = new QuestSystem().validateAllObjectiveTargets(parsedFromDisk);
+  if (!questTargetRes.valid) {
+    errors.push(...questTargetRes.errors);
+  }
+
   const graphRes = CHAPTER1_WORLD_GRAPH.validateWorldGraph(parsedFromDisk);
   if (!graphRes.valid) {
     errors.push(...graphRes.errors);
@@ -147,6 +153,9 @@ export async function runMapValidationCli(
     console.log(
       `WorldGraph (${tableRows.length} Zones Across 4 Eras) Integrity: ${graphRes.valid ? 'PASS' : 'FAIL'}`
     );
+    console.log(
+      `QuestTargetRef Integrity (15 Objectives Across Chapters I–IV): ${questTargetRes.valid ? 'PASS' : 'FAIL'}`
+    );
     if (errors.length > 0) {
       console.error('\nValidation Errors:');
       for (const err of errors) {
@@ -154,7 +163,7 @@ export async function runMapValidationCli(
       }
     } else {
       console.log(
-        `\n✓ All ${tableRows.length} Tiled maps and WorldGraph routes validated with 0 errors.`
+        `\n✓ All ${tableRows.length} Tiled maps, WorldGraph routes, and QuestTargetRef links validated with 0 errors.`
       );
     }
   }

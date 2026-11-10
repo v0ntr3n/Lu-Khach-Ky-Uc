@@ -330,9 +330,18 @@
       #hud-active-objective-text {
         font-family: var(--font-ui);
         font-size: 1rem;
-        font-weight: 500;
-        line-height: 1.42;
+        font-weight: 600;
+        line-height: 1.38;
         color: var(--parchment-light);
+      }
+
+      #hud-active-objective-action {
+        font-family: var(--font-ui);
+        font-size: 0.94rem; /* 15px */
+        font-weight: 500;
+        line-height: 1.4;
+        color: var(--bronze-bright);
+        margin-top: 1px;
       }
 
       #hud-active-objective-hint {
@@ -341,6 +350,108 @@
         line-height: 1.4;
         color: var(--crimson-vermilion);
         margin-top: 2px;
+      }
+
+      /* ==========================================================================
+         THANH HƯỚNG DẪN TÂN THỦ NỔI KHÔNG CHẶN DI CHUYỂN (#tutorial-coach-bar)
+         ========================================================================== */
+      #tutorial-coach-bar {
+        position: absolute;
+        left: 50%;
+        bottom: 18px;
+        transform: translateX(-50%);
+        width: min(680px, calc(100vw - 32px));
+        z-index: 26;
+        pointer-events: auto;
+        background: rgba(27, 22, 18, 0.96);
+        color: var(--parchment-light);
+        border: 1.5px solid var(--bronze-bright);
+        border-left: 4px solid var(--crimson-seal);
+        box-shadow: 0 10px 28px rgba(17, 14, 11, 0.86);
+        padding: 10px 16px;
+        display: none;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      #tutorial-coach-bar.is-open {
+        display: flex;
+      }
+
+      .tutorial-coach-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .tutorial-coach-title-cluster {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      #tutorial-step-badge {
+        padding: 2px 8px;
+        background: var(--crimson-seal);
+        color: var(--parchment-light);
+        border: 1px solid var(--bronze-bright);
+        font-family: var(--font-mono);
+        font-size: 0.76rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+      }
+
+      #tutorial-step-title {
+        font-family: var(--font-display);
+        font-size: 1.12rem;
+        font-weight: 700;
+        color: var(--bronze-bright);
+      }
+
+      #tutorial-step-keycap {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        background: var(--lacquer-void);
+        color: var(--parchment-light);
+        border: 1px solid var(--bronze-antique);
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        font-weight: 600;
+      }
+
+      .tutorial-coach-body {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      #tutorial-step-instruction {
+        flex: 1;
+        min-width: 220px;
+        font-family: var(--font-ui);
+        font-size: 0.98rem;
+        line-height: 1.45;
+        color: var(--parchment-light);
+      }
+
+      .tutorial-coach-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+
+      #btn-tutorial-next,
+      #btn-tutorial-skip {
+        min-height: 36px;
+        padding: 6px 12px;
+        font-size: 0.9rem;
       }
 
       #btn-open-pause {
@@ -2110,6 +2221,9 @@
           <div id="hud-objective-tracker" aria-live="polite">
             <div id="hud-active-quest-title">◆ Hội Nghị Hợp Nhất Cửu Long</div>
             <div id="hud-active-objective-text">Bắt liên lạc tại Quảng Trường Bến Cảng</div>
+            <div id="hud-active-objective-action">
+              → Trò chuyện với Giao Liên Lâm Văn Bính gần cột đèn bến cảng [E]
+            </div>
             <div id="hud-active-objective-hint">
               ▸ Gợi ý: Tiến tới đèn lồng cảng và nhấn [E]
             </div>
@@ -2135,6 +2249,35 @@
             <kbd class="hud-keycap">Esc</kbd>
           </button>
         </div>
+
+        <!-- Thanh hướng dẫn tân thủ nổi không chặn điều khiển thế giới -->
+        <aside
+          id="tutorial-coach-bar"
+          aria-live="polite"
+          aria-label="Hướng dẫn thao tác cơ bản"
+          hidden
+        >
+          <div class="tutorial-coach-top">
+            <div class="tutorial-coach-title-cluster">
+              <span id="tutorial-step-badge">HƯỚNG DẪN 1/5</span>
+              <strong id="tutorial-step-title">Bước 1 · Di chuyển Lữ Khách</strong>
+            </div>
+            <kbd id="tutorial-step-keycap">WASD / Phím mũi tên</kbd>
+          </div>
+          <div class="tutorial-coach-body">
+            <p id="tutorial-step-instruction">
+              Dùng phím WASD hoặc Mũi tên để bước đi trên bến cảng Cửu Long.
+            </p>
+            <div class="tutorial-coach-actions">
+              <button type="button" id="btn-tutorial-next" class="ctrl-btn">
+                Bước tiếp ▸
+              </button>
+              <button type="button" id="btn-tutorial-skip" class="ctrl-btn is-primary">
+                Bỏ qua [X]
+              </button>
+            </div>
+          </div>
+        </aside>
 
         <div id="dev-debug-readout" hidden></div>
 
@@ -2659,6 +2802,9 @@
             <div class="settings-row">
               <button type="button" id="toggle-show-hints" class="ctrl-btn">
                 ◆ Gợi ý nhiệm vụ trên HUD [H]: Đang bật
+              </button>
+              <button type="button" id="btn-replay-tutorial" class="ctrl-btn">
+                ↺ Xem lại hướng dẫn tân thủ
               </button>
             </div>
           </section>

@@ -196,12 +196,14 @@ export class GameHUD {
   public updateObjectiveTracker(
     activeObjective: { quest: QuestDefinition; objective: QuestObjective } | null,
     hintText: string,
-    showHints: boolean
+    showHints: boolean,
+    nextActionText?: string
   ): void {
     if (typeof document === 'undefined') return;
 
     const questTitleEl = document.getElementById('hud-active-quest-title');
     const objTextEl = document.getElementById('hud-active-objective-text');
+    const objActionEl = document.getElementById('hud-active-objective-action');
     const objHintEl = document.getElementById('hud-active-objective-hint');
 
     if (activeObjective) {
@@ -209,14 +211,31 @@ export class GameHUD {
         questTitleEl.textContent = `◆ ${activeObjective.quest.title}`;
       }
       if (objTextEl) {
-        objTextEl.textContent = `${activeObjective.objective.title}: ${activeObjective.objective.description}`;
+        objTextEl.textContent = activeObjective.objective.title;
+      }
+      if (objActionEl) {
+        const actionLine =
+          nextActionText ??
+          activeObjective.objective.nextActionText ??
+          activeObjective.objective.hintText ??
+          activeObjective.objective.title;
+        objActionEl.hidden = false;
+        objActionEl.removeAttribute('hidden');
+        objActionEl.textContent = `→ ${actionLine}`;
       }
     } else {
       if (questTitleEl) {
         questTitleEl.textContent = '✓ HOÀN THÀNH MỤC TIÊU CHƯƠNG';
       }
       if (objTextEl) {
-        objTextEl.textContent = 'Tiến tới không gian hội tụ để kích hoạt Cổng Thời Gian.';
+        objTextEl.textContent =
+          nextActionText || 'Tiến tới không gian hội tụ để kích hoạt Cổng Thời Gian.';
+      }
+      if (objActionEl) {
+        objActionEl.hidden = false;
+        objActionEl.removeAttribute('hidden');
+        objActionEl.textContent =
+          '→ Tiến tới Cổng Thời Gian cuối chương và nhấn [E]';
       }
     }
 

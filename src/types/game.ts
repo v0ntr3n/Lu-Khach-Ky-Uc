@@ -351,11 +351,51 @@ export interface WorldZoneNode {
 
 export type QuestObjectiveStatus = 'locked' | 'active' | 'completed';
 
+export type TargetResolutionStatus = 'resolved' | 'locked' | 'unavailable';
+
+export interface QuestTargetRef {
+  zoneId: string;
+  npcId?: string;
+  interactableId?: string;
+  portalId?: string;
+  milestoneId?: RomanMilestoneId;
+  approachPoint?: Vec2;
+}
+
+export interface ObjectiveTargetResolution {
+  status: TargetResolutionStatus;
+  objectiveId?: string;
+  targetZoneId?: string;
+  currentMapId: string;
+  targetEntityId?: string;
+  targetKind?: 'npc' | 'interactable' | 'portal' | 'milestone';
+  position: {
+    x: number;
+    y: number;
+    isPortal: boolean;
+    label: string;
+    targetId?: string;
+  } | null;
+  nextActionText: string;
+  prerequisiteText?: string;
+  reason?: string;
+}
+
+export type TutorialStepId =
+  | 'move'
+  | 'interact'
+  | 'journal'
+  | 'map'
+  | 'hint'
+  | 'completed';
+
 export interface QuestObjective {
   id: string;
   title: string;
   description: string;
   zoneId: string;
+  targetRef?: QuestTargetRef;
+  nextActionText?: string;
   requiresFlags?: string[];
   requiresEvidence?: string[];
   requiresMilestones?: RomanMilestoneId[];
@@ -476,6 +516,7 @@ export interface GameSettings {
   cameraZoom?: CameraZoomPreset; // 'wide' | 'normal' | 'close' (default 'normal')
   effectsQuality?: EffectsQuality; // 'full' | 'subtle' (default 'full')
   presenterModeUnlocked?: boolean; // explicitly enables developer/presenter controls
+  tutorialCompleted?: boolean; // tracks first-play onboarding completion
 }
 
 export interface SaveSummary {
@@ -545,6 +586,7 @@ export interface HudCallbacks {
   onOpenSettings?: () => void;
   onToggleFullscreen?: () => Promise<boolean> | boolean;
   onUpdateSettings?: (partial: Partial<GameSettings>) => void;
+  onReplayTutorial?: () => void;
   onSubmitDossierPuzzle?: (puzzleId: string, selectedOptionIds: Record<string, string>) => {
     solved: boolean;
     attemptCount: number;
