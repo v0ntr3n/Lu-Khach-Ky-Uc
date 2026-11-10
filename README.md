@@ -29,7 +29,7 @@ Khởi đầu từ **Menu Chính Điện Ảnh** trong đêm mưa bến cảng H
 | `M` | Mở / Đóng **Sơ Đồ Liên Thông Khu Vực & Dịch Chuyển Nhanh** (`#world-map-modal`) |
 | `Q` | Mở / Đóng **Bàn Cố Vấn Sử Học** kèm số trang Giáo trình 2021 (`#lookup-drawer`) |
 | `F` (hoặc `F11`) | Bật / Tắt **Chế độ Toàn màn hình** (`FullscreenManager` + dự phòng tràn khung nhìn) |
-| `H` | Bật / Tắt nhanh dòng gợi ý dẫn đường trên HUD (`#hud-active-objective-hint`) |
+| `H` | Bật / Tắt gợi ý nhiệm vụ chi tiết trong Nhật ký; HUD luôn hiển thị tối giản 2 dòng |
 | `Esc` hoặc `Tab` | Mở **Tạm Dừng** (`#pause-modal`: Tiếp tục, Cài đặt, Lưu, Về Menu Chính) / Đóng cửa sổ đang mở |
 | `1 .. 4` | Chọn nhanh nhánh hội thoại NPC hoặc phương án Quyết sách Climax |
 | `Ctrl + Shift + P` (hoặc `?presenter=1`) | Mở khóa & bật **Ngăn Điều Khiển Giảng Viên / Kiểm Định (`F3`)** độc lập, không ghi đè tiến trình lưu của người chơi |
