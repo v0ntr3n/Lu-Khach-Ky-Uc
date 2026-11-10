@@ -25,7 +25,7 @@ export const DIALOGUE_TREES: readonly DialogueTree[] = [
         text: '“Đồng chí tới đúng giờ lắm! Mưa đêm Hương Cảng đang giúp chúng ta che mắt mật thám. Từ năm 1925, báo Thanh Niên và cuốn Đường Kách Mệnh do Nguyễn Ái Quốc biên soạn đã theo tàu bí mật từ Quảng Châu qua bến này về nước.”',
         provenance: {
           type: 'historical_fact',
-          label: 'Sử liệu Giáo trình 2021 (tr. 44–49)',
+          label: 'Sử liệu',
           citation:
             'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.2, tr. 44–49',
           historicalNote:
@@ -86,7 +86,7 @@ export const DIALOGUE_TREES: readonly DialogueTree[] = [
         text: '“Cuối năm 1929, ba tổ chức cộng sản lần lượt ra đời là Đông Dương Cộng sản Đảng, An Nam Cộng sản Đảng và Đông Dương Cộng sản Liên đoàn. Để tránh phân tán lực lượng, Nguyễn Ái Quốc đã chủ động triệu tập Hội nghị hợp nhất tại Cửu Long.”',
         provenance: {
           type: 'historical_fact',
-          label: 'Sử liệu Giáo trình 2021 (tr. 50–61)',
+          label: 'Sử liệu',
           citation:
             'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.2.c & I.3.a, tr. 50–61',
         },
@@ -149,7 +149,7 @@ export const DIALOGUE_TREES: readonly DialogueTree[] = [
         text: '“Từ năm 1928, Hội Việt Nam Cách mạng Thanh niên phát động phong trào ‘vô sản hóa’. Nhiều anh em hội viên đã vào tận bến cảng, nhà máy, hầm mỏ cùng lao động để truyền bá cách mạng.”',
         provenance: {
           type: 'historical_fact',
-          label: 'Sử liệu Giáo trình 2021 (tr. 48–50)',
+          label: 'Sử liệu',
           citation:
             'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.2.b, tr. 48–50',
         },
@@ -246,7 +246,7 @@ export const DIALOGUE_TREES: readonly DialogueTree[] = [
         text: '“Trên bàn gỗ phía bắc là Sổ Vận Đơn ghi chép các kiện sách báo từ Quảng Châu. Từng số báo Thanh Niên từ tháng 6/1925 đều được đóng thùng kín kẽ tại đây trước khi chuyển về Sài Gòn, Hải Phòng.”',
         provenance: {
           type: 'historical_fact',
-          label: 'Sử liệu Giáo trình 2021 (tr. 44–49)',
+          label: 'Sử liệu',
           citation:
             'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.2.a, tr. 44–49',
         },
@@ -271,7 +271,7 @@ export const DIALOGUE_TREES: readonly DialogueTree[] = [
         text: '“Báo Thanh Niên ra số đầu ngày 21/6/1925, mở đường truyền bá lý luận giải phóng dân tộc. Còn cuốn Đường Kách Mệnh (1927) chỉ rõ cách mạng muốn thắng lợi trước hết phải có ‘Đảng cách mệnh’ vững mạnh.”',
         provenance: {
           type: 'historical_fact',
-          label: 'Sử liệu Giáo trình 2021 (tr. 45–48)',
+          label: 'Sử liệu',
           citation:
             'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.2.a, tr. 45–48',
         },
@@ -369,7 +369,7 @@ export const DIALOGUE_TREES: readonly DialogueTree[] = [
         text: '“Mừng đồng chí tới nơi an toàn! Từ ngày 06/01 đến 07/02/1930 tại Cửu Long (Hương Cảng), đồng chí Nguyễn Ái Quốc đã chủ trì Hội nghị hợp nhất các tổ chức cộng sản thành Đảng Cộng sản Việt Nam.”',
         provenance: {
           type: 'historical_fact',
-          label: 'Sử liệu Giáo trình 2021 (tr. 57–61)',
+          label: 'Sử liệu',
           citation:
             'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.3.a, tr. 57–61',
           historicalNote:
@@ -407,7 +407,7 @@ export const DIALOGUE_TREES: readonly DialogueTree[] = [
         text: '“Dự Hội nghị có đại biểu Đông Dương Cộng sản Đảng (Trịnh Đình Cửu, Nguyễn Đức Cảnh) và An Nam Cộng sản Đảng (Châu Văn Liêm, Nguyễn Thiệu) do Nguyễn Ái Quốc chủ trì. Đến ngày 24/02/1930, Đông Dương Cộng sản Liên đoàn cũng chính thức gia nhập Đảng.”',
         provenance: {
           type: 'historical_fact',
-          label: 'Sử liệu Giáo trình 2021 (tr. 57–65)',
+          label: 'Sử liệu',
           citation:
             'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.3.a, tr. 57–65',
         },
@@ -508,7 +508,7 @@ export const DIALOGUE_TREES: readonly DialogueTree[] = [
         text: '“Đây là Sân Kho Lưu Trữ Cửu Long. Cánh cửa phía đông dẫn vào Phòng Lưu Trữ Bí Mật, nơi cất giữ Chánh cương vắn tắt, Sách lược vắn tắt (02/1930) và Luận cương chính trị (10/1930).”',
         provenance: {
           type: 'historical_fact',
-          label: 'Sử liệu Giáo trình 2021 (tr. 61–76)',
+          label: 'Sử liệu',
           citation:
             'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.3.b & II.1, tr. 61–76',
         },
@@ -534,7 +534,7 @@ export const DIALOGUE_TREES: readonly DialogueTree[] = [
         text: '“Cương lĩnh chính trị đầu tiên xác định nhiệm vụ hàng đầu là chống đế quốc giành độc lập dân tộc (‘làm cho nước Nam được hoàn toàn độc lập’). Đảng đồng thời đoàn kết rộng rãi công nông và các tầng lớp yêu nước.”',
         provenance: {
           type: 'historical_fact',
-          label: 'Sử liệu Giáo trình 2021 (tr. 61–65)',
+          label: 'Sử liệu',
           citation:
             'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục I.3.b, tr. 61–65',
         },
@@ -561,7 +561,7 @@ export const DIALOGUE_TREES: readonly DialogueTree[] = [
         text: '“Chào đồng chí! Từ Hội nghị Trung ương 8 tại Pác Bó (05/1941), Đảng đã đặt nhiệm vụ giải phóng dân tộc lên hàng đầu và lập Mặt trận Việt Minh. Nay tại Tân Trào (08/1945), lệnh Tổng khởi nghĩa đang chờ phát đi khắp cả nước!”',
         provenance: {
           type: 'historical_fact',
-          label: 'Sử liệu Giáo trình 2021 (tr. 88–112)',
+          label: 'Sử liệu',
           citation:
             'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục II.2–II.3, tr. 88–112',
           historicalNote:
@@ -592,7 +592,7 @@ export const DIALOGUE_TREES: readonly DialogueTree[] = [
         text: '“Hội nghị Trung ương 8 khẳng định quyền lợi của bộ phận, của giai cấp phải đặt dưới sự sinh tử, tồn vong của quốc gia, dân tộc. Đồng chí hãy lại Bàn Điều Phối phía đông để phát Quân lệnh số 1!”',
         provenance: {
           type: 'historical_fact',
-          label: 'Sử liệu Giáo trình 2021 (tr. 88–95)',
+          label: 'Sử liệu',
           citation:
             'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục II.2.b, tr. 88–95',
         },
@@ -619,7 +619,7 @@ export const DIALOGUE_TREES: readonly DialogueTree[] = [
         text: '“Giữa rừng cờ đỏ sao vàng tại Quảng trường Ba Đình ngày 02/09/1945, Chủ tịch Hồ Chí Minh đã đọc bản Tuyên ngôn Độc lập. Nước Việt Nam Dân chủ Cộng hòa chính thức khai sinh trước toàn thế giới!”',
         provenance: {
           type: 'historical_fact',
-          label: 'Sử liệu Giáo trình 2021 (tr. 117–124)',
+          label: 'Sử liệu',
           citation:
             'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục II.3.c, tr. 117–124',
         },
@@ -648,7 +648,7 @@ export const DIALOGUE_TREES: readonly DialogueTree[] = [
         text: '“Cách mạng Tháng Tám năm 1945 đã đập tan xiềng xích thực dân gần một thế kỷ và chấm dứt chế độ quân chủ hàng nghìn năm. Nhân dân Việt Nam từ thân phận nô lệ đã vươn lên làm chủ đất nước.”',
         provenance: {
           type: 'historical_fact',
-          label: 'Sử liệu Giáo trình 2021 (tr. 119–124)',
+          label: 'Sử liệu',
           citation:
             'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương I, mục II.3.d, tr. 119–124',
         },
@@ -675,7 +675,7 @@ export const DIALOGUE_TREES: readonly DialogueTree[] = [
         text: '“Từ Lời kêu gọi Toàn quốc kháng chiến (19/12/1946) với đường lối toàn dân, toàn diện, lâu dài, tự lực cánh sinh, cả dân tộc đã bền bỉ chiến đấu. Hôm nay hàng vạn dân công xe thồ đang vượt đèo Pha Đin tiếp lửa cho Điện Biên Phủ!”',
         provenance: {
           type: 'historical_fact',
-          label: 'Sử liệu Giáo trình 2021 (tr. 142–182)',
+          label: 'Sử liệu',
           citation:
             'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương II, mục I.1–I.3, tr. 142–182',
         },
@@ -704,7 +704,7 @@ export const DIALOGUE_TREES: readonly DialogueTree[] = [
         text: '“Đường lối kháng chiến kết tinh trong Lời kêu gọi Toàn quốc kháng chiến của Hồ Chí Minh, Chỉ thị Toàn dân kháng chiến và tác phẩm Kháng chiến nhất định thắng lợi. Hãy tới Sa Bàn Tiếp Vận để điều phối chiến dịch!”',
         provenance: {
           type: 'historical_fact',
-          label: 'Sử liệu Giáo trình 2021 (tr. 142–150)',
+          label: 'Sử liệu',
           citation:
             'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương II, mục I.1.b, tr. 142–150',
         },
@@ -731,7 +731,7 @@ export const DIALOGUE_TREES: readonly DialogueTree[] = [
         text: '“Bức công điện của Đại tướng Võ Nguyên Giáp vừa truyền đi toàn mặt trận: ‘Thần tốc, thần tốc hơn nữa; táo bạo, táo bạo hơn nữa... Quyết chiến và toàn thắng!’ Ngày 30/04/1975 đã thu non sông về một mối!”',
         provenance: {
           type: 'historical_fact',
-          label: 'Sử liệu Giáo trình 2021 (tr. 228–238)',
+          label: 'Sử liệu',
           citation:
             'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương II, mục II.2.c, tr. 228–238',
         },
@@ -760,7 +760,7 @@ export const DIALOGUE_TREES: readonly DialogueTree[] = [
         text: '“Thắng lợi của cuộc kháng chiến chống Mỹ, cứu nước đã kết thúc 21 năm chiến đấu kiên cường, hoàn thành cách mạng dân tộc dân chủ nhân dân trên cả nước. Kỷ nguyên độc lập, thống nhất và đi lên chủ nghĩa xã hội chính thức mở ra.”',
         provenance: {
           type: 'historical_fact',
-          label: 'Sử liệu Giáo trình 2021 (tr. 232–238)',
+          label: 'Sử liệu',
           citation:
             'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương II, mục II.3, tr. 232–238',
         },
@@ -787,7 +787,7 @@ export const DIALOGUE_TREES: readonly DialogueTree[] = [
         text: '“Tháng 12/1986, Đại hội VI của Đảng họp tại Hà Nội với tinh thần ‘nhìn thẳng vào sự thật, đánh giá đúng sự thật, nói rõ sự thật’. Từ đây, công cuộc Đổi mới toàn diện đất nước chính thức khởi xướng!”',
         provenance: {
           type: 'historical_fact',
-          label: 'Sử liệu Giáo trình 2021 (tr. 261–268)',
+          label: 'Sử liệu',
           citation:
             'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương III, mục I.2.a, tr. 261–268',
         },
@@ -816,7 +816,7 @@ export const DIALOGUE_TREES: readonly DialogueTree[] = [
         text: '“Đại hội VI chủ trương thực hiện Ba chương trình kinh tế lớn: Lương thực - thực phẩm, Hàng tiêu dùng và Hàng xuất khẩu. Cơ chế tập trung quan liêu bao cấp được xóa bỏ để phát triển kinh tế nhiều thành phần.”',
         provenance: {
           type: 'historical_fact',
-          label: 'Sử liệu Giáo trình 2021 (tr. 261–268)',
+          label: 'Sử liệu',
           citation:
             'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương III, mục I.2.a, tr. 261–268',
         },
@@ -874,7 +874,7 @@ export const DIALOGUE_TREES: readonly DialogueTree[] = [
         text: '“Nghị quyết Đại hội XIII xác định đến năm 2030 (100 năm thành lập Đảng) Việt Nam là nước đang phát triển, có công nghiệp hiện đại, thu nhập trung bình cao. Đến năm 2045 (100 năm thành lập nước), nước ta trở thành nước phát triển, thu nhập cao.”',
         provenance: {
           type: 'historical_fact',
-          label: 'Sử liệu Giáo trình 2021 (tr. 385–393)',
+          label: 'Sử liệu',
           citation:
             'Giáo trình Lịch sử Đảng Cộng sản Việt Nam (2021), Chương III, mục II.4, tr. 385–393',
         },
