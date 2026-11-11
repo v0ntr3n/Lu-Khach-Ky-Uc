@@ -53,7 +53,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400&display=swap"
       rel="stylesheet"
     />
     <style>
@@ -61,6 +61,7 @@
          HỆ THỐNG DESIGN TOKENS TẬP TRUNG — EASTWARD PIXEL RPG (SƠN MÀI & GIẤY DÓ)
          - Dark Mode (Mặc định): Nâu than ấm, Sơn mài đen thẫm, Vàng đồng dịu, Đỏ son.
          - Light Mode: Giấy dó cổ, Màu kem ấm, Nâu mực thẫm, Vàng đồng cổ.
+         - Chỉ sử dụng tối đa 2 họ phông chữ tiếng Việt: Newsreader & Be Vietnam Pro.
          - Đảm bảo độ tương phản WCAG AA (>= 4.5:1) trên mọi bề mặt ở cả hai chế độ.
          ========================================================================== */
       :root,
@@ -79,17 +80,19 @@
         --parchment-warm: #e6e5dc;
         --parchment-light: #f4efe4;
 
-        /* Phông chữ tiếng Việt sắc nét */
-        --font-display: 'Cormorant Garamond', 'Noto Serif', Georgia, 'Times New Roman', serif;
+        /* Hạng mục B.2: Tối đa 2 họ phông chữ tiếng Việt (Newsreader + Be Vietnam Pro) */
+        --font-display: 'Newsreader', 'Be Vietnam Pro', Georgia, serif;
         --font-serif: 'Newsreader', 'Be Vietnam Pro', Georgia, serif;
         --font-ui: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
           sans-serif;
-        --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        --font-mono: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          sans-serif;
 
         /* Semantic Tokens — Background & Overlay */
         --bg-canvas: #110e0b;
         --bg-page: #110e0b;
         --bg-overlay: rgba(17, 14, 11, 0.88);
+        --bg-paper-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='96' height='96' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
         --bg-vignette-radial: radial-gradient(
           ellipse 68% 74% at 50% 46%,
           rgba(17, 14, 11, 0.42) 0%,
@@ -133,10 +136,13 @@
         --border-accent: #9e3321;
         --border-focus: #e2b56b;
 
-        /* Semantic Tokens — Accents */
+        /* Semantic Tokens — Accents & Crimson Seal (Triện Son) */
         --accent-primary: #9e3321;
         --accent-primary-hover: #b33b27;
         --accent-secondary: #d4a55d;
+        --seal-bg: rgba(158, 51, 33, 0.18);
+        --seal-border: #df6b57;
+        --seal-text: #f59381;
         --accent-gradient: linear-gradient(90deg, #9e3321 0%, #d4a55d 100%);
         --rule-gradient: linear-gradient(
           90deg,
@@ -184,6 +190,7 @@
         --bg-canvas: #16120e;
         --bg-page: #efe7d6;
         --bg-overlay: rgba(34, 28, 21, 0.72);
+        --bg-paper-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='96' height='96' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
         --bg-vignette-radial: radial-gradient(
           ellipse 68% 74% at 50% 46%,
           rgba(28, 22, 16, 0.35) 0%,
@@ -227,10 +234,13 @@
         --border-accent: #8f2918;
         --border-focus: #8f2918;
 
-        /* Semantic Tokens — Accents */
+        /* Semantic Tokens — Accents & Crimson Seal (Triện Son) */
         --accent-primary: #8f2918;
         --accent-primary-hover: #752012;
         --accent-secondary: #734215;
+        --seal-bg: rgba(143, 41, 24, 0.12);
+        --seal-border: #8f2918;
+        --seal-text: #7a1f10;
         --accent-gradient: linear-gradient(90deg, #8f2918 0%, #b88238 100%);
         --rule-gradient: linear-gradient(
           90deg,
@@ -518,12 +528,11 @@
 
       #region-entry-era {
         font-family: var(--font-mono);
-        font-size: 0.76rem;
+        font-size: 0.82rem;
         font-weight: 600;
         color: var(--parchment-light);
         text-shadow: var(--shadow-location-label);
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
+        letter-spacing: 0.04em;
       }
 
       #region-entry-title {
@@ -685,7 +694,7 @@
 
       #minimap-zone-title {
         font-family: var(--font-mono);
-        font-size: 0.72rem;
+        font-size: 0.82rem;
         font-weight: 600;
         color: var(--text-accent);
         white-space: nowrap;
@@ -712,8 +721,9 @@
       }
 
       #minimap-route-banner {
+        display: none;
         font-family: var(--font-ui);
-        font-size: 0.76rem;
+        font-size: 0.82rem;
         line-height: 1.3;
         color: var(--text-secondary);
         white-space: nowrap;
@@ -808,9 +818,9 @@
         color: var(--text-on-accent);
         border: 1px solid var(--border-strong);
         font-family: var(--font-mono);
-        font-size: 0.76rem;
+        font-size: 0.82rem;
         font-weight: 600;
-        letter-spacing: 0.06em;
+        letter-spacing: 0.04em;
       }
 
       #tutorial-step-title {
@@ -828,7 +838,7 @@
         color: var(--text-primary);
         border: 1px solid var(--border-default);
         font-family: var(--font-mono);
-        font-size: 0.8rem;
+        font-size: 0.82rem;
         font-weight: 600;
       }
 
@@ -1072,6 +1082,7 @@
       #dialogue-lore-drawer {
         width: min(410px, 100%);
         background: var(--surface-elevated);
+        background-image: var(--bg-paper-noise);
         color: var(--text-primary);
         border: 2px solid var(--border-default);
         box-shadow: var(--shadow-inset), var(--shadow-toast);
@@ -1107,11 +1118,10 @@
 
       .dialogue-lore-kicker {
         font-family: var(--font-mono);
-        font-size: 0.72rem;
+        font-size: 0.82rem;
         font-weight: 700;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.04em;
         color: var(--text-crimson);
-        text-transform: uppercase;
       }
 
       #dialogue-milestone-title {
@@ -1126,7 +1136,7 @@
       #dialogue-significance {
         font-family: var(--font-serif);
         font-size: 0.92rem;
-        line-height: 1.45;
+        line-height: 1.65;
         color: var(--text-secondary);
         font-style: italic;
         margin: 0;
@@ -1137,7 +1147,7 @@
         font-size: 0.84rem;
         font-weight: 600;
         color: var(--text-primary);
-        line-height: 1.38;
+        line-height: 1.45;
       }
 
       /* Khay lựa chọn nhánh hội thoại xếp gọn góc phải phía trên thanh thoại */
@@ -1188,6 +1198,7 @@
       #dialogue-parchment-card {
         position: relative;
         background: var(--surface-primary);
+        background-image: var(--bg-paper-noise);
         color: var(--text-primary);
         border: 2px solid var(--border-strong);
         box-shadow: var(--shadow-dialogue);
@@ -1229,7 +1240,7 @@
 
       #dialogue-role {
         font-family: var(--font-ui);
-        font-size: 0.8rem;
+        font-size: 0.82rem;
         font-weight: 500;
         color: var(--text-on-accent);
         opacity: 0.9;
@@ -1254,7 +1265,7 @@
         align-items: center;
         padding: 2px 9px;
         font-family: var(--font-ui);
-        font-size: 0.76rem;
+        font-size: 0.82rem;
         font-weight: 600;
         letter-spacing: 0.02em;
         box-shadow: var(--shadow-hud);
@@ -1293,7 +1304,7 @@
         border: 1px solid var(--border-default);
         box-shadow: var(--shadow-hud);
         font-family: var(--font-ui);
-        font-size: 0.76rem;
+        font-size: 0.82rem;
         font-weight: 600;
         cursor: pointer;
         display: inline-flex;
@@ -1340,13 +1351,19 @@
       }
 
       #dialogue-body-text {
-        font-family: var(--font-serif);
-        font-size: 1.1875rem;
-        line-height: 1.48;
+        font-family: var(--font-ui);
+        font-size: 1.125rem;
+        line-height: 1.62;
+        max-width: 58ch;
         color: var(--text-primary);
         margin: 0;
         text-wrap: pretty;
         cursor: pointer;
+      }
+
+      .dialogue-highlight {
+        color: var(--text-accent);
+        font-weight: 600;
       }
 
       .dialogue-bottom-bar {
@@ -1359,7 +1376,7 @@
 
       #dialogue-page-indicator {
         font-family: var(--font-mono);
-        font-size: 0.75rem;
+        font-size: 0.82rem;
         color: var(--text-accent);
         margin-right: auto;
       }
@@ -1574,7 +1591,7 @@
         color: var(--text-accent);
         border: 1px solid var(--border-default);
         font-family: var(--font-ui);
-        font-size: 0.78rem;
+        font-size: 0.82rem;
         font-weight: 600;
         letter-spacing: 0.03em;
       }
@@ -1793,7 +1810,9 @@
 
       .rpg-modal-dialog,
       .world-map-dialog {
+        position: relative;
         background: var(--surface-primary);
+        background-image: var(--bg-paper-noise);
         color: var(--text-primary);
         border: 2px solid var(--border-strong);
         box-shadow: var(--shadow-panel);
@@ -1805,6 +1824,52 @@
         flex-direction: column;
         gap: 14px;
         overflow-y: auto;
+      }
+
+      /* Ngàm đồng cổ mảnh ở góc sổ tay & bàn kiểm định tư liệu */
+      #journal-modal .rpg-modal-dialog::before,
+      #dossier-puzzle-modal .rpg-modal-dialog::before {
+        content: '';
+        position: absolute;
+        top: 6px;
+        left: 6px;
+        width: 14px;
+        height: 14px;
+        border-top: 2px solid var(--border-strong);
+        border-left: 2px solid var(--border-strong);
+        pointer-events: none;
+      }
+
+      #journal-modal .rpg-modal-dialog::after,
+      #dossier-puzzle-modal .rpg-modal-dialog::after {
+        content: '';
+        position: absolute;
+        bottom: 6px;
+        right: 6px;
+        width: 14px;
+        height: 14px;
+        border-bottom: 2px solid var(--border-strong);
+        border-right: 2px solid var(--border-strong);
+        pointer-events: none;
+      }
+
+      /* Dấu Triện Son đóng nghiêng nhẹ xác thực hoàn thành mục tiêu / hồ sơ */
+      .crimson-seal-stamp {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 3px 10px;
+        border: 2px solid var(--seal-border);
+        background: var(--seal-bg);
+        color: var(--seal-text);
+        font-family: var(--font-display);
+        font-size: 0.84rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        transform: rotate(-6deg);
+        box-shadow: var(--shadow-hud);
+        user-select: none;
+        flex-shrink: 0;
       }
 
       .rpg-modal-dialog.is-compact {
@@ -1862,7 +1927,7 @@
 
       .modal-body-paragraph {
         font-size: 1.02rem;
-        line-height: 1.62;
+        line-height: 1.72;
         color: var(--text-secondary);
       }
 
@@ -1970,7 +2035,7 @@
 
       .journal-category-badge {
         font-family: var(--font-mono);
-        font-size: 0.72rem;
+        font-size: 0.82rem;
         font-weight: 700;
         padding: 2px 6px;
         background: var(--accent-primary);
@@ -1996,7 +2061,7 @@
 
       .journal-step-count {
         font-family: var(--font-mono);
-        font-size: 0.78rem;
+        font-size: 0.82rem;
         font-weight: 600;
         color: var(--text-accent);
         padding: 2px 7px;
@@ -2087,7 +2152,7 @@
         color: var(--text-primary);
         border: 1px solid var(--border-default);
         font-family: var(--font-ui);
-        font-size: 0.75rem;
+        font-size: 0.82rem;
         font-weight: 600;
         white-space: nowrap;
         flex-shrink: 0;
@@ -2103,6 +2168,7 @@
       #journal-active-banner,
       #codex-milestone-detail {
         background: var(--surface-elevated);
+        background-image: var(--bg-paper-noise);
         color: var(--text-primary);
         border: 1.5px solid var(--border-strong);
         border-top: 3px solid var(--accent-primary);
@@ -2125,15 +2191,15 @@
 
       .journal-banner-label {
         font-family: var(--font-mono);
-        font-size: 0.78rem;
+        font-size: 0.82rem;
         font-weight: 700;
         color: var(--text-crimson);
-        letter-spacing: 0.05em;
+        letter-spacing: 0.04em;
       }
 
       .journal-inspector-step-pill {
         font-family: var(--font-mono);
-        font-size: 0.75rem;
+        font-size: 0.82rem;
         font-weight: 600;
         color: var(--text-accent);
         padding: 2px 8px;
@@ -2159,7 +2225,7 @@
       .journal-quest-summary,
       .codex-detail-desc {
         font-size: 0.96rem;
-        line-height: 1.55;
+        line-height: 1.72;
         color: var(--text-secondary);
       }
 
@@ -2188,13 +2254,13 @@
 
       .journal-banner-desc {
         font-size: 0.96rem;
-        line-height: 1.5;
+        line-height: 1.65;
         color: var(--text-secondary);
       }
 
       .journal-banner-hint {
         font-size: 0.92rem;
-        line-height: 1.45;
+        line-height: 1.55;
         font-weight: 500;
         color: var(--text-crimson);
       }
@@ -2227,15 +2293,28 @@
         font-size: 1.25rem;
         letter-spacing: 0.025em;
       }
-      #journal-modal .modal-subtitle { font-size: 0.82rem; }
+      #journal-modal .modal-subtitle { font-size: 0.84rem; }
       #journal-modal .journal-two-col-grid {
         grid-template-columns: minmax(260px, 1fr) minmax(290px, 1.08fr);
-        gap: 10px;
+        gap: 12px;
+      }
+      #journal-modal #journal-quest-list {
+        gap: 0;
+        border-right: 1px solid var(--border-subtle);
+        padding-right: 10px;
       }
       #journal-modal .journal-quest-card {
         gap: 4px;
-        padding: 8px 10px;
-        border-color: var(--border-subtle);
+        padding: 10px 8px;
+        background: transparent;
+        border: none;
+        border-bottom: 1px solid var(--border-subtle);
+        box-shadow: none;
+      }
+      #journal-modal .journal-quest-card.is-selected {
+        background: var(--surface-selected);
+        border-left: 3px solid var(--accent-primary);
+        box-shadow: none;
       }
       #journal-modal .journal-quest-header { min-height: 34px; }
       #journal-modal .journal-category-glyph {
@@ -2255,7 +2334,7 @@
       #journal-modal .journal-step-count {
         background: transparent;
         border: none;
-        font-size: 0.75rem;
+        font-size: 0.82rem;
         padding: 0;
       }
       #journal-modal .journal-objective-list { gap: 2px; }
@@ -2304,11 +2383,11 @@
       }
       #journal-modal .journal-banner-label {
         font-family: var(--font-ui);
-        font-size: 0.78rem;
+        font-size: 0.82rem;
         letter-spacing: 0;
         color: var(--text-accent);
       }
-      #journal-modal .journal-inspector-step-pill { background: transparent; border: none; }
+      #journal-modal .journal-inspector-step-pill { background: transparent; border: none; font-size: 0.82rem; }
       #journal-modal .journal-inspector-quest-title {
         font-family: var(--font-ui);
         color: var(--text-muted);
@@ -2348,7 +2427,7 @@
         gap: 9px;
         padding-top: 12px;
         font-size: 0.88rem;
-        line-height: 1.5;
+        line-height: 1.72;
         color: var(--text-secondary);
       }
       #journal-modal .journal-quest-lore-content h5 { color: var(--text-primary); font-size: 0.9rem; }
@@ -2356,7 +2435,11 @@
       @media (max-width: 860px) {
         #journal-modal .journal-two-col-grid { grid-template-columns: 1fr; }
         #journal-modal .rpg-modal-dialog { padding: 14px; }
-        #journal-modal #journal-quest-list { max-height: min(30dvh, 260px); }
+        #journal-modal #journal-quest-list {
+          max-height: min(30dvh, 260px);
+          border-right: none;
+          padding-right: 0;
+        }
       }
 
       /* BIÊN NIÊN SỬ LA MÃ I–XII 2 CỘT */
@@ -2485,7 +2568,7 @@
 
       .codex-detail-seal {
         font-family: var(--font-mono);
-        font-size: 0.78rem;
+        font-size: 0.82rem;
         font-weight: 700;
         padding: 2px 8px;
         background: var(--accent-primary);
@@ -2501,7 +2584,7 @@
 
       .codex-detail-status {
         font-family: var(--font-mono);
-        font-size: 0.76rem;
+        font-size: 0.82rem;
         font-weight: 600;
         color: var(--text-accent);
       }
@@ -2516,7 +2599,7 @@
         font-family: var(--font-serif);
         font-size: 1.02rem;
         font-style: italic;
-        line-height: 1.52;
+        line-height: 1.65;
         color: var(--text-primary);
         padding: 8px 12px;
         background: var(--surface-inset);
@@ -2575,13 +2658,14 @@
 
       .inv-card-cat {
         font-family: var(--font-mono);
-        font-size: 0.8rem;
+        font-size: 0.82rem;
         font-weight: 600;
         color: var(--text-accent);
       }
 
       #inventory-item-detail {
         background: var(--surface-elevated);
+        background-image: var(--bg-paper-noise);
         color: var(--text-primary);
         border: 1.5px solid var(--border-strong);
         border-top: 3px solid var(--accent-primary);
@@ -2590,7 +2674,7 @@
         flex-direction: column;
         gap: 10px;
         font-size: 1rem;
-        line-height: 1.6;
+        line-height: 1.72;
       }
 
       .inv-detail-header {
@@ -2671,7 +2755,7 @@
         align-items: center;
         gap: 6px;
         font-family: var(--font-mono);
-        font-size: 0.76rem;
+        font-size: 0.82rem;
       }
 
       .wm-district-badge {
@@ -2680,7 +2764,7 @@
         border: 1px solid var(--border-subtle);
         padding: 2px 7px;
         font-family: var(--font-mono);
-        font-size: 0.74rem;
+        font-size: 0.82rem;
       }
 
       .wm-current-seal {
@@ -2751,11 +2835,10 @@
       /* TẠM DỪNG (#pause-modal) */
       .pause-section-title {
         font-family: var(--font-mono);
-        font-size: 0.82rem;
+        font-size: 0.84rem;
         font-weight: 600;
-        letter-spacing: 0.06em;
+        letter-spacing: 0.04em;
         color: var(--text-accent);
-        text-transform: uppercase;
       }
 
       .pause-quick-grid {
@@ -2786,11 +2869,10 @@
 
       .settings-group-title {
         font-family: var(--font-mono);
-        font-size: 0.82rem;
+        font-size: 0.84rem;
         font-weight: 600;
-        letter-spacing: 0.06em;
+        letter-spacing: 0.04em;
         color: var(--text-accent);
-        text-transform: uppercase;
       }
 
       .settings-sub-label {
@@ -2845,31 +2927,110 @@
         color: var(--text-secondary);
       }
 
-      /* BÀN KIỂM ĐỊNH HỒ SƠ (#dossier-puzzle-modal) */
+      /* BÀN KIỂM ĐỊNH HỒ SƠ — 1 TỜ VĂN KIỆN LIỀN MẠCH (#dossier-puzzle-modal) */
       #dossier-slots-container {
         display: flex;
         flex-direction: column;
         gap: 12px;
       }
 
-      .dossier-slot-card {
+      .dossier-document-sheet {
+        position: relative;
         background: var(--surface-elevated);
+        background-image: var(--bg-paper-noise);
         color: var(--text-primary);
-        border: 1px solid var(--border-default);
-        padding: 14px 16px;
+        border: 1.5px solid var(--border-strong);
+        padding: 18px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .dossier-doc-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+        border-bottom: 1px solid var(--border-subtle);
+        padding-bottom: 10px;
+      }
+
+      .dossier-doc-kicker {
+        font-family: var(--font-display);
+        font-size: 0.92rem;
+        font-weight: 700;
+        color: var(--text-accent);
+        letter-spacing: 0.04em;
+      }
+
+      .dossier-inline-gaps-bar {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 8px;
+        padding: 10px 12px;
+        background: var(--surface-inset);
+        border: 1px dashed var(--border-strong);
+      }
+
+      .dossier-inline-gap-slot {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        padding: 6px 8px;
+        border-left: 3px solid var(--border-default);
+        background: var(--surface-primary);
+      }
+
+      .dossier-inline-gap-slot.is-filled {
+        border-left-color: var(--accent-primary);
+      }
+
+      .dossier-inline-gap-num {
+        font-family: var(--font-display);
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: var(--text-accent);
+      }
+
+      .dossier-inline-gap-value {
+        font-family: var(--font-serif);
+        font-size: 0.9rem;
+        line-height: 1.4;
+        color: var(--text-secondary);
+        font-style: italic;
+      }
+
+      .dossier-inline-gap-slot.is-filled .dossier-inline-gap-value {
+        color: var(--text-primary);
+        font-style: normal;
+        font-weight: 600;
+      }
+
+      .dossier-slot-card {
+        background: transparent;
+        color: var(--text-primary);
+        border: none;
+        border-bottom: 1px solid var(--border-subtle);
+        padding: 12px 4px;
         display: flex;
         flex-direction: column;
         gap: 8px;
       }
 
+      .dossier-slot-card:last-child {
+        border-bottom: none;
+      }
+
       .dossier-slot-label {
         font-family: var(--font-display);
-        font-size: 1.28rem;
+        font-size: 1.24rem;
         color: var(--text-accent);
       }
 
       .dossier-slot-prompt {
         font-size: 1rem;
+        line-height: 1.55;
         color: var(--text-secondary);
       }
 
@@ -2885,9 +3046,10 @@
         background: var(--surface-inset);
         color: var(--text-primary);
         border: 1px solid var(--border-default);
+        border-left: 3px solid var(--border-strong);
         font-family: var(--font-serif);
         font-size: 1.02rem;
-        line-height: 1.5;
+        line-height: 1.55;
         cursor: pointer;
       }
 
@@ -2932,6 +3094,7 @@
       /* CLIMAX MODAL (#climax-modal) */
       .climax-dialog {
         background: var(--surface-primary);
+        background-image: var(--bg-paper-noise);
         color: var(--text-primary);
         border: 2px solid var(--border-strong);
         box-shadow: var(--shadow-panel);
@@ -3024,6 +3187,7 @@
         height: 100dvh;
         width: min(480px, 94vw);
         background: var(--surface-primary);
+        background-image: var(--bg-paper-noise);
         color: var(--text-primary);
         border-left: 2px solid var(--border-strong);
         box-shadow: var(--shadow-drawer);
@@ -3041,6 +3205,7 @@
         height: 100dvh;
         width: min(520px, 94vw);
         background: var(--surface-primary);
+        background-image: var(--bg-paper-noise);
         color: var(--text-primary);
         border-left: 2px solid var(--border-strong);
         box-shadow: var(--shadow-drawer);
@@ -3132,14 +3297,14 @@
         background: var(--accent-primary);
         color: var(--text-on-accent);
         font-family: var(--font-mono);
-        font-size: 0.78rem;
+        font-size: 0.82rem;
         padding: 2px 7px;
         margin-right: 6px;
       }
 
       .lookup-entry-answer {
         font-size: 1rem;
-        line-height: 1.62;
+        line-height: 1.72;
         color: var(--text-secondary);
       }
 
@@ -3277,7 +3442,7 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-U4GWnOys.js"></script>
+    <script type="module" crossorigin src="./assets/index-FP1rXtvj.js"></script>
   </head>
   <body>
     <div id="game-shell">
