@@ -162,6 +162,29 @@ export function getDialogueNameplate(
   };
 }
 
+function escapeDialogueHtml(raw: string): string {
+  return raw
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Tô sáng tối đa 1 cụm từ khóa/mốc thời gian quan trọng trong mỗi trang lời thoại
+ * để tránh biến hộp thoại thành văn bản gạch chân xanh đỏ (Hạng mục B.3).
+ */
+export function formatDialoguePageWithSingleHighlight(pageText: string): string {
+  const escaped = escapeDialogueHtml(pageText);
+  const pattern =
+    /(&#39;[^&#]{2,42}&#39;|\b\d{1,2}(?:[–-]\d{1,2})?\/\d{1,2}\/\d{4}\b|\b\d{1,2}\/\d{4}\b|\b(?:1930|1941|1945|1954|1968|1975|1986|2021|2045)\b)/u;
+  return escaped.replace(
+    pattern,
+    '<span class="dialogue-highlight">$1</span>'
+  );
+}
+
 export class DialoguePanel {
   private callbacks: DialoguePanelCallbacks;
   private pages: string[] = [];
@@ -380,10 +403,11 @@ export class DialoguePanel {
     const nextBtn = document.getElementById('btn-dialogue-next-page');
 
     const activeLine = this.pages[this.currentPageIndex] ?? '“...”';
+    const highlightedHtml = formatDialoguePageWithSingleHighlight(activeLine);
     if (textEl) {
-      textEl.textContent = activeLine;
+      textEl.innerHTML = highlightedHtml;
     } else if (bodyEl) {
-      bodyEl.textContent = activeLine;
+      bodyEl.innerHTML = highlightedHtml;
     }
 
     const total = this.pages.length;

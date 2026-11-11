@@ -104,6 +104,41 @@ export class PuzzlePanel {
 
     container.innerHTML = '';
 
+    const docSheet = document.createElement('div');
+    docSheet.className = 'dossier-document-sheet';
+
+    const docHeader = document.createElement('div');
+    docHeader.className = 'dossier-doc-header';
+    docHeader.innerHTML = `
+      <span class="dossier-doc-kicker">VĂN KIỆN LƯU TRỮ · BẢN ĐỐI CHIẾU GỐC</span>
+      <span id="dossier-crimson-seal" class="crimson-seal-stamp" hidden>ẤN CHƯƠNG XÁC THỰC</span>
+    `;
+    docSheet.appendChild(docHeader);
+
+    const inlineGapsBar = document.createElement('div');
+    inlineGapsBar.className = 'dossier-inline-gaps-bar';
+    inlineGapsBar.setAttribute('aria-label', 'Các chỗ khuyết trên văn kiện');
+
+    this.activePuzzle.slots.forEach((slot, idx) => {
+      const gapEl = document.createElement('div');
+      gapEl.className = 'dossier-inline-gap-slot';
+      gapEl.dataset.inlineSlotId = slot.id;
+
+      const numSpan = document.createElement('span');
+      numSpan.className = 'dossier-inline-gap-num';
+      numSpan.textContent = `Mảnh [${idx + 1}] · ${slot.label}`;
+
+      const valSpan = document.createElement('span');
+      valSpan.className = 'dossier-inline-gap-value';
+      valSpan.textContent = '[ Chọn mảnh tư liệu bên dưới ]';
+
+      gapEl.appendChild(numSpan);
+      gapEl.appendChild(valSpan);
+      inlineGapsBar.appendChild(gapEl);
+    });
+
+    docSheet.appendChild(inlineGapsBar);
+
     for (const slot of this.activePuzzle.slots) {
       const slotCard = document.createElement('div');
       slotCard.className = 'dossier-slot-card';
@@ -137,14 +172,27 @@ export class PuzzlePanel {
             b.classList.toggle('is-selected', active);
             b.setAttribute('aria-pressed', String(active));
           });
+
+          const inlineSlot = inlineGapsBar.querySelector<HTMLElement>(
+            `.dossier-inline-gap-slot[data-inline-slot-id="${slot.id}"]`
+          );
+          if (inlineSlot) {
+            inlineSlot.classList.add('is-filled');
+            const valEl = inlineSlot.querySelector<HTMLElement>('.dossier-inline-gap-value');
+            if (valEl) {
+              valEl.textContent = opt.text;
+            }
+          }
         });
 
         optionsBox.appendChild(btn);
       }
 
       slotCard.appendChild(optionsBox);
-      container.appendChild(slotCard);
+      docSheet.appendChild(slotCard);
     }
+
+    container.appendChild(docSheet);
   }
 
   private handleSubmit(): void {
@@ -159,6 +207,7 @@ export class PuzzlePanel {
     const modal = document.getElementById('dossier-puzzle-modal');
     const feedbackEl = document.getElementById('dossier-feedback-banner');
     const hintEl = document.getElementById('dossier-progressive-hint');
+    const sealEl = document.getElementById('dossier-crimson-seal');
 
     if (feedbackEl) {
       feedbackEl.hidden = false;
@@ -177,6 +226,10 @@ export class PuzzlePanel {
 
     if (res.solved && modal) {
       modal.classList.add('is-solved');
+      if (sealEl) {
+        sealEl.hidden = false;
+        sealEl.removeAttribute('hidden');
+      }
     }
   }
 

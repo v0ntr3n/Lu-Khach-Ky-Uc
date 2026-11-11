@@ -21,6 +21,26 @@ export const PALETTE_12 = {
   PARCHMENT_LIGHT: '#F4EFE4',
 } as const;
 
+/**
+ * Hệ màu Môi trường mở rộng 20 sắc độ (Đối trọng Nóng – Lạnh Sơn Mài, Chàm Đêm, Xanh Rêu Cổ & Xám Đá Ướt)
+ * giúp nhân vật chính (tông Sơn Mài – Đồng ấm) tách biệt rõ khỏi mặt nước đêm, màn mưa, tán cây và mặt đường đá.
+ */
+export const PALETTE_ENV = {
+  INDIGO_NIGHT_DEEP: '#16202A',
+  INDIGO_WATER_MID: '#243646',
+  RAIN_SLATE_MIST: '#4F677A',
+  MOSS_SHADOW: '#2D3B2F',
+  MOSS_FOLIAGE: '#4A5D46',
+  MOSS_CANOPY_HIGHLIGHT: '#687D5B',
+  WET_STONE_DARK: '#272A2C',
+  WET_STONE_GRAY: '#353839',
+} as const;
+
+export const PALETTE_20 = {
+  ...PALETTE_12,
+  ...PALETTE_ENV,
+} as const;
+
 export const CHAPTERS: ChapterData[] = [
   {
     id: '1930',

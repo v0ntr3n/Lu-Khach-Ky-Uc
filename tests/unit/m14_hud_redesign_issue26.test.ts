@@ -9,6 +9,15 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { PALETTE_12, PALETTE_ENV, PALETTE_20 } from '../../src/data/chronicles';
+import {
+  ZONE_VIGNETTE_CLUSTERS,
+  drawZoneVignetteClusters,
+} from '../../src/engine/SpriteAtlas';
+import { getAllBuiltInMaps } from '../../src/runtime/MapLoader';
+import { CH1_DOSSIER_PUZZLE } from '../../src/data/chapters/ch1_1930';
 import { QUEST_CATALOG } from '../../src/systems/QuestSystem';
 import {
   GameHUD,
@@ -16,6 +25,8 @@ import {
   formatStageIntroLabel,
   stripStaticInteractKey,
 } from '../../src/ui/GameHUD';
+import { formatDialoguePageWithSingleHighlight } from '../../src/ui/DialoguePanel';
+import { PuzzlePanel } from '../../src/ui/PuzzlePanel';
 
 describe('M14 (Issue #26): 1-Line Quest HUD, Top-Center Location Label & Stage Intro', () => {
   beforeEach(() => {
@@ -139,4 +150,116 @@ describe('M14 (Issue #26): 1-Line Quest HUD, Top-Center Location Label & Stage I
     expect(bannerEl.hidden).toBe(false);
     expect(titleEl.textContent).toBe('ẢI 2 : Tân Trào – Ba Đình 1945');
   });
+
+  it('M14-UT-05: 20-Shade Warm-Cool Palette & Asymmetric Vignette Clusters cover all 14 maps', () => {
+    expect(Object.keys(PALETTE_12)).toHaveLength(12);
+    expect(Object.keys(PALETTE_ENV)).toHaveLength(8);
+    expect(Object.keys(PALETTE_20)).toHaveLength(20);
+    expect(PALETTE_20.INDIGO_NIGHT_DEEP).toBe('#16202A');
+    expect(PALETTE_20.MOSS_FOLIAGE).toBe('#4A5D46');
+    expect(PALETTE_20.WET_STONE_DARK).toBe('#272A2C');
+
+    const allMaps = getAllBuiltInMaps();
+    for (const mapId of Object.keys(allMaps)) {
+      const clusters = ZONE_VIGNETTE_CLUSTERS[mapId as keyof typeof ZONE_VIGNETTE_CLUSTERS];
+      expect(clusters).toBeDefined();
+      expect(clusters!.length).toBeGreaterThanOrEqual(2);
+    }
+
+    const fillCalls: string[] = [];
+    const mockCtx = {
+      fillStyle: '#000000',
+      save: () => {},
+      restore: () => {},
+      fillRect: () => {
+        fillCalls.push(String(mockCtx.fillStyle));
+      },
+    } as unknown as CanvasRenderingContext2D;
+
+    drawZoneVignetteClusters(mockCtx, allMaps.harbor_square!, 0, 0, 1.5);
+    expect(fillCalls.length).toBeGreaterThan(20);
+  });
+
+  it('M14-UT-06: Typography audit — only 2 font families (Be Vietnam Pro & Newsreader), zero uppercase rules, and >=13px (0.8125rem) font sizes', () => {
+    const html = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8');
+
+    // Chỉ tải 2 họ font từ Google Fonts
+    expect(html).toContain('family=Be+Vietnam+Pro');
+    expect(html).toContain('family=Newsreader');
+    expect(html).not.toContain('Cormorant');
+    expect(html).not.toContain('JetBrains');
+
+    // Không dùng text-transform: uppercase làm đứt dấu tiếng Việt
+    expect(html).not.toMatch(/text-transform:\s*uppercase/i);
+
+    // Mọi khai báo font-size theo rem đều >= 0.8125rem (13px)
+    const remMatches = [...html.matchAll(/font-size:\s*([0-9.]+)rem/g)];
+    expect(remMatches.length).toBeGreaterThan(20);
+    for (const m of remMatches) {
+      const val = parseFloat(m[1]!);
+      expect(val).toBeGreaterThanOrEqual(0.8125);
+    }
+  });
+
+  it('M14-UT-07: formatDialoguePageWithSingleHighlight highlights at most 1 key phrase per page', () => {
+    const sample =
+      "“Đồng chí giữ kỹ mảnh khẩu hiệu 'Vô sản và dân tộc bị áp bức' cho kỳ họp 3–7/2/1930 tại Hương Cảng 1930.”";
+    const formatted = formatDialoguePageWithSingleHighlight(sample);
+    const matches = formatted.match(/class="dialogue-highlight"/g) ?? [];
+    expect(matches.length).toBe(1);
+  });
+
+  it('M14-UT-08: PuzzlePanel renders 1 seamless historical document sheet with 3 inline gap slots and Crimson Seal stamp', () => {
+    document.body.innerHTML += `
+      <div id="dossier-puzzle-modal" hidden>
+        <h3 id="dossier-puzzle-title"></h3>
+        <p id="dossier-puzzle-subtitle"></p>
+        <span id="dossier-provenance-badge" hidden></span>
+        <p id="dossier-puzzle-instruction"></p>
+        <div id="dossier-slots-container"></div>
+        <div id="dossier-progressive-hint" hidden></div>
+        <div id="dossier-feedback-banner" hidden></div>
+        <button id="btn-submit-dossier" type="button">Đối chiếu</button>
+        <button id="btn-close-dossier" type="button">Đóng</button>
+      </div>
+    `;
+
+    const puzzleCh1 = CH1_DOSSIER_PUZZLE;
+    const panel = new PuzzlePanel({
+      onSubmitDossierPuzzle: (_id, selected) => ({
+        solved: Object.keys(selected).length === puzzleCh1.slots.length,
+        attemptCount: 1,
+        feedback: 'Đã xác thực văn kiện!',
+        showProgressiveHint: false,
+      }),
+    });
+
+    panel.open(puzzleCh1, 0);
+
+    const sheet = document.querySelector('.dossier-document-sheet');
+    expect(sheet).not.toBeNull();
+
+    const inlineGaps = document.querySelectorAll('.dossier-inline-gap-slot');
+    expect(inlineGaps.length).toBe(puzzleCh1.slots.length);
+
+    const sealEl = document.getElementById('dossier-crimson-seal')!;
+    expect(sealEl.hidden).toBe(true);
+
+    // Nhấp chọn mảnh tư liệu đầu tiên của từng ô khuyết
+    for (const slot of puzzleCh1.slots) {
+      const firstOpt = slot.options[0]!;
+      document
+        .querySelector<HTMLButtonElement>(
+          `[data-slot-id="${slot.id}"][data-option-id="${firstOpt.id}"]`
+        )!
+        .click();
+    }
+
+    expect(inlineGaps[0]!.classList.contains('is-filled')).toBe(true);
+
+    // Gửi đối chiếu -> Dấu Triện Son hiện lên
+    document.getElementById('btn-submit-dossier')!.click();
+    expect(sealEl.hidden).toBe(false);
+  });
 });
+

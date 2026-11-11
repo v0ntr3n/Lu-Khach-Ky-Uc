@@ -6,8 +6,10 @@
  * phom dáng (silhouette) tách biệt rõ nét theo từng vai trò lịch sử.
  */
 
-import { PALETTE_12 } from '../data/chronicles';
+import { PALETTE_12, PALETTE_20, PALETTE_ENV } from '../data/chronicles';
 import type { EraId, Facing4, MilestoneArtifact, NormalizedMapData } from '../types/game';
+
+export { PALETTE_12, PALETTE_20, PALETTE_ENV };
 
 export const CHARACTER_SPRITE_WIDTH = 16;
 export const CHARACTER_SPRITE_HEIGHT = 22;
@@ -1858,33 +1860,35 @@ export function drawTopDownTile(
   if (!isInterior) {
     switch (tileId) {
       case 1: {
-        // Cobblestone courtyard / era ground base with deterministic micro-variations
+        // Cobblestone courtyard / era ground base with wet-stone & moss micro-variations
         ctx.fillStyle = PALETTE_12.LACQUER_DEEP;
         ctx.fillRect(x, y, 16, 16);
-        ctx.fillStyle = PALETTE_12.LACQUER_ELEVATED;
+        ctx.fillStyle =
+          variant === 0 ? PALETTE_ENV.WET_STONE_DARK : PALETTE_12.LACQUER_ELEVATED;
         ctx.fillRect(x + 1, y + 1, 6, 6);
         ctx.fillRect(x + 8, y + 1, 7, 6);
         ctx.fillRect(x + 1, y + 8, 7, 7);
         ctx.fillRect(x + 9, y + 8, 6, 7);
         ctx.fillStyle =
           eraId === '1945'
-            ? PALETTE_12.BRONZE_MUTED
+            ? PALETTE_ENV.MOSS_SHADOW
             : eraId === '1986_2045'
-              ? PALETTE_12.INK_PRIMARY
-              : PALETTE_12.INK_SECONDARY;
+              ? PALETTE_ENV.WET_STONE_GRAY
+              : PALETTE_ENV.WET_STONE_GRAY;
         ctx.fillRect(x + 2 + (variant & 1), y + 2, 2, 1);
         ctx.fillRect(x + 10 - (variant & 1), y + 10, 2, 1);
         if (variant === 2) {
-          ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
-          ctx.fillRect(x + 5, y + 12, 2, 1);
+          ctx.fillStyle =
+            eraId === '1930' ? PALETTE_ENV.INDIGO_WATER_MID : PALETTE_ENV.MOSS_SHADOW;
+          ctx.fillRect(x + 5, y + 12, 3, 1);
         }
         break;
       }
       case 2: {
-        // Main stone street / avenue with subtle slab variation
-        ctx.fillStyle = PALETTE_12.LACQUER_ELEVATED;
+        // Main stone street / avenue with Wet Stone Gray (#353839) contrast against warm traveler sprite
+        ctx.fillStyle = PALETTE_ENV.WET_STONE_DARK;
         ctx.fillRect(x, y, 16, 16);
-        ctx.fillStyle = PALETTE_12.INK_SECONDARY;
+        ctx.fillStyle = PALETTE_ENV.WET_STONE_GRAY;
         ctx.fillRect(x + 1, y + 1, 14, 6);
         ctx.fillRect(x + 1, y + 9, 14, 6);
         ctx.fillStyle = PALETTE_12.LACQUER_VOID;
@@ -1892,17 +1896,21 @@ export function drawTopDownTile(
         ctx.fillRect(x, y + 15, 16, 1);
         ctx.fillRect(x + (variant % 2 === 0 ? 8 : 6), y, 1, 7);
         ctx.fillRect(x + (variant % 2 === 0 ? 4 : 10), y + 8, 1, 7);
-        if (eraId === '1986_2045' && variant === 1) {
+        if (variant === 3 && eraId === '1930') {
+          // Subtle rain puddle glint on wet pavement
+          ctx.fillStyle = PALETTE_ENV.INDIGO_WATER_MID;
+          ctx.fillRect(x + 3, y + 3, 4, 2);
+        } else if (eraId === '1986_2045' && variant === 1) {
           ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
           ctx.fillRect(x + 7, y + 3, 2, 1);
         }
         break;
       }
       case 3: {
-        // Wooden pier planking (BRONZE_MUTED horizontal planks with dark seams)
+        // Wooden pier planking (BRONZE_MUTED horizontal planks with damp indigo seam shadows)
         ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
         ctx.fillRect(x, y, 16, 16);
-        ctx.fillStyle = PALETTE_12.LACQUER_DEEP;
+        ctx.fillStyle = PALETTE_ENV.INDIGO_NIGHT_DEEP;
         for (let py = 0; py < 16; py += 4) {
           ctx.fillRect(x, y + py, 16, 1);
         }
@@ -1913,13 +1921,16 @@ export function drawTopDownTile(
         break;
       }
       case 4: {
-        // Harbor dark water (LACQUER_VOID with animated wave ripples)
+        // Harbor night water: Chàm Đêm (#16202A / #243646) + Mist (#4F677A) + warm lantern reflection (#D4A55D)
         const waveShift = reducedMotion
           ? 0
           : Math.round(Math.sin(timeSec * 2.4 + variant) * 1);
-        ctx.fillStyle = PALETTE_12.LACQUER_VOID;
+        ctx.fillStyle = PALETTE_ENV.INDIGO_NIGHT_DEEP;
         ctx.fillRect(x, y, 16, 16);
-        ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+        ctx.fillStyle = PALETTE_ENV.INDIGO_WATER_MID;
+        ctx.fillRect(x, y + 2, 16, 4);
+        ctx.fillRect(x, y + 10, 16, 4);
+        ctx.fillStyle = PALETTE_ENV.RAIN_SLATE_MIST;
         ctx.fillRect(x + 2 + waveShift, y + 4, 6, 1);
         ctx.fillRect(x + 7 - waveShift, y + 11, 6, 1);
         ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
@@ -1928,8 +1939,8 @@ export function drawTopDownTile(
         break;
       }
       case 5: {
-        // Doorway stone threshold (INK_SECONDARY with BRONZE_ANTIQUE border)
-        ctx.fillStyle = PALETTE_12.INK_SECONDARY;
+        // Doorway stone threshold (WET_STONE_GRAY with BRONZE_ANTIQUE border)
+        ctx.fillStyle = PALETTE_ENV.WET_STONE_GRAY;
         ctx.fillRect(x, y, 16, 16);
         ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
         ctx.fillRect(x, y, 16, 2);
@@ -1939,12 +1950,12 @@ export function drawTopDownTile(
         break;
       }
       case 6: {
-        // Ceremonial stone plaza (INK_PRIMARY with CRIMSON_SEAL & BRONZE_BRIGHT inlay)
-        ctx.fillStyle = PALETTE_12.INK_PRIMARY;
+        // Ceremonial stone plaza (WET_STONE_DARK with CRIMSON_SEAL & BRONZE_BRIGHT inlay)
+        ctx.fillStyle = PALETTE_ENV.WET_STONE_DARK;
         ctx.fillRect(x, y, 16, 16);
         ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
         ctx.fillRect(x + 2, y + 2, 12, 12);
-        ctx.fillStyle = PALETTE_12.INK_SECONDARY;
+        ctx.fillStyle = PALETTE_ENV.WET_STONE_GRAY;
         ctx.fillRect(x + 4, y + 4, 8, 8);
         ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
         ctx.fillRect(x + 7, y + 7, 2, 2);
@@ -1977,12 +1988,14 @@ export function drawTopDownTile(
         break;
       }
       case 9: {
-        // Shopfront lacquer wall (LACQUER_DEEP wall with BRONZE_ANTIQUE timber frame & lit window)
+        // Shopfront lacquer wall with mossy stone plinth & lit window
         ctx.fillStyle = PALETTE_12.LACQUER_DEEP;
         ctx.fillRect(x, y, 16, 16);
         ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
         ctx.fillRect(x, y, 16, 2);
+        ctx.fillStyle = PALETTE_ENV.MOSS_SHADOW;
         ctx.fillRect(x, y + 14, 16, 2);
+        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
         ctx.fillRect(x + 1, y + 2, 2, 12);
         ctx.fillRect(x + 13, y + 2, 2, 12);
         ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
@@ -1992,12 +2005,13 @@ export function drawTopDownTile(
         break;
       }
       case 10: {
-        // Warehouse brick & timber wall (LACQUER_ELEVATED & BRONZE_MUTED structural wall)
+        // Warehouse brick & timber wall with damp moss at base
         ctx.fillStyle = PALETTE_12.LACQUER_ELEVATED;
         ctx.fillRect(x, y, 16, 16);
         ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
         ctx.fillRect(x, y, 16, 2);
         ctx.fillRect(x, y + 7, 16, 2);
+        ctx.fillStyle = PALETTE_ENV.MOSS_SHADOW;
         ctx.fillRect(x, y + 14, 16, 2);
         ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
         ctx.fillRect(x + 2, y + 3, 5, 3);
@@ -2006,11 +2020,13 @@ export function drawTopDownTile(
         break;
       }
       case 11: {
-        // Tree trunk base (BRONZE_MUTED & BRONZE_ANTIQUE cylindrical trunk with roots)
+        // Tree trunk base with ancient moss roots (#2D3B2F / #4A5D46)
         ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
         ctx.fillRect(x + 5, y + 1, 6, 14);
-        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        ctx.fillStyle = PALETTE_ENV.MOSS_SHADOW;
         ctx.fillRect(x + 3, y + 12, 10, 3);
+        ctx.fillStyle = PALETTE_ENV.MOSS_FOLIAGE;
+        ctx.fillRect(x + 4, y + 11, 3, 2);
         ctx.fillStyle = PALETTE_12.LACQUER_DEEP;
         ctx.fillRect(x + 7, y + 3, 2, 9);
         break;
@@ -2028,25 +2044,25 @@ export function drawTopDownTile(
         break;
       }
       case 13: {
-        // Tree canopy foliage (INK_PRIMARY & BRONZE_MUTED layered leaves)
-        ctx.fillStyle = PALETTE_12.INK_PRIMARY;
+        // Tree canopy foliage: Xanh Rêu Cổ (#2D3B2F / #4A5D46 / #687D5B) + điểm lá đồng
+        ctx.fillStyle = PALETTE_ENV.MOSS_SHADOW;
         ctx.fillRect(x + 1, y + 1, 14, 14);
-        ctx.fillStyle = PALETTE_12.INK_SECONDARY;
+        ctx.fillStyle = PALETTE_ENV.MOSS_FOLIAGE;
         ctx.fillRect(x + 2, y + 2, 12, 11);
-        ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+        ctx.fillStyle = PALETTE_ENV.MOSS_CANOPY_HIGHLIGHT;
         ctx.fillRect(x + 4, y + 3, 8, 6);
         ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
         ctx.fillRect(x + 6, y + 4, 3, 2);
         break;
       }
       case 14: {
-        // Stone curb & cobbled border strip (GroundDetails)
-        ctx.fillStyle = PALETTE_12.INK_PRIMARY;
+        // Stone curb & cobbled border strip (GroundDetails) in Wet Stone Gray
+        ctx.fillStyle = PALETTE_ENV.WET_STONE_DARK;
         ctx.fillRect(x, y, 16, 16);
         ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
         ctx.fillRect(x, y, 16, 2);
         ctx.fillRect(x, y + 14, 16, 2);
-        ctx.fillStyle = PALETTE_12.INK_SECONDARY;
+        ctx.fillStyle = PALETTE_ENV.WET_STONE_GRAY;
         ctx.fillRect(x + 2, y + 4, 5, 8);
         ctx.fillRect(x + 9, y + 4, 5, 8);
         break;
@@ -2065,12 +2081,12 @@ export function drawTopDownTile(
       }
       case 17: {
         // Tân Trào banyan root network & mossy stone slab (Era 1945)
-        ctx.fillStyle = PALETTE_12.LACQUER_DEEP;
+        ctx.fillStyle = PALETTE_ENV.MOSS_SHADOW;
         ctx.fillRect(x, y, 16, 16);
         ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
         ctx.fillRect(x + 1, y + 3, 14, 3);
         ctx.fillRect(x + 4, y + 1, 3, 14);
-        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        ctx.fillStyle = PALETTE_ENV.MOSS_FOLIAGE;
         ctx.fillRect(x + 2, y + 4, 10, 1);
         ctx.fillRect(x + 5, y + 8, 8, 3);
         break;
@@ -2089,12 +2105,13 @@ export function drawTopDownTile(
         break;
       }
       case 19: {
-        // Pha Đin & Spring 1975 supply track / sandbag / camouflage mesh (Era 1954_1975)
-        ctx.fillStyle = PALETTE_12.INK_PRIMARY;
+        // Pha Đin & Spring 1975 supply track / sandbag / forest camouflage mesh (Era 1954_1975)
+        ctx.fillStyle = PALETTE_ENV.MOSS_SHADOW;
         ctx.fillRect(x, y, 16, 16);
-        ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+        ctx.fillStyle = PALETTE_ENV.MOSS_FOLIAGE;
         ctx.fillRect(x + 1, y + 2, 6, 5);
         ctx.fillRect(x + 8, y + 2, 7, 5);
+        ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
         ctx.fillRect(x + 2, y + 9, 7, 5);
         ctx.fillRect(x + 10, y + 9, 5, 5);
         ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
@@ -2104,11 +2121,11 @@ export function drawTopDownTile(
       }
       case 20: {
         // Đổi Mới & Nexus 2045 solar-glass & bronze inlay tile (Era 1986_2045)
-        ctx.fillStyle = PALETTE_12.INK_PRIMARY;
+        ctx.fillStyle = PALETTE_ENV.INDIGO_NIGHT_DEEP;
         ctx.fillRect(x, y, 16, 16);
         ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
         ctx.fillRect(x + 1, y + 1, 14, 14);
-        ctx.fillStyle = PALETTE_12.LACQUER_DEEP;
+        ctx.fillStyle = PALETTE_ENV.INDIGO_WATER_MID;
         ctx.fillRect(x + 2, y + 2, 12, 12);
         ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
         ctx.fillRect(x + 4, y + 4, 8, 2);
@@ -2323,8 +2340,13 @@ export function drawZoneLandmarks(
         break;
       }
       case 'lm_moored_sampans': {
-        // Thuyền Tam Bản Neo Đậu Đêm
+        // Thuyền Tam Bản Neo Đậu Đêm trên mặt nước Chàm Đêm (#16202A / #243646)
         const bob = reducedMotion ? 0 : Math.round(Math.sin(timeSec * 2.2) * 1);
+        ctx.fillStyle = PALETTE_ENV.INDIGO_WATER_MID;
+        ctx.fillRect(lx, ly + 22, 96, 12);
+        ctx.fillStyle = PALETTE_ENV.RAIN_SLATE_MIST;
+        ctx.fillRect(lx + 8, ly + 28 + bob, 28, 1);
+        ctx.fillRect(lx + 56, ly + 31 - bob, 28, 1);
         ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
         ctx.fillRect(lx + 4, ly + 14 + bob, 40, 14);
         ctx.fillRect(lx + 52, ly + 18 - bob, 40, 14);
@@ -2334,6 +2356,9 @@ export function drawZoneLandmarks(
         ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
         ctx.fillRect(lx + 36, ly + 12 + bob, 3, 3);
         ctx.fillRect(lx + 84, ly + 16 - bob, 3, 3);
+        // Vệt phản chiếu đèn dầu xuống mặt nước chàm
+        ctx.fillRect(lx + 36, ly + 29, 3, 2);
+        ctx.fillRect(lx + 84, ly + 32, 3, 2);
         break;
       }
       case 'lm_manifest_scales':
@@ -2351,10 +2376,13 @@ export function drawZoneLandmarks(
         break;
       }
       case 'lm_canton_archway': {
-        // Cổng Vòm Đá Phố Cổ Cửu Long
-        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        // Cổng Vòm Đá Phố Cổ Cửu Long phủ rêu cổ (#2D3B2F / #4A5D46)
+        ctx.fillStyle = PALETTE_ENV.WET_STONE_GRAY;
         ctx.fillRect(lx + 2, ly + 8, 8, 52);
         ctx.fillRect(lx + 38, ly + 8, 8, 52);
+        ctx.fillStyle = PALETTE_ENV.MOSS_SHADOW;
+        ctx.fillRect(lx + 2, ly + 48, 8, 12);
+        ctx.fillRect(lx + 38, ly + 48, 8, 12);
         ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
         ctx.fillRect(lx, ly, 48, 12);
         ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
@@ -2393,14 +2421,17 @@ export function drawZoneLandmarks(
         break;
       }
       case 'lm_night_ferry_sampan': {
-        // Thuyền Đò Đêm Cửu Long
+        // Thuyền Đò Đêm Cửu Long trên sóng nước Chàm Đêm
         const bob = reducedMotion ? 0 : Math.round(Math.sin(timeSec * 2.5) * 1);
+        ctx.fillStyle = PALETTE_ENV.INDIGO_WATER_MID;
+        ctx.fillRect(lx, ly + 22, 88, 10);
         ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
         ctx.fillRect(lx + 4, ly + 12 + bob, 80, 18);
         ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
         ctx.fillRect(lx + 22, ly + 4 + bob, 36, 12);
         ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
         ctx.fillRect(lx + 68, ly + 8 + bob, 5, 5);
+        ctx.fillRect(lx + 68, ly + 28, 4, 2);
         break;
       }
       case 'lm_cipher_telegraph_wall':
@@ -2418,9 +2449,11 @@ export function drawZoneLandmarks(
       }
       case 'lm_stone_overpass_arch':
       case 'lm_colonial_watch_post': {
-        // Vòm Đá Cổ Hẻm Tối & Trạm Gác
-        ctx.fillStyle = PALETTE_12.INK_SECONDARY;
+        // Vòm Đá Cổ Hẻm Tối & Trạm Gác đá xám ướt phủ rêu
+        ctx.fillStyle = PALETTE_ENV.WET_STONE_GRAY;
         ctx.fillRect(lx + 2, ly + 4, lm.width - 4, lm.height - 8);
+        ctx.fillStyle = PALETTE_ENV.MOSS_SHADOW;
+        ctx.fillRect(lx + 2, ly + lm.height - 14, lm.width - 4, 8);
         ctx.fillStyle = PALETTE_12.LACQUER_VOID;
         ctx.fillRect(lx + 12, ly + 18, lm.width - 24, lm.height - 22);
         ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
@@ -2428,7 +2461,7 @@ export function drawZoneLandmarks(
         break;
       }
       case 'lm_tam_quan_gate': {
-        // Cổng Tam Quan Sân Lưu Trữ
+        // Cổng Tam Quan Sân Lưu Trữ với chân cột đá xám rêu phong
         ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
         ctx.fillRect(lx + 4, ly + 4, 88, 18);
         ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
@@ -2436,10 +2469,15 @@ export function drawZoneLandmarks(
         ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
         ctx.fillRect(lx + 10, ly + 22, 10, 56);
         ctx.fillRect(lx + 76, ly + 22, 10, 56);
+        ctx.fillStyle = PALETTE_ENV.MOSS_SHADOW;
+        ctx.fillRect(lx + 8, ly + 68, 14, 10);
+        ctx.fillRect(lx + 74, ly + 68, 14, 10);
         break;
       }
       case 'lm_bronze_incense_urn': {
         // Đỉnh Đồng & Bia Đá Cổ
+        ctx.fillStyle = PALETTE_ENV.WET_STONE_GRAY;
+        ctx.fillRect(lx + 8, ly + 24, 32, 10);
         ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
         ctx.fillRect(lx + 12, ly + 10, 24, 22);
         ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
@@ -2474,16 +2512,18 @@ export function drawZoneLandmarks(
         break;
       }
       case 'lm_twin_banyan_tree': {
-        // Cây Đa Tân Trào Cổ Thụ Đôi (08/1945)
+        // Cây Đa Tân Trào Cổ Thụ Đôi (08/1945) với tán lá Xanh Rêu Cổ (#2D3B2F / #4A5D46 / #687D5B)
         ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
         ctx.fillRect(lx + 28, ly + 38, 16, 44);
         ctx.fillRect(lx + 52, ly + 42, 14, 40);
-        ctx.fillStyle = PALETTE_12.INK_PRIMARY;
+        ctx.fillStyle = PALETTE_ENV.MOSS_SHADOW;
         ctx.fillRect(lx + 4, ly + 4, 88, 42);
-        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
-        ctx.fillRect(lx + 14, ly + 10, 68, 28);
+        ctx.fillStyle = PALETTE_ENV.MOSS_FOLIAGE;
+        ctx.fillRect(lx + 12, ly + 8, 72, 30);
+        ctx.fillStyle = PALETTE_ENV.MOSS_CANOPY_HIGHLIGHT;
+        ctx.fillRect(lx + 22, ly + 12, 52, 16);
         ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
-        ctx.fillRect(lx + 26, ly + 16, 44, 12);
+        ctx.fillRect(lx + 32, ly + 16, 28, 6);
         break;
       }
       case 'lm_dinh_tan_trao': {
@@ -2540,10 +2580,10 @@ export function drawZoneLandmarks(
         break;
       }
       case 'lm_pha_din_command_bunker': {
-        // Hầm Chỉ Huy & Lưới Ngụy Trang Đèo Pha Đin
-        ctx.fillStyle = PALETTE_12.INK_PRIMARY;
+        // Hầm Chỉ Huy & Lưới Ngụy Trang Đèo Pha Đin với lá ngụy trang Xanh Rêu
+        ctx.fillStyle = PALETTE_ENV.MOSS_SHADOW;
         ctx.fillRect(lx + 12, ly + 12, 296, 64);
-        ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+        ctx.fillStyle = PALETTE_ENV.MOSS_FOLIAGE;
         for (let px = 20; px < 292; px += 32) {
           ctx.fillRect(lx + px, ly + 18, 24, 12);
         }
@@ -2554,9 +2594,9 @@ export function drawZoneLandmarks(
       case 'lm_tank_column_1975': {
         // Đội Hình Xe Tăng Tiến Quân Mùa Xuân 1975
         for (let px = 12; px < 120; px += 56) {
-          ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+          ctx.fillStyle = PALETTE_ENV.MOSS_SHADOW;
           ctx.fillRect(lx + px, ly + 22, 36, 14);
-          ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+          ctx.fillStyle = PALETTE_ENV.MOSS_FOLIAGE;
           ctx.fillRect(lx + px + 6, ly + 12, 20, 10);
           ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
           ctx.fillRect(lx + px + 26, ly + 15, 16, 4);
@@ -2592,18 +2632,20 @@ export function drawZoneLandmarks(
         break;
       }
       case 'lm_integration_clock_plaza': {
-        // Đài Phun Nước & Biểu Tượng Hội Nhập
-        ctx.fillStyle = PALETTE_12.INK_SECONDARY;
+        // Đài Phun Nước & Biểu Tượng Hội Nhập trên mặt nước chàm sáng
+        ctx.fillStyle = PALETTE_ENV.WET_STONE_GRAY;
         ctx.fillRect(lx + 12, ly + 8, 72, 32);
+        ctx.fillStyle = PALETTE_ENV.INDIGO_WATER_MID;
+        ctx.fillRect(lx + 18, ly + 12, 60, 24);
         ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
-        ctx.fillRect(lx + 20, ly + 14, 56, 20);
+        ctx.fillRect(lx + 26, ly + 16, 44, 16);
         ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
         ctx.fillRect(lx + 42, ly + 10 - pulse, 12, 16);
         break;
       }
       case 'lm_solar_lotus_arch_2045': {
         // Vòm Sen Năng Lượng Mặt Trời 2045
-        ctx.fillStyle = PALETTE_12.LACQUER_DEEP;
+        ctx.fillStyle = PALETTE_ENV.INDIGO_NIGHT_DEEP;
         ctx.fillRect(lx + 16, ly + 16, 288, 80);
         ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
         ctx.fillRect(lx + 32, ly + 8, 256, 14);
@@ -2625,6 +2667,230 @@ export function drawZoneLandmarks(
           ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
           ctx.fillRect(lx + px + 7, ly + 12 - pulse, 6, 12);
         }
+        break;
+      }
+    }
+  }
+  ctx.restore();
+}
+
+export type VignetteClusterTheme =
+  | 'harbor_cargo_lantern'
+  | 'alley_poster_lamp'
+  | 'courtyard_moss_banyan'
+  | 'interior_archive_clutter'
+  | 'campaign_supply_cluster'
+  | 'modern_memory_cluster';
+
+export interface VignetteClusterSpec {
+  id: string;
+  theme: VignetteClusterTheme;
+  x: number;
+  y: number;
+  flipX?: boolean;
+}
+
+/**
+ * Hạng mục A.2: Cụm đạo cụ kể chuyện bất đối xứng (Asymmetric Vignette Clusters) ở rìa đường & góc phòng
+ * trên toàn bộ 14 bản đồ (Chương I–IV), phá vỡ cảm giác lưới phẳng mà không làm thay đổi vật cản A*.
+ */
+export const ZONE_VIGNETTE_CLUSTERS: Record<string, VignetteClusterSpec[]> = {
+  harbor_square: [
+    { id: 'vc_harbor_west_jetty', theme: 'harbor_cargo_lantern', x: 96, y: 472 },
+    { id: 'vc_harbor_customs_eave', theme: 'alley_poster_lamp', x: 344, y: 176, flipX: true },
+    { id: 'vc_harbor_east_bollards', theme: 'harbor_cargo_lantern', x: 752, y: 456, flipX: true },
+  ],
+  warehouse_interior: [
+    { id: 'vc_warehouse_north_crates', theme: 'interior_archive_clutter', x: 88, y: 152 },
+    { id: 'vc_warehouse_east_bales', theme: 'interior_archive_clutter', x: 432, y: 264, flipX: true },
+  ],
+  old_street: [
+    { id: 'vc_old_street_west_poster', theme: 'alley_poster_lamp', x: 112, y: 184 },
+    { id: 'vc_old_street_tea_corner', theme: 'harbor_cargo_lantern', x: 312, y: 376, flipX: true },
+    { id: 'vc_old_street_moss_eave', theme: 'courtyard_moss_banyan', x: 544, y: 192 },
+  ],
+  small_pier: [
+    { id: 'vc_pier_mooring_west', theme: 'harbor_cargo_lantern', x: 96, y: 264 },
+    { id: 'vc_pier_ferry_lantern', theme: 'harbor_cargo_lantern', x: 448, y: 296, flipX: true },
+  ],
+  safehouse_interior: [
+    { id: 'vc_safehouse_stencil_desk', theme: 'interior_archive_clutter', x: 76, y: 224 },
+    { id: 'vc_safehouse_cipher_books', theme: 'interior_archive_clutter', x: 384, y: 156, flipX: true },
+  ],
+  shadow_alley: [
+    { id: 'vc_alley_wet_leaflet', theme: 'alley_poster_lamp', x: 176, y: 216 },
+    { id: 'vc_alley_patrol_barrels', theme: 'harbor_cargo_lantern', x: 456, y: 204, flipX: true },
+  ],
+  archive_courtyard: [
+    { id: 'vc_courtyard_west_banyan', theme: 'courtyard_moss_banyan', x: 136, y: 168 },
+    { id: 'vc_courtyard_east_stele', theme: 'courtyard_moss_banyan', x: 528, y: 176, flipX: true },
+  ],
+  secret_archive: [
+    { id: 'vc_secret_west_scrolls', theme: 'interior_archive_clutter', x: 72, y: 168 },
+    { id: 'vc_secret_east_lamp_stand', theme: 'interior_archive_clutter', x: 392, y: 172, flipX: true },
+  ],
+  tan_trao_banyan: [
+    { id: 'vc_tan_trao_roots_west', theme: 'courtyard_moss_banyan', x: 96, y: 248 },
+    { id: 'vc_tan_trao_communal_lantern', theme: 'courtyard_moss_banyan', x: 560, y: 192, flipX: true },
+  ],
+  ba_dinh_square: [
+    { id: 'vc_ba_dinh_west_bunting', theme: 'alley_poster_lamp', x: 120, y: 152 },
+    { id: 'vc_ba_dinh_east_bunting', theme: 'courtyard_moss_banyan', x: 640, y: 152, flipX: true },
+  ],
+  pha_din_pass: [
+    { id: 'vc_pha_din_supply_west', theme: 'campaign_supply_cluster', x: 112, y: 248 },
+    { id: 'vc_pha_din_camo_east', theme: 'campaign_supply_cluster', x: 584, y: 184, flipX: true },
+  ],
+  spring_1975_corridor: [
+    { id: 'vc_1975_milestone_west', theme: 'campaign_supply_cluster', x: 112, y: 240 },
+    { id: 'vc_1975_signal_post_east', theme: 'campaign_supply_cluster', x: 576, y: 184, flipX: true },
+  ],
+  doi_moi_avenue: [
+    { id: 'vc_doi_moi_newsstand_west', theme: 'modern_memory_cluster', x: 128, y: 184 },
+    { id: 'vc_doi_moi_plaza_planter', theme: 'modern_memory_cluster', x: 592, y: 232, flipX: true },
+  ],
+  nexus_2045_plaza: [
+    { id: 'vc_nexus_holo_garden_west', theme: 'modern_memory_cluster', x: 136, y: 184 },
+    { id: 'vc_nexus_holo_garden_east', theme: 'modern_memory_cluster', x: 592, y: 184, flipX: true },
+  ],
+};
+
+/**
+ * Vẽ các cụm đạo cụ kể chuyện bất đối xứng (Vignette Clusters) ở rìa đường và góc phòng.
+ * Kết hợp 3–5 chi tiết (Cột đèn + vũng nước phản chiếu ánh vàng + kiện hàng phủ bạt + tờ truyền đơn + bóng hiên chéo).
+ */
+export function drawZoneVignetteClusters(
+  ctx: CanvasRenderingContext2D,
+  mapData: NormalizedMapData,
+  cameraX: number,
+  cameraY: number,
+  timeSec = 0,
+  reducedMotion = false
+): void {
+  const clusters = ZONE_VIGNETTE_CLUSTERS[mapData.id] ?? [];
+  if (clusters.length === 0) return;
+
+  const shimmer = reducedMotion ? 0 : Math.round(Math.sin(timeSec * 3.6) * 1);
+
+  ctx.save();
+  for (const cluster of clusters) {
+    const cx = Math.round(cluster.x - cameraX);
+    const cy = Math.round(cluster.y - cameraY);
+    const dir = cluster.flipX ? -1 : 1;
+
+    // 1. Bóng hiên chéo mềm dưới chân cụm đạo cụ (Diagonal Eave Cast Shadow)
+    ctx.fillStyle = 'rgba(17, 14, 11, 0.34)';
+    ctx.fillRect(cx - 16, cy + 4, 34, 8);
+    ctx.fillRect(cx - 12 + dir * 3, cy + 10, 26, 4);
+
+    switch (cluster.theme) {
+      case 'harbor_cargo_lantern': {
+        // Vũng nước mưa phản chiếu ánh đèn vàng trên mặt đá xám ướt
+        ctx.fillStyle = PALETTE_ENV.INDIGO_NIGHT_DEEP;
+        ctx.fillRect(cx - 14, cy + 6, 18, 6);
+        ctx.fillStyle = PALETTE_ENV.INDIGO_WATER_MID;
+        ctx.fillRect(cx - 12, cy + 7, 14, 4);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(cx - 8 + shimmer, cy + 8, 5, 2);
+
+        // Kiện hàng gỗ đặt lệch phủ bạt chàm + dây thừng buộc tàu
+        ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+        ctx.fillRect(cx + 2, cy - 6, 14, 12);
+        ctx.fillStyle = PALETTE_ENV.INDIGO_WATER_MID;
+        ctx.fillRect(cx + 1, cy - 7, 15, 5);
+        ctx.fillStyle = PALETTE_12.PARCHMENT_WARM;
+        ctx.fillRect(cx + 5, cy - 2, 8, 2);
+        ctx.fillRect(cx - 4, cy + 3, 7, 2);
+
+        // Cột đèn dầu bến cảng
+        ctx.fillStyle = PALETTE_12.LACQUER_VOID;
+        ctx.fillRect(cx - 7, cy - 16, 2, 22);
+        ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+        ctx.fillRect(cx - 10, cy - 20, 8, 5);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(cx - 8, cy - 19, 4, 3);
+        break;
+      }
+      case 'alley_poster_lamp': {
+        // Mảng tường rêu ẩm & Tờ truyền đơn dán lệch (Asymmetric Wall Leaflet)
+        ctx.fillStyle = PALETTE_ENV.WET_STONE_DARK;
+        ctx.fillRect(cx - 12, cy - 16, 24, 18);
+        ctx.fillStyle = PALETTE_ENV.MOSS_SHADOW;
+        ctx.fillRect(cx - 12, cy - 2, 24, 5);
+        ctx.fillStyle = PALETTE_12.PARCHMENT_WARM;
+        ctx.fillRect(cx - 8, cy - 12, 7, 9);
+        ctx.fillRect(cx + 1, cy - 10, 6, 7);
+        ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+        ctx.fillRect(cx - 7, cy - 10, 5, 2);
+        ctx.fillRect(cx + 2, cy - 8, 4, 2);
+
+        // Đèn bão treo lệch + Vũng nước nhỏ dưới chân tường
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(cx + 6, cy - 15, 4, 4);
+        ctx.fillStyle = PALETTE_ENV.INDIGO_WATER_MID;
+        ctx.fillRect(cx - 6, cy + 6, 14, 4);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(cx + shimmer, cy + 7, 4, 1);
+        break;
+      }
+      case 'courtyard_moss_banyan': {
+        // Rễ đa cổ thụ phủ rêu xanh (#2D3B2F / #4A5D46 / #687D5B) + Bia đá cổ + Lá vàng rụng
+        ctx.fillStyle = PALETTE_ENV.MOSS_SHADOW;
+        ctx.fillRect(cx - 14, cy - 4, 28, 12);
+        ctx.fillStyle = PALETTE_ENV.MOSS_FOLIAGE;
+        ctx.fillRect(cx - 10, cy - 6, 20, 8);
+        ctx.fillStyle = PALETTE_ENV.MOSS_CANOPY_HIGHLIGHT;
+        ctx.fillRect(cx - 6, cy - 5, 10, 4);
+        ctx.fillStyle = PALETTE_ENV.WET_STONE_GRAY;
+        ctx.fillRect(cx + 4, cy - 14, 10, 14);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(cx - 10, cy + 5, 2, 2);
+        ctx.fillRect(cx + 8, cy + 6, 2, 1);
+        break;
+      }
+      case 'interior_archive_clutter': {
+        // Kệ gỗ nhỏ kê lệch + Chồng sổ vận đơn Giấy Dó + Đèn dầu đồng ấm
+        ctx.fillStyle = PALETTE_12.BRONZE_MUTED;
+        ctx.fillRect(cx - 12, cy - 6, 24, 12);
+        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        ctx.fillRect(cx - 10, cy - 4, 20, 8);
+        ctx.fillStyle = PALETTE_12.PARCHMENT_WARM;
+        ctx.fillRect(cx - 8, cy - 7, 8, 5);
+        ctx.fillRect(cx + 1, cy - 5, 7, 4);
+        ctx.fillStyle = PALETTE_12.CRIMSON_SEAL;
+        ctx.fillRect(cx - 6, cy - 6, 3, 2);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(cx + 5, cy - 10, 4, 5);
+        ctx.fillStyle = PALETTE_12.PARCHMENT_LIGHT;
+        ctx.fillRect(cx + 6, cy - 9, 2, 2);
+        break;
+      }
+      case 'campaign_supply_cluster': {
+        // Bao cát ngụy trang rêu rừng + Hòm tiếp vận đồng + Đèn bão hành quân
+        ctx.fillStyle = PALETTE_ENV.MOSS_SHADOW;
+        ctx.fillRect(cx - 14, cy - 4, 28, 12);
+        ctx.fillStyle = PALETTE_ENV.MOSS_FOLIAGE;
+        ctx.fillRect(cx - 12, cy - 2, 12, 6);
+        ctx.fillRect(cx + 2, cy - 2, 10, 6);
+        ctx.fillStyle = PALETTE_12.BRONZE_ANTIQUE;
+        ctx.fillRect(cx - 4, cy - 9, 12, 7);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(cx - 10, cy - 8, 4, 5);
+        break;
+      }
+      case 'modern_memory_cluster': {
+        // Bồn cây xanh rêu đô thị + Trụ đèn đồng & mặt kính chàm phản quang
+        ctx.fillStyle = PALETTE_ENV.WET_STONE_GRAY;
+        ctx.fillRect(cx - 14, cy - 2, 28, 10);
+        ctx.fillStyle = PALETTE_ENV.MOSS_FOLIAGE;
+        ctx.fillRect(cx - 11, cy - 6, 14, 6);
+        ctx.fillStyle = PALETTE_ENV.MOSS_CANOPY_HIGHLIGHT;
+        ctx.fillRect(cx - 8, cy - 5, 8, 3);
+        ctx.fillStyle = PALETTE_ENV.INDIGO_WATER_MID;
+        ctx.fillRect(cx + 5, cy - 14, 7, 14);
+        ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
+        ctx.fillRect(cx + 6, cy - 12, 5, 3);
+        ctx.fillRect(cx + 4 + shimmer, cy + 5, 6, 2);
         break;
       }
     }
