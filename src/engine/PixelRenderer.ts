@@ -23,13 +23,18 @@ import type {
 } from '../types/game';
 import {
   type CharacterAtlasRole,
+  ZONE_LANDMARKS,
   drawArtifactSprite,
   drawCharacter4Dir,
+  drawDecorSprite,
   drawNpcSprite,
+  drawPropInteractableSprite,
+  drawSingleZoneLandmark,
   drawTopDownTile,
   drawTravelerSprite,
-  drawZoneLandmarks,
+  drawZoneDecorLayer,
   drawZoneVignetteClusters,
+  getZoneDecorProps,
 } from './SpriteAtlas';
 
 export const INTERNAL_WIDTH = 320;
@@ -239,7 +244,9 @@ export class PixelRenderer {
     const reducedMotion = Boolean(state.reducedMotion);
     const effectsQuality: EffectsQuality = state.effectsQuality ?? 'full';
     const isInterior =
-      mapData.id.includes('interior') || mapData.id.includes('warehouse');
+      mapData.id.includes('interior') ||
+      mapData.id.includes('warehouse') ||
+      mapData.id.includes('secret_archive');
     const tileSize = mapData.tileSize || 16;
 
     ctx.imageSmoothingEnabled = false;
@@ -257,6 +264,21 @@ export class PixelRenderer {
       Math.ceil((cameraY + viewH) / tileSize)
     );
 
+    const computeTileNeighborMask = (
+      layer: number[],
+      c: number,
+      r: number,
+      tileId: number
+    ): number => {
+      const w = mapData.widthInTiles;
+      const h = mapData.heightInTiles;
+      const n = r > 0 && layer[(r - 1) * w + c] === tileId ? 1 : 0;
+      const s = r < h - 1 && layer[(r + 1) * w + c] === tileId ? 2 : 0;
+      const west = c > 0 && layer[r * w + (c - 1)] === tileId ? 4 : 0;
+      const east = c < w - 1 && layer[r * w + (c + 1)] === tileId ? 8 : 0;
+      return n | s | west | east;
+    };
+
     const drawTileLayer = (layerName: string) => {
       const layer = mapData.tileLayers[layerName];
       if (!layer) return;
@@ -272,17 +294,22 @@ export class PixelRenderer {
               isInterior,
               mapData.eraId,
               timeSec,
-              reducedMotion
+              reducedMotion,
+              c,
+              r,
+              computeTileNeighborMask(layer, c, r, tileId)
             );
           }
         }
       }
     };
 
-    // 1. Lớp mặt đất & chi tiết mặt đất
+    // 1. Lớp mặt đất, chi tiết mặt đất & cụm đạo cụ rìa đường (Ground Decor + Vignette Clusters)
     drawTileLayer('Ground');
     drawTileLayer('GroundDetails');
     drawTileLayer('LowProps');
+    drawZoneDecorLayer(ctx, mapData, 'ground', cameraX, cameraY, viewW, viewH);
+    drawZoneVignetteClusters(ctx, mapData, cameraX, cameraY, timeSec, reducedMotion);
 
     // 2. Vẽ khung chỉ báo vùng ẩn nấp (Shelters) & ngưỡng cửa dịch chuyển (Portals)
     for (const shelter of mapData.shelters) {
@@ -356,6 +383,9 @@ export class PixelRenderer {
             const footY = (r + 1) * tileSize;
             const sx = Math.round(c * tileSize - cameraX);
             const sy = Math.round(r * tileSize - cameraY);
+            const colIdx = c;
+            const rowIdx = r;
+            const mask = computeTileNeighborMask(structuresLayer, c, r, tileId);
             depthQueue.push({
               footY,
               draw: () =>
@@ -367,7 +397,10 @@ export class PixelRenderer {
                   isInterior,
                   mapData.eraId,
                   timeSec,
-                  reducedMotion
+                  reducedMotion,
+                  colIdx,
+                  rowIdx,
+                  mask
                 ),
             });
           }
@@ -375,14 +408,47 @@ export class PixelRenderer {
       }
     }
 
-    // Công trình biểu tượng (Focal Landmarks) của khu vực
-    depthQueue.push({
-      footY: 162,
-      draw: () =>
-        drawZoneLandmarks(ctx, mapData, cameraX, cameraY, timeSec, reducedMotion),
-    });
+    // Công trình biểu tượng (Focal Landmarks) — sắp xếp Y-sort theo đúng chân đế từng công trình
+    const landmarkSpecs = ZONE_LANDMARKS[mapData.id] ?? [];
+    for (const lm of landmarkSpecs) {
+      const lx = Math.round(lm.x - cameraX);
+      const ly = Math.round(lm.y - cameraY);
+      if (
+        lx + lm.width < -32 ||
+        lx > viewW + 32 ||
+        ly + lm.height < -32 ||
+        ly > viewH + 32
+      ) {
+        continue;
+      }
+      depthQueue.push({
+        footY: lm.y + lm.height - 4,
+        draw: () =>
+          drawSingleZoneLandmark(
+            ctx,
+            lm,
+            cameraX,
+            cameraY,
+            timeSec,
+            reducedMotion
+          ),
+      });
+    }
 
-    // Interactables (Doors, Evidence, Climax Gate)
+    // Tĩnh vật trang trí 20-màu có chiều sâu ('ysort')
+    const ysortDecor = getZoneDecorProps(mapData.id, 'ysort');
+    for (const decor of ysortDecor) {
+      const dx = Math.round(decor.x - cameraX);
+      const dy = Math.round(decor.y - cameraY);
+      if (dx < -40 || dx > viewW + 40 || dy < -40 || dy > viewH + 40) continue;
+      depthQueue.push({
+        footY: decor.y,
+        draw: () =>
+          drawDecorSprite(ctx, decor.spriteId, dx, dy, Boolean(decor.flipX)),
+      });
+    }
+
+    // Interactables (Doors, Props, Evidence, Puzzles, Checkpoints, Climax Gate)
     for (const inter of mapData.interactables) {
       const ix = Math.round(inter.x - cameraX);
       const iy = Math.round(inter.y - cameraY);
@@ -484,6 +550,24 @@ export class PixelRenderer {
               this.drawOverheadQuestMarker(ix, iy - 23, 'main', timeSec, reducedMotion);
             } else if (optionalLore) {
               this.drawOverheadQuestMarker(ix, iy - 22, 'optional', timeSec, reducedMotion);
+            }
+          },
+        });
+      } else if (inter.kind === 'prop') {
+        depthQueue.push({
+          footY: inter.y + 4,
+          draw: () => {
+            if (tracked) {
+              ctx.fillStyle = 'rgba(212, 165, 93, 0.24)';
+              ctx.fillRect(ix - 12, iy, 24, 5);
+            }
+            drawPropInteractableSprite(ctx, inter.id, ix, iy);
+            if (tracked) {
+              this.drawOverheadQuestMarker(ix, iy - 20, 'tracked', timeSec, reducedMotion);
+            } else if (activeMain) {
+              this.drawOverheadQuestMarker(ix, iy - 19, 'main', timeSec, reducedMotion);
+            } else if (optionalLore) {
+              this.drawOverheadQuestMarker(ix, iy - 18, 'optional', timeSec, reducedMotion);
             }
           },
         });
@@ -595,21 +679,32 @@ export class PixelRenderer {
       item.draw();
     }
 
-    // 4. Lớp Foreground (Mái hiên & Tán cây cổ thụ che phủ phía trước nhân vật khi đi qua bên dưới)
+    // 4. Lớp Foreground & Tán cây / Dây đèn lồng ('canopy') che phủ phía trước nhân vật khi đi qua bên dưới
     const foregroundLayer = mapData.tileLayers['Foreground'];
-    if (foregroundLayer) {
-      const playerUnderOccluder = mapData.occluders.some(
-        (occ) =>
-          playerX >= occ.x &&
-          playerX <= occ.x + occ.width &&
-          playerY >= occ.y &&
-          playerY <= occ.y + occ.height
-      );
+    const canopyDecor = getZoneDecorProps(mapData.id, 'canopy');
+    if (foregroundLayer || canopyDecor.length > 0) {
+      const playerUnderOccluder =
+        mapData.occluders.some(
+          (occ) =>
+            playerX >= occ.x &&
+            playerX <= occ.x + occ.width &&
+            playerY >= occ.y &&
+            playerY <= occ.y + occ.height
+        ) ||
+        canopyDecor.some(
+          (cd) =>
+            Math.abs(playerX - cd.x) <= 18 &&
+            playerY >= cd.y - 20 &&
+            playerY <= cd.y + 6
+        );
       ctx.save();
       if (playerUnderOccluder) {
         ctx.globalAlpha = 0.76;
       }
-      drawTileLayer('Foreground');
+      if (foregroundLayer) {
+        drawTileLayer('Foreground');
+      }
+      drawZoneDecorLayer(ctx, mapData, 'canopy', cameraX, cameraY, viewW, viewH);
       ctx.restore();
     }
 
@@ -1081,7 +1176,7 @@ export class PixelRenderer {
   }
 
   private resolveNpcRole(npc: NpcMapPlacement): CharacterAtlasRole {
-    const key = `${npc.npcId} ${npc.role}`.toLowerCase();
+    const key = `${npc.id} ${npc.npcId} ${npc.role}`.toLowerCase();
     if (
       key.includes('guard') ||
       key.includes('patrol') ||
@@ -1089,29 +1184,73 @@ export class PixelRenderer {
     ) {
       return 'guard';
     }
+    if (key.includes('2045') || key.includes('kỷ nguyên số')) {
+      return 'archivist_2045';
+    }
+    if (
+      key.includes('doi_moi') ||
+      key.includes('economist') ||
+      key.includes('đổi mới') ||
+      key.includes('1986')
+    ) {
+      return 'reform_1986';
+    }
+    if (
+      key.includes('1975') ||
+      key.includes('signal') ||
+      key.includes('thông tin')
+    ) {
+      return 'commander_1975';
+    }
+    if (
+      key.includes('pha_din') ||
+      key.includes('quartermaster') ||
+      key.includes('pha đin') ||
+      key.includes('tiếp vận') ||
+      key.includes('1954')
+    ) {
+      return 'soldier_1954';
+    }
+    if (
+      key.includes('tan_trao') ||
+      key.includes('ba_dinh') ||
+      key.includes('việt minh') ||
+      key.includes('tân trào') ||
+      key.includes('ba đình') ||
+      key.includes('1945')
+    ) {
+      return 'cadre_1945';
+    }
+    if (
+      key.includes('vendor') ||
+      key.includes('hàng nước') ||
+      key.includes('bà năm')
+    ) {
+      return 'vendor';
+    }
+    if (
+      key.includes('boatman') ||
+      key.includes('chèo đò') ||
+      key.includes('lái đò')
+    ) {
+      return 'boatman';
+    }
     if (
       key.includes('courier') ||
       key.includes('liaison') ||
       key.includes('messenger') ||
-      key.includes('signal') ||
       key.includes('giao liên') ||
-      key.includes('liên lạc') ||
-      key.includes('thông tin')
+      key.includes('liên lạc')
     ) {
       return 'courier';
     }
     if (
       key.includes('worker') ||
       key.includes('observer') ||
-      key.includes('vendor') ||
-      key.includes('boatman') ||
       key.includes('watchman') ||
-      key.includes('quartermaster') ||
       key.includes('công nhân') ||
       key.includes('phu') ||
-      key.includes('bến') ||
-      key.includes('lái đò') ||
-      key.includes('tiếp vận')
+      key.includes('hoa tiêu')
     ) {
       return 'observer';
     }
@@ -1119,7 +1258,7 @@ export class PixelRenderer {
       key.includes('archivist') ||
       key.includes('scholar') ||
       key.includes('archive') ||
-      key.includes('economist') ||
+      key.includes('keeper') ||
       key.includes('lưu trữ') ||
       key.includes('học giả')
     ) {

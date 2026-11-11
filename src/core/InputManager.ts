@@ -20,6 +20,7 @@ export interface InputCallbacks {
   onToggleHints?: () => void;
   onToggleFullscreen?: () => void;
   onTogglePresenterShortcut?: () => void;
+  onSkipTutorial?: () => void;
   onNumberKey?: (num: 1 | 2 | 3 | 4) => void;
   onActionKey?: (key: string) => void;
 }
@@ -45,6 +46,7 @@ const ACTION_KEYS = new Set<string>([
   'i',
   'h',
   'f',
+  'x',
   'escape',
   'tab',
   'f3',
@@ -150,7 +152,10 @@ export class InputManager {
     }
 
     if (ACTION_KEYS.has(key)) {
-      if (key === 'f' && (e.ctrlKey || e.metaKey || e.altKey)) {
+      if (
+        (key === 'f' || key === 'x') &&
+        (e.ctrlKey || e.metaKey || e.altKey)
+      ) {
         return;
       }
       if (e.repeat || this.consumedActionKeys.has(key)) {
@@ -184,6 +189,8 @@ export class InputManager {
       } else if (key === 'f') {
         e.preventDefault();
         this.callbacks.onToggleFullscreen?.();
+      } else if (key === 'x') {
+        this.callbacks.onSkipTutorial?.();
       } else if (key === 'tab') {
         e.preventDefault();
         this.callbacks.onTogglePause?.();

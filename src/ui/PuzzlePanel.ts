@@ -126,7 +126,10 @@ export class PuzzlePanel {
 
       const numSpan = document.createElement('span');
       numSpan.className = 'dossier-inline-gap-num';
-      numSpan.textContent = `Mảnh [${idx + 1}] · ${slot.label}`;
+      const cleanLabel = slot.label.trim();
+      numSpan.textContent = /^\d+[.)]/.test(cleanLabel)
+        ? cleanLabel
+        : `${idx + 1}. ${cleanLabel}`;
 
       const valSpan = document.createElement('span');
       valSpan.className = 'dossier-inline-gap-value';
