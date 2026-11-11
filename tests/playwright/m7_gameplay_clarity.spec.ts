@@ -22,7 +22,10 @@ test.describe('M7 (#12) — Gameplay Clarity: First-Play Tutorial, Concise HUD &
 
     // Verify PLAYING state and non-blocking tutorial coach bar is visible
     await expect(page.locator('#tutorial-coach-bar')).toBeVisible();
-    await expect(page.locator('#tutorial-step-badge')).toHaveText('HƯỚNG DẪN 1/5');
+    await expect(page.locator('#tutorial-step-badge')).toHaveText('1/5');
+    await expect(page.locator('#tutorial-step-title')).toHaveText(
+      'Di chuyển Lữ Khách'
+    );
 
     // Verify concise 1-line HUD objective tracker shows exact objective line
     const objectiveLine = page.locator('#hud-active-objective-text');
@@ -45,7 +48,10 @@ test.describe('M7 (#12) — Gameplay Clarity: First-Play Tutorial, Concise HUD &
     await page.keyboard.down('d');
     await page.waitForTimeout(400);
     await page.keyboard.up('d');
-    await expect(page.locator('#tutorial-step-badge')).toHaveText('HƯỚNG DẪN 2/5');
+    await expect(page.locator('#tutorial-step-badge')).toHaveText('2/5');
+    await expect(page.locator('#tutorial-step-title')).toHaveText(
+      'Trò chuyện & Tương tác'
+    );
 
     // Step 2 -> Step 3: Interact near npc_courier with [E]
     await page.evaluate(() => {
@@ -56,34 +62,37 @@ test.describe('M7 (#12) — Gameplay Clarity: First-Play Tutorial, Concise HUD &
     });
     // Close dialogue modal so tutorial bar unsuppresses
     await page.locator('#btn-close-dialogue').click();
-    await expect(page.locator('#tutorial-step-badge')).toHaveText('HƯỚNG DẪN 3/5');
+    await expect(page.locator('#tutorial-step-badge')).toHaveText('3/5');
+    await expect(page.locator('#tutorial-step-title')).toHaveText(
+      'Nhật ký & Biên niên sử'
+    );
 
     // Step 3 -> Step 4: Open & close Journal [J]
     await page.keyboard.press('j');
     await expect(page.locator('#journal-modal')).toBeVisible();
     await page.locator('#btn-close-journal').click();
-    await expect(page.locator('#tutorial-step-badge')).toHaveText('HƯỚNG DẪN 4/5');
+    await expect(page.locator('#tutorial-step-badge')).toHaveText('4/5');
 
     // Step 4 -> Step 5: Open & close World Map [M]
     await page.keyboard.press('m');
     await expect(page.locator('#world-map-modal')).toBeVisible();
     await page.locator('#btn-close-world-map').click();
-    await expect(page.locator('#tutorial-step-badge')).toHaveText('HƯỚNG DẪN 5/5');
+    await expect(page.locator('#tutorial-step-badge')).toHaveText('5/5');
 
     // Step 5 -> Completed: Toggle Hints [H]
     await page.keyboard.press('h');
     await expect(page.locator('#tutorial-coach-bar')).toBeHidden();
 
-    // Verify tutorial can be replayed from Settings modal and skipped with 1 click
+    // Verify tutorial can be replayed from Settings modal and skipped with keyboard [X]
     await page.locator('#btn-open-pause').click();
     await page.locator('#pause-open-settings').click();
     await expect(page.locator('#settings-modal')).toBeVisible();
     await page.locator('#btn-replay-tutorial').click();
 
     await expect(page.locator('#tutorial-coach-bar')).toBeVisible();
-    await expect(page.locator('#tutorial-step-badge')).toHaveText('HƯỚNG DẪN 1/5');
+    await expect(page.locator('#tutorial-step-badge')).toHaveText('1/5');
 
-    await page.locator('#btn-tutorial-skip').click();
+    await page.keyboard.press('x');
     await expect(page.locator('#tutorial-coach-bar')).toBeHidden();
   });
 });

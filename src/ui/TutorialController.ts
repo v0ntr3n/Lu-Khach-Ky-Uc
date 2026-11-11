@@ -23,49 +23,49 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
     id: 'move',
     index: 1,
     total: 5,
-    badgeText: 'HƯỚNG DẪN 1/5',
-    title: 'Bước 1 · Di chuyển Lữ Khách',
-    instruction: 'Nhấn [WASD] hoặc phím Mũi tên để bước đi trên bến cảng.',
+    badgeText: '1/5',
+    title: 'Di chuyển Lữ Khách',
+    instruction: 'Bước đi trên bến cảng để làm quen địa hình.',
     keycap: 'WASD / ↑↓←→',
   },
   {
     id: 'interact',
     index: 2,
     total: 5,
-    badgeText: 'HƯỚNG DẪN 2/5',
-    title: 'Bước 2 · Trò chuyện & Tương tác',
+    badgeText: '2/5',
+    title: 'Trò chuyện & Tương tác',
     instruction:
-      'Tiến lại gần Giao Liên Lâm Văn Bính và nhấn [E] để nhận mật hiệu.',
+      'Tiến lại gần Giao Liên Lâm Văn Bính để nhận mật hiệu.',
     keycap: 'E',
   },
   {
     id: 'journal',
     index: 3,
     total: 5,
-    badgeText: 'HƯỚNG DẪN 3/5',
-    title: 'Bước 3 · Nhật ký & Biên niên sử',
+    badgeText: '3/5',
+    title: 'Nhật ký & Biên niên sử',
     instruction:
-      'Nhấn [J] để mở Sổ tay Nhiệm vụ và tra cứu Biên niên sử I–XII.',
+      'Mở Sổ tay Nhiệm vụ và tra cứu Biên niên sử I–XII.',
     keycap: 'J',
   },
   {
     id: 'map',
     index: 4,
     total: 5,
-    badgeText: 'HƯỚNG DẪN 4/5',
-    title: 'Bước 4 · Sơ đồ Khu vực & Điểm lưu',
+    badgeText: '4/5',
+    title: 'Sơ đồ Khu vực & Điểm lưu',
     instruction:
-      'Nhấn [M] để xem Sơ đồ liên thông và các Đèn Báo An Toàn đã mở.',
+      'Xem Sơ đồ liên thông và các Đèn Báo An Toàn đã mở.',
     keycap: 'M',
   },
   {
     id: 'hint',
     index: 5,
     total: 5,
-    badgeText: 'HƯỚNG DẪN 5/5',
-    title: 'Bước 5 · Gợi ý & Tạm dừng',
+    badgeText: '5/5',
+    title: 'Gợi ý & Tạm dừng',
     instruction:
-      'Nhấn [H] để bật/tắt gợi ý nhiệm vụ hoặc [Tab]/[Esc] để mở Menu Tạm Dừng.',
+      'Bật/tắt gợi ý nhiệm vụ hoặc mở Menu Tạm Dừng.',
     keycap: 'H / Tab',
   },
 ];
@@ -212,6 +212,7 @@ export class TutorialController {
     const shouldShow =
       Boolean(stepDef) && this.isGameplayVisible && !this.isOverlaySuppressed;
 
+    document.body?.classList.toggle('is-tutorial-bar-open', shouldShow);
     barEl.hidden = !shouldShow;
     barEl.classList.toggle('is-open', shouldShow);
     barEl.classList.toggle('is-visible', shouldShow);

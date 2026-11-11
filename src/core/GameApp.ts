@@ -269,14 +269,18 @@ export class LuKhachKyUcGame {
       },
       onToggleHints: () => {
         if (!this.isInGameplaySession()) return;
+        const wasFinishingTutorial =
+          this.tutorialController?.getCurrentStep() === 'hint';
         this.tutorialController?.recordAction('hint');
         const nextShowHints = !this.store.settings.showHints;
         this.updateSettings({ showHints: nextShowHints });
-        this.hud.showToast(
-          nextShowHints
-            ? '◆ Đã bật hiển thị Gợi ý Nhiệm vụ [H].'
-            : '○ Đã tắt hiển thị Gợi ý Nhiệm vụ [H].'
-        );
+        if (!wasFinishingTutorial) {
+          this.hud.showToast(
+            nextShowHints
+              ? '◆ Đã bật hiển thị Gợi ý Nhiệm vụ [H].'
+              : '○ Đã tắt hiển thị Gợi ý Nhiệm vụ [H].'
+          );
+        }
       },
       onToggleMinimap: () => {
         if (!this.isInGameplaySession()) return;
@@ -292,6 +296,13 @@ export class LuKhachKyUcGame {
       },
       onTogglePresenterShortcut: () => {
         this.handlePresenterShortcut();
+      },
+      onSkipTutorial: () => {
+        if (!this.isInGameplaySession() || this.hud.isOverlayOpen()) return;
+        if (this.tutorialController?.isActive()) {
+          this.sound.playMenuCancel();
+          this.tutorialController.skip();
+        }
       },
       onNumberKey: (num: 1 | 2 | 3 | 4) => {
         if (!this.isInGameplaySession()) return;
@@ -392,7 +403,7 @@ export class LuKhachKyUcGame {
           this.tutorialController.setOverlaySuppressed(false);
         }
         this.tutorialController.replay();
-        this.hud.showToast('◆ Đã mở lại Hướng dẫn Tân thủ từ Bước 1/5.');
+        this.hud.showToast('◆ Đã mở lại Hướng dẫn Tân thủ (1/5).');
       },
       onTrackObjective: (objectiveId: string | null) => {
         this.trackObjective(objectiveId);

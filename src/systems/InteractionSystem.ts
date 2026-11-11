@@ -114,9 +114,11 @@ export class InteractionSystem {
         } else if (item.kind === 'npc') {
           promptText = `[E] Trò chuyện: ${item.label}`;
         } else if (item.kind === 'checkpoint') {
-          promptText = `Nhấn [E] — Kích hoạt Điểm Lưu / Đèn Báo An Toàn: ${item.label}`;
+          promptText = `[E] Kích hoạt Đèn An Toàn: ${item.label}`;
         } else if (item.kind === 'puzzle') {
-          promptText = `Nhấn [E] — Đối chiếu Tư liệu: ${item.label}`;
+          promptText = `[E] Đối chiếu Tư liệu: ${item.label}`;
+        } else if (item.kind === 'prop') {
+          promptText = `[E] Xem xét: ${item.label}`;
         } else if (item.kind === 'climax_gate') {
           promptText = '[E] Cổng Thời Gian';
         }

@@ -34,9 +34,9 @@ export function formatStageIntroLabel(eraId: EraId | string): string {
   return STAGE_INTRO_LABELS[eraId as EraId] ?? `ẢI 1 : ${String(eraId)}`;
 }
 
-function cleanPromptLabel(raw: string): string {
+export function cleanPromptLabel(raw: string): string {
   return raw
-    .replace(/^\s*\[?\s*E\s*\]?\s*[·:–\-]?\s*/i, '')
+    .replace(/^\s*(?:(?:nhấn|bấm)\s+)?\[?\s*(?:phím\s*)?E\s*\]?\s*[·:–\-—]?\s*/i, '')
     .replace(/\s*[\[(]\s*(?:phím\s*)?E\s*[\])]\s*$/i, '')
     .replace(/^[\p{Extended_Pictographic}\uFE0F\s]+/u, '')
     .trim();
