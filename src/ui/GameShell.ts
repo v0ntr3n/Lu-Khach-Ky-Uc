@@ -6,6 +6,7 @@
  */
 
 import type { CameraZoomPreset, Vec2, ViewportMetrics } from '../types/game';
+import { installLiveUiPolish, type LiveUiPolishHandle } from './LiveUiPolish';
 
 export interface GameShellOptions {
   shellSelector?: string;
@@ -22,6 +23,7 @@ export class GameShell {
   private metrics: ViewportMetrics;
   private readonly onViewportChange?: (metrics: ViewportMetrics) => void;
   private resizeObserver: ResizeObserver | null = null;
+  private liveUiPolish: LiveUiPolishHandle | null = null;
   private readonly boundHandleViewportEvent: () => void;
 
   /**
@@ -80,6 +82,10 @@ export class GameShell {
         : null);
     this.zoomPreset = options?.initialZoom ?? 'normal';
     this.onViewportChange = options?.onViewportChange;
+
+    if (typeof document !== 'undefined') {
+      this.liveUiPolish = installLiveUiPolish(document);
+    }
 
     this.metrics = GameShell.computeViewportMetrics(
       1280,
@@ -284,6 +290,11 @@ export class GameShell {
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
+    }
+
+    if (this.liveUiPolish) {
+      this.liveUiPolish.destroy();
+      this.liveUiPolish = null;
     }
   }
 }

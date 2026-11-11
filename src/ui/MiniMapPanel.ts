@@ -19,6 +19,9 @@ import type {
   Vec2,
 } from '../types/game';
 import type { TrackedRouteState } from '../world/GridPathfinder';
+import { formatCompactMinimapTitle } from './LiveUiPolish';
+
+export { formatCompactMinimapTitle };
 
 export interface MiniMapRenderParams {
   map: NormalizedMapData;
@@ -243,7 +246,8 @@ export class MiniMapPanel {
     const titleEl = document.getElementById('minimap-zone-title');
     if (titleEl && this.lastZoneTitle !== map.title) {
       this.lastZoneTitle = map.title;
-      titleEl.textContent = map.title;
+      titleEl.textContent = formatCompactMinimapTitle(map.title);
+      titleEl.title = map.title;
     }
 
     const bannerEl = document.getElementById('minimap-route-banner');
