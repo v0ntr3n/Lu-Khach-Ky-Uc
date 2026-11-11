@@ -3,23 +3,25 @@
  * @description Cửa sổ Nhật Ký Hành Trình & Biên Niên Sử La Mã I–XII (#journal-modal, phím J)
  * thiết kế theo phong cách Pixel RPG Eastward với bố cục 2 cột (Master List + Detail Inspector):
  * - Ngăn 1 (#journal-quests-panel): Cột trái (#journal-quest-list) liệt kê nhóm nhiệm vụ Chính/Phụ
- *   và các bước mục tiêu ngắn gọn, dễ quét; Cột phải (#journal-active-banner) hiển thị chi tiết mục tiêu
- *   đang chọn/dẫn đường, gợi ý hành động và ghi chú bối cảnh (loại bỏ hoàn toàn văn bản trùng lặp và huy hiệu rườm rà).
- * - Ngăn 2 (#journal-codex-panel): Cột trái (#codex-milestone-list) liệt kê 12 Cột mốc La Mã I–XII theo chương;
- *   Cột phải (#codex-milestone-detail) hiển thị chi tiết cột mốc, ý nghĩa lịch sử và nguồn tham chiếu.
+ *   tinh gọn; Cột phải (#journal-active-banner) hiển thị mục tiêu đang chọn, nút dẫn đường, dấu Triện Son
+ *   và ngăn mở rộng `<details class="journal-quest-lore">` chứa chi tiết & tư liệu.
+ * - Ngăn 2 (#journal-codex-panel): Cột trái (#codex-milestone-list) liệt kê 12 Cột mốc La Mã I–XII;
+ *   Cột phải (#codex-milestone-detail) hiển thị chi tiết cột mốc, dấu Triện Son và nguồn tham chiếu.
+ * - Dựng cây DOM trực tiếp qua `createDomElement()` / `replaceChildren()` (tuyệt đối không nối chuỗi HTML thô)
+ *   theo chuẩn Modern Web Guidance (`sanitize-untrusted-html`).
  */
 
 import { CHAPTERS } from '../data/chronicles';
 import type {
   ChapterData,
+  JournalTabId,
   MilestoneArtifact,
   QuestDefinition,
   QuestObjective,
   QuestObjectiveStatus,
   RomanMilestoneId,
 } from '../types/game';
-
-export type JournalTabId = 'quests' | 'codex';
+import { createDomElement } from './safeDom';
 
 export interface JournalQuestEntry {
   quest: QuestDefinition;
@@ -42,16 +44,6 @@ export interface JournalPanelCallbacks {
   onSelectObjective?: (objectiveId: string) => void;
   onSelectMilestone?: (milestone: MilestoneArtifact) => void;
   onClose?: () => void;
-}
-
-/** Escape text interpolated into Journal's small static HTML templates. */
-function escapeJournalHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 export class JournalPanel {
@@ -161,31 +153,28 @@ export class JournalPanel {
   public toggle(force?: boolean, initialTab?: JournalTabId): boolean {
     if (typeof document === 'undefined') return false;
     const modal = document.getElementById('journal-modal');
-    const openBtn = document.getElementById('btn-open-journal');
+    const triggerBtn = document.getElementById('btn-open-journal');
     if (!modal) return false;
 
-    const currentlyOpen = this.isOpen();
-    const next = force ?? !currentlyOpen;
-
-    if (initialTab) {
-      this.activeTab = initialTab;
+    const next = force ?? modal.hidden;
+    if (next && initialTab) {
+      this.setActiveTab(initialTab);
+    } else if (next) {
+      this.setActiveTab(this.activeTab);
     }
 
-    modal.classList.toggle('is-open', next);
     modal.hidden = !next;
+    modal.classList.toggle('is-open', next);
     if (next) {
       modal.removeAttribute('hidden');
-      this.setActiveTab(this.activeTab);
-      this.render();
-      this.renderCodex();
       const closeBtn = document.getElementById('btn-close-journal');
       closeBtn?.focus({ preventScroll: true });
     } else {
       modal.setAttribute('hidden', '');
     }
 
-    openBtn?.classList.toggle('is-active', next);
-    openBtn?.setAttribute('aria-expanded', String(next));
+    triggerBtn?.classList.toggle('is-active', next);
+    triggerBtn?.setAttribute('aria-expanded', String(next));
     return next;
   }
 
@@ -211,9 +200,7 @@ export class JournalPanel {
   }
 
   /**
-   * Kết xuất ngăn Nhiệm Vụ (#journal-quests-panel) theo bố cục 2 cột Eastward RPG:
-   * - Cột trái (#journal-quest-list): Danh sách nhiệm vụ Chính/Phụ và các dòng mục tiêu tinh gọn.
-   * - Cột phải (#journal-active-banner): Khung chi tiết nhiệm vụ & bước mục tiêu đang chọn/theo dõi.
+   * Kết xuất ngăn Nhiệm Vụ (#journal-quests-panel) theo bố cục 2 cột Eastward RPG.
    */
   public render(): void {
     if (typeof document === 'undefined') return;
@@ -222,13 +209,11 @@ export class JournalPanel {
     const bannerEl = document.getElementById('journal-active-banner');
     const listEl = document.getElementById('journal-quest-list');
 
-    // Đảm bảo khung 2 cột luôn được bao bọc quanh #journal-quest-list và #journal-active-banner
     const questsPanel = document.getElementById('journal-quests-panel');
     if (questsPanel && listEl && bannerEl) {
       let twoColWrap = questsPanel.querySelector<HTMLElement>('.journal-two-col-grid');
       if (!twoColWrap) {
-        twoColWrap = document.createElement('div');
-        twoColWrap.className = 'journal-two-col-grid';
+        twoColWrap = createDomElement('div', { className: 'journal-two-col-grid' });
         listEl.parentNode?.insertBefore(twoColWrap, listEl);
         twoColWrap.appendChild(listEl);
         twoColWrap.appendChild(bannerEl);
@@ -266,7 +251,6 @@ export class JournalPanel {
     const effectiveTrackedId =
       this.trackedObjectiveId ?? this.activeObjective?.objective.id ?? null;
 
-    // Xác định nhiệm vụ và mục tiêu đang được chọn để hiển thị chi tiết ở cột phải
     let selectedEntry: JournalQuestEntry | undefined;
     let selectedObjItem:
       | {
@@ -336,7 +320,7 @@ export class JournalPanel {
     );
 
     if (!listEl) return;
-    listEl.innerHTML = '';
+    const questCards: HTMLElement[] = [];
 
     for (const entry of this.quests) {
       const { quest, objectives } = entry;
@@ -355,25 +339,43 @@ export class JournalPanel {
         objectives.length > 0 && doneSteps === objectives.length;
       const isQuestSelected = selectedEntry?.quest.id === quest.id;
 
-      const card = document.createElement('article');
-      card.className = `journal-quest-card is-${quest.category} ${
-        isQuestCompleted ? 'is-completed' : hasActive ? 'is-active' : 'is-locked'
-      }${isQuestSelected ? ' is-selected' : ''}`;
+      const card = createDomElement('article', {
+        className: `journal-quest-card is-${quest.category} ${
+          isQuestCompleted ? 'is-completed' : hasActive ? 'is-active' : 'is-locked'
+        }${isQuestSelected ? ' is-selected' : ''}`,
+      });
       card.dataset.questId = quest.id;
 
-      const header = document.createElement('div');
-      header.className = 'journal-quest-header';
+      const header = createDomElement(
+        'div',
+        {
+          className: 'journal-quest-header',
+          attrs: {
+            role: 'button',
+            'aria-label': `Chọn nhiệm vụ ${quest.title}`,
+          },
+        },
+        [
+          createDomElement('div', { className: 'journal-quest-title-wrap' }, [
+            createDomElement('span', {
+              className: 'journal-category-glyph',
+              text: quest.category === 'main' ? '◆' : '◇',
+              attrs: { 'aria-hidden': 'true' },
+            }),
+            createDomElement('h4', {
+              className: 'journal-quest-title',
+              text: quest.hudTitle || quest.title,
+            }),
+          ]),
+          createDomElement('span', {
+            className: 'journal-step-count',
+            text: `${doneSteps}/${objectives.length}`,
+          }),
+        ]
+      );
       header.tabIndex = 0;
-      header.setAttribute('role', 'button');
-      header.setAttribute('aria-label', `Chọn nhiệm vụ ${quest.title}`);
       header.title = quest.title;
-      header.innerHTML = `
-        <div class="journal-quest-title-wrap">
-          <span class="journal-category-glyph" aria-hidden="true">${quest.category === 'main' ? '◆' : '◇'}</span>
-          <h4 class="journal-quest-title">${escapeJournalHtml(quest.hudTitle || quest.title)}</h4>
-        </div>
-        <span class="journal-step-count">${doneSteps}/${objectives.length}</span>
-      `;
+
       const selectQuest = () => {
         this.inspectedQuestId = quest.id;
         const firstActive = objectives.find(
@@ -392,8 +394,9 @@ export class JournalPanel {
       });
       card.appendChild(header);
 
-      const objList = document.createElement('ul');
-      objList.className = 'journal-objective-list';
+      const objList = createDomElement('ul', {
+        className: 'journal-objective-list',
+      });
 
       for (const item of objectives) {
         const effStatus: QuestObjectiveStatus = this.isPresenterMode
@@ -404,12 +407,6 @@ export class JournalPanel {
         const isInspected =
           selectedObjItem?.objective.id === item.objective.id;
 
-        const li = document.createElement('li');
-        li.className = `journal-objective-row is-${effStatus}${
-          isTracked ? ' is-tracked' : ''
-        }${isInspected ? ' is-selected' : ''}`;
-        li.dataset.objectiveId = item.objective.id;
-
         const statusGlyph =
           effStatus === 'completed'
             ? '✓'
@@ -419,12 +416,30 @@ export class JournalPanel {
                 ? '◆'
                 : '○';
 
-        li.innerHTML = `
-          <div class="journal-obj-top">
-            <span class="journal-status-badge is-${effStatus}${isTracked ? ' is-tracked' : ''}" aria-hidden="true">${statusGlyph}</span>
-            <strong class="journal-obj-title">${escapeJournalHtml(item.objective.hudText || item.objective.title)}</strong>
-          </div>
-        `;
+        const li = createDomElement(
+          'li',
+          {
+            className: `journal-objective-row is-${effStatus}${
+              isTracked ? ' is-tracked' : ''
+            }${isInspected ? ' is-selected' : ''}`,
+          },
+          [
+            createDomElement('div', { className: 'journal-obj-top' }, [
+              createDomElement('span', {
+                className: `journal-status-badge is-${effStatus}${
+                  isTracked ? ' is-tracked' : ''
+                }`,
+                text: statusGlyph,
+                attrs: { 'aria-hidden': 'true' },
+              }),
+              createDomElement('strong', {
+                className: 'journal-obj-title',
+                text: item.objective.hudText || item.objective.title,
+              }),
+            ]),
+          ]
+        );
+        li.dataset.objectiveId = item.objective.id;
         li.title = item.objective.title;
 
         if (effStatus === 'active') {
@@ -458,8 +473,10 @@ export class JournalPanel {
       }
 
       card.appendChild(objList);
-      listEl.appendChild(card);
+      questCards.push(card);
     }
+
+    listEl.replaceChildren(...questCards);
   }
 
   private renderQuestInspector(
@@ -475,12 +492,21 @@ export class JournalPanel {
     if (!bannerEl) return;
 
     if (!entry && !this.activeObjective) {
-      bannerEl.innerHTML = `
-        <div class="journal-inspector-empty">
-          <div class="journal-banner-label">✓ Đã hoàn thành</div>
-          <div class="journal-banner-title">Đến Cổng Thời Gian</div>
-        </div>
-      `;
+      const emptyBox = createDomElement(
+        'div',
+        { className: 'journal-inspector-empty' },
+        [
+          createDomElement('div', {
+            className: 'journal-banner-label',
+            text: '✓ Đã hoàn thành',
+          }),
+          createDomElement('div', {
+            className: 'journal-banner-title',
+            text: 'Đến Cổng Thời Gian',
+          }),
+        ]
+      );
+      bannerEl.replaceChildren(emptyBox);
       return;
     }
 
@@ -511,80 +537,140 @@ export class JournalPanel {
           : isTracked
             ? '◆ Đang dẫn đường'
             : '◆ Có thể thực hiện';
-    const shortObjective = escapeJournalHtml(
-      objective?.hudText || objective?.title || 'Đã hoàn thành mục tiêu'
-    );
-    const shortQuest = escapeJournalHtml(quest?.hudTitle || quest?.title || '');
-    const unlockMessage =
+    const shortObjective =
+      objective?.hudText || objective?.title || 'Đã hoàn thành mục tiêu';
+    const shortQuest = quest?.hudTitle || quest?.title || '';
+
+    const unlockHintEl =
       effStatus === 'locked'
-        ? '<p class="journal-compact-hint">Hoàn thành mục tiêu trước để mở khóa.</p>'
-        : '';
+        ? createDomElement('p', {
+            className: 'journal-compact-hint',
+            text: 'Hoàn thành mục tiêu trước để mở khóa.',
+          })
+        : null;
 
-    const trackActionHtml =
-      objective && effStatus === 'active'
-        ? `<button type="button" class="ctrl-btn journal-inspector-track-btn${isTracked ? ' is-primary' : ''}" data-inspect-track-id="${escapeJournalHtml(objective.id)}">${isTracked ? '✓ Đang dẫn đường' : '⌖ Dẫn đường'}</button>`
-        : '';
+    let trackBtnEl: HTMLButtonElement | null = null;
+    if (objective && effStatus === 'active') {
+      trackBtnEl = createDomElement('button', {
+        className: `ctrl-btn journal-inspector-track-btn${
+          isTracked ? ' is-primary' : ''
+        }`,
+        text: isTracked ? '✓ Đang dẫn đường' : '⌖ Dẫn đường',
+        attrs: { type: 'button' },
+      });
+      trackBtnEl.dataset.inspectTrackId = objective.id;
+      const targetObjId = objective.id;
+      trackBtnEl.addEventListener('click', () => {
+        this.callbacks.onSelectObjective?.(targetObjId);
+      });
+    }
 
-    // The full historical text, specific requirements and citations are preserved
-    // in a deliberate disclosure, rather than competing with gameplay actions.
     const citation =
       quest?.provenance?.citation ||
       quest?.provenance?.historicalNote ||
-      quest?.provenance?.label || '';
+      quest?.provenance?.label ||
+      '';
     const hint = objective?.hintText || (isTracked ? this.hintText : '');
-    const loreHtml = `
-      <details class="journal-quest-lore" ${this.loreExpanded ? 'open' : ''}>
-        <summary>Xem chi tiết &amp; tư liệu</summary>
-        <div class="journal-quest-lore-content">
-          ${quest?.title ? `<h5>${escapeJournalHtml(quest.title)}</h5>` : ''}
-          ${quest?.summary ? `<p>${escapeJournalHtml(quest.summary)}</p>` : ''}
-          ${objective?.title ? `<p><strong>Mục tiêu:</strong> ${escapeJournalHtml(objective.title)}</p>` : ''}
-          ${objective?.description ? `<p>${escapeJournalHtml(objective.description)}</p>` : ''}
-          ${objItem?.prerequisiteText ? `<p><strong>Điều kiện:</strong> ${escapeJournalHtml(objItem.prerequisiteText)}</p>` : ''}
-          ${this.showHints && hint && effStatus !== 'completed' ? `<p><strong>Gợi ý:</strong> ${escapeJournalHtml(hint)}</p>` : ''}
-          ${citation ? `<p class="journal-quest-cite"><strong>Nguồn:</strong> ${escapeJournalHtml(citation)}</p>` : ''}
-        </div>
-      </details>
-    `;
 
-    const statusHeaderHtml =
-      effStatus === 'completed'
-        ? '<span class="crimson-seal-stamp" aria-label="Đã kiểm định">✓ ĐÃ KIỂM ĐỊNH</span>'
-        : `<span class="journal-banner-label">${statusText}</span>`;
+    const loreContentChildren: Array<Node | null> = [
+      quest?.title ? createDomElement('h5', { text: quest.title }) : null,
+      quest?.summary ? createDomElement('p', { text: quest.summary }) : null,
+      objective?.title
+        ? createDomElement('p', undefined, [
+            createDomElement('strong', { text: 'Mục tiêu:' }),
+            document.createTextNode(` ${objective.title}`),
+          ])
+        : null,
+      objective?.description
+        ? createDomElement('p', { text: objective.description })
+        : null,
+      objItem?.prerequisiteText
+        ? createDomElement('p', undefined, [
+            createDomElement('strong', { text: 'Điều kiện:' }),
+            document.createTextNode(` ${objItem.prerequisiteText}`),
+          ])
+        : null,
+      this.showHints && hint && effStatus !== 'completed'
+        ? createDomElement('p', undefined, [
+            createDomElement('strong', { text: 'Gợi ý:' }),
+            document.createTextNode(` ${hint}`),
+          ])
+        : null,
+      citation
+        ? createDomElement('p', { className: 'journal-quest-cite' }, [
+            createDomElement('strong', { text: 'Nguồn:' }),
+            document.createTextNode(` ${citation}`),
+          ])
+        : null,
+    ];
 
-    bannerEl.innerHTML = `
-      <div class="journal-inspector-top">
-        ${statusHeaderHtml}
-        <span class="journal-inspector-step-pill">${stepIndex}/${totalSteps}</span>
-      </div>
-      <div class="journal-inspector-quest-head">
-        <span class="journal-inspector-quest-title">${shortQuest}</span>
-      </div>
-      <div class="journal-inspector-objective-box is-${effStatus}">
-        <div class="journal-banner-title"><strong>${shortObjective}</strong></div>
-        ${unlockMessage}
-        ${trackActionHtml}
-      </div>
-      ${loreHtml}
-    `;
-
-    const trackBtn = bannerEl.querySelector<HTMLButtonElement>(
-      '.journal-inspector-track-btn'
+    const loreDetails = createDomElement(
+      'details',
+      { className: 'journal-quest-lore' },
+      [
+        createDomElement('summary', { text: 'Xem chi tiết & tư liệu' }),
+        createDomElement(
+          'div',
+          { className: 'journal-quest-lore-content' },
+          loreContentChildren
+        ),
+      ]
     );
-    trackBtn?.addEventListener('click', () => {
-      const objId = trackBtn.dataset.inspectTrackId;
-      if (objId) this.callbacks.onSelectObjective?.(objId);
+    if (this.loreExpanded) {
+      loreDetails.open = true;
+    }
+    loreDetails.addEventListener('toggle', () => {
+      this.loreExpanded = loreDetails.open;
     });
-    const lore = bannerEl.querySelector<HTMLDetailsElement>('.journal-quest-lore');
-    lore?.addEventListener('toggle', () => {
-      this.loreExpanded = lore.open;
-    });
+
+    const statusHeaderEl =
+      effStatus === 'completed'
+        ? createDomElement('span', {
+            className: 'crimson-seal-stamp',
+            text: '✓ ĐÃ KIỂM ĐỊNH',
+            attrs: { 'aria-label': 'Đã kiểm định' },
+          })
+        : createDomElement('span', {
+            className: 'journal-banner-label',
+            text: statusText,
+          });
+
+    const topRow = createDomElement('div', { className: 'journal-inspector-top' }, [
+      statusHeaderEl,
+      createDomElement('span', {
+        className: 'journal-inspector-step-pill',
+        text: `${stepIndex}/${totalSteps}`,
+      }),
+    ]);
+
+    const questHead = createDomElement(
+      'div',
+      { className: 'journal-inspector-quest-head' },
+      [
+        createDomElement('span', {
+          className: 'journal-inspector-quest-title',
+          text: shortQuest,
+        }),
+      ]
+    );
+
+    const objBox = createDomElement(
+      'div',
+      { className: `journal-inspector-objective-box is-${effStatus}` },
+      [
+        createDomElement('div', { className: 'journal-banner-title' }, [
+          createDomElement('strong', { text: shortObjective }),
+        ]),
+        unlockHintEl,
+        trackBtnEl,
+      ]
+    );
+
+    bannerEl.replaceChildren(topRow, questHead, objBox, loreDetails);
   }
 
   /**
-   * Cập nhật ngăn Biên Niên Sử La Mã I–XII (#journal-codex-panel) theo bố cục 2 cột:
-   * - Cột trái (#codex-milestone-list): Danh sách 12 cột mốc tinh gọn chia theo 4 Chương.
-   * - Cột phải (#codex-milestone-detail): Khung tra cứu chi tiết cột mốc đang chọn.
+   * Cập nhật ngăn Biên Niên Sử La Mã I–XII (#journal-codex-panel) theo bố cục 2 cột.
    */
   public updateCodex(
     activeChapter: ChapterData,
@@ -595,9 +681,7 @@ export class JournalPanel {
     this.codexActiveChapter = activeChapter;
     this.codexCollected = new Set(collectedMilestones);
     this.codexActiveMilestone = activeMilestone;
-    if (onSelectMilestone) {
-      this.onSelectMilestone = onSelectMilestone;
-    }
+    this.onSelectMilestone = onSelectMilestone;
     this.renderCodex();
   }
 
@@ -612,20 +696,18 @@ export class JournalPanel {
     const codexList = document.getElementById('codex-milestone-list');
     if (!codexList) return;
 
-    // Đảm bảo khung 2 cột cho Biên Niên Sử có vùng chi tiết #codex-milestone-detail
     const codexPanel = document.getElementById('journal-codex-panel');
     let detailEl = document.getElementById('codex-milestone-detail');
     if (codexPanel && !detailEl) {
       let splitWrap = codexPanel.querySelector<HTMLElement>('.codex-two-col-grid');
       if (!splitWrap) {
-        splitWrap = document.createElement('div');
-        splitWrap.className = 'codex-two-col-grid';
+        splitWrap = createDomElement('div', { className: 'codex-two-col-grid' });
         codexList.parentNode?.insertBefore(splitWrap, codexList);
         splitWrap.appendChild(codexList);
       }
-      detailEl = document.createElement('aside');
-      detailEl.id = 'codex-milestone-detail';
-      detailEl.setAttribute('aria-live', 'polite');
+      detailEl = createDomElement('aside', {
+        attrs: { id: 'codex-milestone-detail', 'aria-live': 'polite' },
+      });
       splitWrap.appendChild(detailEl);
     }
 
@@ -649,45 +731,53 @@ export class JournalPanel {
       allMilestones.find((e) => e.milestone.roman === targetRoman) ??
       allMilestones[0];
 
-    codexList.innerHTML = '';
+    const groups: HTMLElement[] = [];
 
     for (const ch of CHAPTERS) {
-      const groupEl = document.createElement('div');
-      groupEl.className = 'codex-chapter-group';
+      const groupEl = createDomElement('div', { className: 'codex-chapter-group' });
 
-      const headerEl = document.createElement('div');
-      headerEl.className = `codex-chapter-header ${
-        ch.id === activeChapter?.id ? 'is-active' : ''
-      }`;
-      headerEl.textContent = `${ch.chapterNum} · ${ch.years} — ${ch.title}`;
+      const headerEl = createDomElement('div', {
+        className: `codex-chapter-header ${
+          ch.id === activeChapter?.id ? 'is-active' : ''
+        }`,
+        text: `${ch.chapterNum} · ${ch.years} — ${ch.title}`,
+      });
       groupEl.appendChild(headerEl);
 
-      const itemsBox = document.createElement('div');
-      itemsBox.className = 'codex-chapter-items';
+      const itemsBox = createDomElement('div', { className: 'codex-chapter-items' });
 
       for (const m of ch.milestones) {
         const isDone = this.codexCollected.has(m.roman);
         const isCurrent = selectedEntry?.milestone.roman === m.roman;
 
-        const itemBtn = document.createElement('button');
-        itemBtn.type = 'button';
+        const itemBtn = createDomElement(
+          'button',
+          {
+            className: [
+              'codex-item',
+              isDone ? 'is-collected' : 'is-locked',
+              isCurrent ? 'is-current' : '',
+            ]
+              .filter(Boolean)
+              .join(' '),
+            attrs: { type: 'button' },
+          },
+          [
+            createDomElement('span', {
+              className: 'codex-roman',
+              text: `${isDone ? '✓ ' : ''}${m.roman}`,
+            }),
+            createDomElement('div', { className: 'codex-item-body' }, [
+              createDomElement('strong', {
+                className: 'codex-title',
+                text: `${m.year} · ${
+                  isDone || this.isPresenterMode ? m.title : 'Cột mốc chưa khôi phục'
+                }`,
+              }),
+            ]),
+          ]
+        );
         itemBtn.dataset.milestoneRoman = m.roman;
-        itemBtn.className = [
-          'codex-item',
-          isDone ? 'is-collected' : 'is-locked',
-          isCurrent ? 'is-current' : '',
-        ]
-          .filter(Boolean)
-          .join(' ');
-
-        itemBtn.innerHTML = `
-          <span class="codex-roman">${isDone ? '✓ ' : ''}${m.roman}</span>
-          <div class="codex-item-body">
-            <strong class="codex-title">${m.year} · ${
-              isDone || this.isPresenterMode ? m.title : 'Cột mốc chưa khôi phục'
-            }</strong>
-          </div>
-        `;
 
         itemBtn.addEventListener('click', () => {
           this.inspectedMilestoneRoman = m.roman;
@@ -711,8 +801,10 @@ export class JournalPanel {
       }
 
       groupEl.appendChild(itemsBox);
-      codexList.appendChild(groupEl);
+      groups.push(groupEl);
     }
+
+    codexList.replaceChildren(...groups);
 
     if (selectedEntry) {
       this.renderCodexDetail(
@@ -733,37 +825,85 @@ export class JournalPanel {
     if (!detailEl) return;
 
     if (!isCollected && !this.isPresenterMode) {
-      detailEl.innerHTML = `
-        <div class="codex-detail-top">
-          <span class="codex-detail-seal is-locked">CỘT MỐC ${milestone.roman} · ${milestone.year}</span>
-          <span class="codex-detail-status is-locked">○ Chưa khôi phục</span>
-        </div>
-        <h4 class="codex-detail-title">Dấu Ấn Lịch Sử Chưa Mở Khóa</h4>
-        <div class="codex-detail-meta">${chapter.chapterNum} · ${chapter.locationLabel}</div>
-        <p class="codex-detail-desc">
-          Khám phá không gian <strong>${chapter.locationLabel}</strong> và hoàn thành nhiệm vụ liên quan để khôi phục sự kiện lịch sử này vào Biên Niên Sử.
-        </p>
-        <div class="codex-detail-cite">◆ Tham chiếu: ${milestone.textbookCitation}</div>
-      `;
+      const lockedDesc = createDomElement('p', { className: 'codex-detail-desc' }, [
+        document.createTextNode('Khám phá không gian '),
+        createDomElement('strong', { text: chapter.locationLabel }),
+        document.createTextNode(
+          ' và hoàn thành nhiệm vụ liên quan để khôi phục sự kiện lịch sử này vào Biên Niên Sử.'
+        ),
+      ]);
+
+      detailEl.replaceChildren(
+        createDomElement('div', { className: 'codex-detail-top' }, [
+          createDomElement('span', {
+            className: 'codex-detail-seal is-locked',
+            text: `CỘT MỐC ${milestone.roman} · ${milestone.year}`,
+          }),
+          createDomElement('span', {
+            className: 'codex-detail-status is-locked',
+            text: '○ Chưa khôi phục',
+          }),
+        ]),
+        createDomElement('h4', {
+          className: 'codex-detail-title',
+          text: 'Dấu Ấn Lịch Sử Chưa Mở Khóa',
+        }),
+        createDomElement('div', {
+          className: 'codex-detail-meta',
+          text: `${chapter.chapterNum} · ${chapter.locationLabel}`,
+        }),
+        lockedDesc,
+        createDomElement('div', {
+          className: 'codex-detail-cite',
+          text: `◆ Tham chiếu: ${milestone.textbookCitation}`,
+        })
+      );
       return;
     }
 
     const quoteText = milestone.dialogue[0] ?? '';
+    const nodes: Node[] = [
+      createDomElement('div', { className: 'codex-detail-top' }, [
+        createDomElement('span', {
+          className: 'codex-detail-seal is-collected',
+          text: `CỘT MỐC ${milestone.roman} · ${milestone.year}`,
+        }),
+        createDomElement('span', {
+          className: 'crimson-seal-stamp',
+          text: '✓ ĐÃ KHÔI PHỤC',
+          attrs: { 'aria-label': 'Đã khôi phục' },
+        }),
+      ]),
+      createDomElement('h4', {
+        className: 'codex-detail-title',
+        text: milestone.title,
+      }),
+      createDomElement('div', {
+        className: 'codex-detail-meta',
+        text: `${chapter.chapterNum} · ${milestone.npcSpeaker} (${milestone.npcRole})`,
+      }),
+    ];
 
-    detailEl.innerHTML = `
-      <div class="codex-detail-top">
-        <span class="codex-detail-seal is-collected">CỘT MỐC ${milestone.roman} · ${milestone.year}</span>
-        <span class="crimson-seal-stamp" aria-label="Đã khôi phục">✓ ĐÃ KHÔI PHỤC</span>
-      </div>
-      <h4 class="codex-detail-title">${milestone.title}</h4>
-      <div class="codex-detail-meta">${chapter.chapterNum} · ${milestone.npcSpeaker} (${milestone.npcRole})</div>
-      ${
-        quoteText
-          ? `<blockquote class="codex-detail-quote">${quoteText}</blockquote>`
-          : ''
-      }
-      <p class="codex-detail-desc">${milestone.historicalSignificance}</p>
-      <div class="codex-detail-cite">◆ Tư liệu: ${milestone.textbookCitation}</div>
-    `;
+    if (quoteText) {
+      nodes.push(
+        createDomElement('blockquote', {
+          className: 'codex-detail-quote',
+          text: quoteText,
+        })
+      );
+    }
+
+    nodes.push(
+      createDomElement('p', {
+        className: 'codex-detail-desc',
+        text: milestone.historicalSignificance,
+      }),
+      createDomElement('div', {
+        className: 'codex-detail-cite',
+        text: `◆ Tư liệu: ${milestone.textbookCitation}`,
+      })
+    );
+
+    detailEl.replaceChildren(...nodes);
   }
 }
