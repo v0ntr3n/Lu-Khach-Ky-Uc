@@ -547,9 +547,15 @@ export class JournalPanel {
       </details>
     `;
 
+    const sealHtml =
+      effStatus === 'completed'
+        ? '<span class="crimson-seal-stamp" aria-label="Đã kiểm định">ĐÃ KIỂM ĐỊNH</span>'
+        : '';
+
     bannerEl.innerHTML = `
       <div class="journal-inspector-top">
         <span class="journal-banner-label">${statusText}</span>
+        ${sealHtml}
         <span class="journal-inspector-step-pill">${stepIndex}/${totalSteps}</span>
       </div>
       <div class="journal-inspector-quest-head">
@@ -748,6 +754,7 @@ export class JournalPanel {
     detailEl.innerHTML = `
       <div class="codex-detail-top">
         <span class="codex-detail-seal is-collected">✓ CỘT MỐC ${milestone.roman} · ${milestone.year}</span>
+        <span class="crimson-seal-stamp" aria-label="Đã khôi phục">ẤN CHƯƠNG LỊCH SỬ</span>
         <span class="codex-detail-status is-collected">Đã khôi phục</span>
       </div>
       <h4 class="codex-detail-title">${milestone.title}</h4>

@@ -9,7 +9,7 @@
  * - Ánh sáng Chiaroscuro hướng tâm, chất lượng hiệu ứng (`effectsQuality: 'full' | 'subtle'`) & Đại Cảnh Climax
  */
 
-import { PALETTE_12 } from '../data/chronicles';
+import { PALETTE_12, PALETTE_ENV } from '../data/chronicles';
 import type {
   ChapterData,
   EffectsQuality,
@@ -29,6 +29,7 @@ import {
   drawTopDownTile,
   drawTravelerSprite,
   drawZoneLandmarks,
+  drawZoneVignetteClusters,
 } from './SpriteAtlas';
 
 export const INTERNAL_WIDTH = 320;
@@ -643,8 +644,8 @@ export class PixelRenderer {
       effectsQuality
     );
 
-    // 6.5. Khung viền đồng cổ 2 lớp quanh bản đồ nhỏ căn giữa (khi cameraX < 0 || cameraY < 0)
-    if (cameraX < 0 || cameraY < 0) {
+    // 6.5. Hạng mục A.3: Không gian Diorama Nội thất — Vignette biên tối hòa vào #110E0B + silhouette xà gỗ tiền cảnh ở cạnh trên
+    if (isInterior || cameraX < 0 || cameraY < 0) {
       this.drawCenteredMapBorder(cameraX, cameraY, mapData.widthPx, mapData.heightPx);
     }
 
@@ -809,8 +810,9 @@ export class PixelRenderer {
   }
 
   /**
-   * Vẽ khung kiến trúc đồng cổ 2 lớp (`PALETTE_12.BRONZE_ANTIQUE`) bao quanh biên bản đồ
-   * khi bản đồ nội thất nhỏ được căn giữa trong khung nhìn lớn (`cameraX < 0 || cameraY < 0`).
+   * Hạng mục A.3: Thay khung chữ nhật 2 đường viền cứng quanh phòng nội thất nhỏ bằng:
+   * 1. Lớp chuyển sắc tối mềm (Diorama Vignette) ở 4 rìa bản đồ hòa tự nhiên vào nền tối `#110E0B`.
+   * 2. Silhouette xà gỗ tiền cảnh mờ (`LACQUER_VOID` / `rgba(17, 14, 11, 0.72)`) vắt ngang cạnh trên.
    */
   private drawCenteredMapBorder(
     cameraX: number,
@@ -825,26 +827,38 @@ export class PixelRenderer {
     const mh = Math.round(mapHeightPx);
 
     ctx.save();
-    ctx.lineWidth = 1;
 
-    // Khe rãnh tối ngăn cách nền với khung đồng
-    ctx.strokeStyle = PALETTE_12.LACQUER_VOID;
-    ctx.strokeRect(mx - 1.5, my - 1.5, mw + 3, mh + 3);
+    // 1. Dải Diorama Vignette 3 nấc ở 4 rìa trong của căn phòng hòa mềm vào nền #110E0B
+    const vignetteSteps = [
+      { inset: 0, band: 6, alpha: 0.82 },
+      { inset: 6, band: 8, alpha: 0.48 },
+      { inset: 14, band: 8, alpha: 0.2 },
+    ];
+    for (const step of vignetteSteps) {
+      const x0 = mx + step.inset;
+      const y0 = my + step.inset;
+      const w0 = Math.max(0, mw - step.inset * 2);
+      const h0 = Math.max(0, mh - step.inset * 2);
+      const b = step.band;
+      ctx.fillStyle = `rgba(17, 14, 11, ${step.alpha})`;
+      // Top & Bottom feather bands
+      ctx.fillRect(x0, y0, w0, b);
+      ctx.fillRect(x0, y0 + h0 - b, w0, b);
+      // Left & Right feather bands
+      ctx.fillRect(x0, y0 + b, b, Math.max(0, h0 - b * 2));
+      ctx.fillRect(x0 + w0 - b, y0 + b, b, Math.max(0, h0 - b * 2));
+    }
 
-    // Đường viền đồng cổ lớp trong (sát biên bản đồ)
-    ctx.strokeStyle = PALETTE_12.BRONZE_ANTIQUE;
-    ctx.strokeRect(mx - 0.5, my - 0.5, mw + 1, mh + 1);
-
-    // Đường viền đồng cổ lớp ngoài (cách 1px tạo gờ kiến trúc 2 lớp)
-    ctx.strokeStyle = PALETTE_12.BRONZE_ANTIQUE;
-    ctx.strokeRect(mx - 2.5, my - 2.5, mw + 5, mh + 5);
-
-    // Chốt góc vàng đồng sáng tại 4 góc khung
-    ctx.fillStyle = PALETTE_12.BRONZE_BRIGHT;
-    ctx.fillRect(mx - 3, my - 3, 2, 2);
-    ctx.fillRect(mx + mw + 1, my - 3, 2, 2);
-    ctx.fillRect(mx - 3, my + mh + 1, 2, 2);
-    ctx.fillRect(mx + mw + 1, my + mh + 1, 2, 2);
+    // 2. Silhouette xà gỗ tiền cảnh mờ (Foreground Wooden Rafter Silhouettes) ở cạnh trên phòng
+    ctx.fillStyle = 'rgba(17, 14, 11, 0.76)';
+    ctx.fillRect(mx, my, mw, 10);
+    for (let rx = mx + 24; rx < mx + mw - 24; rx += 64) {
+      // Kèo/xà dọc tiền cảnh đổ bóng xuống từ trần kho/phòng
+      ctx.fillStyle = 'rgba(17, 14, 11, 0.62)';
+      ctx.fillRect(rx, my + 8, 12, 14);
+      ctx.fillStyle = 'rgba(36, 29, 23, 0.45)';
+      ctx.fillRect(rx + 2, my + 10, 8, 10);
+    }
 
     ctx.restore();
   }
@@ -885,6 +899,23 @@ export class PixelRenderer {
       );
     }
 
+    // 1.5. Hạng mục A.3: Hạt bụi sáng lơ lửng dưới đèn dầu trong phòng nội thất (Interior Lamp Dust Motes)
+    if (isInterior && !reducedMotion) {
+      const moteCount = effectsQuality === 'subtle' ? 6 : 12;
+      for (let m = 0; m < moteCount; m++) {
+        const driftX = Math.round(Math.sin(timeSec * 1.4 + m * 1.7) * 4);
+        const driftY = Math.round(Math.cos(timeSec * 1.1 + m * 2.1) * 3);
+        const mx = Math.round(((m * 73 + 64) % Math.max(120, mapData.widthPx - 96)) + 48 - cameraX) + driftX;
+        const my = Math.round(((m * 53 + 72) % Math.max(96, mapData.heightPx - 96)) + 48 - cameraY) + driftY;
+        if (mx < 4 || mx > viewW - 4 || my < 4 || my > viewH - 4) continue;
+        ctx.fillStyle =
+          m % 3 === 0
+            ? 'rgba(244, 239, 228, 0.52)'
+            : 'rgba(212, 165, 93, 0.44)';
+        ctx.fillRect(mx, my, 1, 1);
+      }
+    }
+
     // 2. Hiệu ứng môi trường theo từng Thời kỳ Lịch sử (chỉ khi ngoài trời & không bật giảm chuyển động)
     if (!isInterior && !reducedMotion) {
       for (let i = 0; i < ambientCount; i++) {
@@ -894,12 +925,12 @@ export class PixelRenderer {
         if (rx < 4 || rx > viewW - 4 || ry < 4 || ry > viewH - 4) continue;
 
         if (mapData.eraId === '1930') {
-          // 1930: Vòng gợn mưa 3-frame trên mặt đá Cửu Long (Hương Cảng)
+          // 1930: Vòng gợn mưa 3-frame trên mặt đá Cửu Long (Hương Cảng) với sắc lam xám mưa đêm (#4F677A)
           const radius = phase < 0.33 ? 1 : phase < 0.66 ? 2 : 3;
           ctx.fillStyle =
             phase < 0.66
-              ? 'rgba(230, 229, 220, 0.35)'
-              : 'rgba(212, 165, 93, 0.22)';
+              ? PALETTE_ENV.RAIN_SLATE_MIST
+              : 'rgba(212, 165, 93, 0.26)';
           ctx.fillRect(rx - radius, ry, 1, 1);
           ctx.fillRect(rx + radius, ry, 1, 1);
           ctx.fillRect(rx, ry - 1, 1, 1);
@@ -1746,3 +1777,4 @@ export class PixelRenderer {
     }
   }
 }
+
