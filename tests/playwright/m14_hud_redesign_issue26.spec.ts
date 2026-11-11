@@ -12,9 +12,12 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const ARTIFACT_DIR =
-  '/home/antigravity/.gemini/jetski/brain/v1/default/jetski_remote_agents_3p/9794bb53-67ce-4471-a58e-ea7055d0c4ce';
+  process.env.QA_ARTIFACT_DIR || path.resolve(process.cwd(), 'artifacts/playwright');
+fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
 
 async function startNewGameToPlaying(page: Page): Promise<void> {
   await page.goto('/', { waitUntil: 'networkidle' });
