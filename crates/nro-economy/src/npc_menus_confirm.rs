@@ -153,7 +153,7 @@ impl NpcMenuRouter {
                 50 => if select == 0 { Ok(NpcEffect::ChangeMap(MapId(48), 300, 312)) } else if select == 1 { Ok(NpcEffect::ChangeMap(MapId(154), 300, 312)) } else { Ok(NpcEffect::NoOp) },
                 154 | 155 => if select == 0 { Ok(NpcEffect::ChangeMap(MapId(if map == 154 { 155 } else { 154 }), 200, 312)) } else { Ok(NpcEffect::NoOp) },
                 165 => if select == 1 { Err(NpcMenuError::GuardFailed("Tính năng đang được phát triển!")) } else if select == 0 { Ok(NpcEffect::ChangeMap(MapId(21 + i16::from(ctx.gender)), 250, 336)) } else { Ok(NpcEffect::NoOp) },
-                114..=120 => if select == 0 { Ok(NpcEffect::Tutorial("Hạ quái tích điểm xuống tầng dưới")) } else if select == 1 && !ctx.is_use_gtpt { Err(NpcMenuError::GuardFailed("Tính năng đang được phát triển!")) } else if ctx.mabu_points >= 10 && map < 120 { Ok(NpcEffect::ChangeMap(MapId(map + 1), 250, 312)) } else { Err(NpcMenuError::GuardFailed("insufficient Mabu points")) },
+                114..=120 => if select == 0 { Ok(NpcEffect::Tutorial("Hạ quái tích điểm xuống tầng dưới")) } else if select == 1 && !ctx.is_use_gtpt { ctx.inventory.sub_gem(1)?; ctx.is_use_gtpt = true; Ok(NpcEffect::ApplyGtpt) } else if ctx.mabu_points >= 10 && map < 120 { Ok(NpcEffect::ChangeMap(MapId(map + 1), 250, 312)) } else { Err(NpcMenuError::GuardFailed("insufficient Mabu points")) },
                 127 => if select == 0 && !ctx.is_phu_ho_mabu { Err(NpcMenuError::GuardFailed("Tính năng đang được phát triển!")) } else { Ok(NpcEffect::ChangeMap(MapId(52), 200, 336)) },
                 _ => if select == 0 { Ok(NpcEffect::ChangeMap(MapId(114), 250, 312)) } else if select == 1 { Ok(NpcEffect::ChangeMap(MapId(165), 250, 312)) } else { Ok(NpcEffect::NoOp) },
             },
