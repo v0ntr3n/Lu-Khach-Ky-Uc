@@ -7,13 +7,14 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  CARGO_TERM_COLOR: always
+  CARGO_TERM_COLOR: never
   RUST_BACKTRACE: "1"
 
 jobs:
@@ -37,34 +38,67 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "=== Verifying workspace invariants (<= 400 lines, #![forbid(unsafe_code)], zero unsafe) ==="
-          while IFS= read -r -d '' file; do
-            lines="$(wc -l < "${file}")"
-            if [ "${lines}" -gt 400 ]; then
-              echo "ERROR: ${file} has ${lines} lines (exceeds 400-line limit)"
+          {
+            echo "=== Verifying workspace invariants (<= 400 lines, #![forbid(unsafe_code)], zero unsafe) ==="
+            while IFS= read -r -d '' file; do
+              lines="$(wc -l < "${file}")"
+              if [ "${lines}" -gt 400 ]; then
+                echo "ERROR: ${file} has ${lines} lines (exceeds 400-line limit)"
+                exit 1
+              fi
+            done < <(find crates -name '*.rs' -print0)
+
+            for root_file in crates/*/src/lib.rs crates/*/src/main.rs; do
+              if [ -f "${root_file}" ] && ! grep -q '#!\[forbid(unsafe_code)\]' "${root_file}"; then
+                echo "ERROR: Crate root ${root_file} is missing #![forbid(unsafe_code)]"
+                exit 1
+              fi
+            done
+
+            if grep -rn 'unsafe ' crates/ --include='*.rs'; then
+              echo "ERROR: Forbidden 'unsafe ' token detected under crates/"
               exit 1
             fi
-          done < <(find crates -name '*.rs' -print0)
-
-          for root_file in crates/*/src/lib.rs crates/*/src/main.rs; do
-            if [ -f "${root_file}" ] && ! grep -q '#!\[forbid(unsafe_code)\]' "${root_file}"; then
-              echo "ERROR: Crate root ${root_file} is missing #![forbid(unsafe_code)]"
-              exit 1
-            fi
-          done
-
-          if grep -rn 'unsafe ' crates/ --include='*.rs'; then
-            echo "ERROR: Forbidden 'unsafe ' token detected under crates/"
-            exit 1
-          fi
+          } 2>&1 | tee /tmp/ci-lint.log
 
       - name: Cargo check (-D warnings)
+        shell: bash
         env:
           RUSTFLAGS: "-D warnings"
-        run: cargo check --workspace --all-targets
+        run: |
+          set -euo pipefail
+          cargo check --workspace --all-targets 2>&1 | tee /tmp/ci-lint.log
 
       - name: Cargo clippy (-D warnings)
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo clippy --workspace --all-targets -- -D warnings 2>&1 | tee /tmp/ci-lint.log
+
+      - name: Report failure log to GitHub Issue
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHORT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          LOG_TAIL="$(tail -c 45000 /tmp/ci-lint.log 2>/dev/null || echo 'No log captured.')"
+          {
+            echo "### CI Failed: \`Lint, Invariants & Clippy\`"
+            echo ""
+            echo "- **Commit:** \`${SHORT_SHA}\`"
+            echo "- **Run:** ${RUN_URL}"
+            echo ""
+            echo '```text'
+            echo "${LOG_TAIL}"
+            echo '```'
+          } > /tmp/issue-body.md
+          gh issue create \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "CI Failed: Lint & Clippy (${SHORT_SHA:0:7})" \
+            --body-file /tmp/issue-body.md
 
   workspace_tests:
     name: Workspace & Doc Tests
@@ -82,10 +116,41 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run workspace tests
-        run: cargo test --workspace --all-targets -- --nocapture
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --workspace --all-targets -- --nocapture 2>&1 | tee /tmp/ci-test.log
 
       - name: Run doc tests
-        run: cargo test --workspace --doc
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --workspace --doc 2>&1 | tee /tmp/ci-test.log
+
+      - name: Report failure log to GitHub Issue
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHORT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          LOG_TAIL="$(tail -c 45000 /tmp/ci-test.log 2>/dev/null || echo 'No log captured.')"
+          {
+            echo "### CI Failed: \`Workspace & Doc Tests\`"
+            echo ""
+            echo "- **Commit:** \`${SHORT_SHA}\`"
+            echo "- **Run:** ${RUN_URL}"
+            echo ""
+            echo '```text'
+            echo "${LOG_TAIL}"
+            echo '```'
+          } > /tmp/issue-body.md
+          gh issue create \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "CI Failed: Workspace Tests (${SHORT_SHA:0:7})" \
+            --body-file /tmp/issue-body.md
 
   pgo_release_binary:
     name: PGO Release Build
