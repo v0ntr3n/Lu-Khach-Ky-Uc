@@ -1,0 +1,116 @@
+[workspace]
+members = [
+    "crates/nro-core",
+    "crates/nro-consts",
+    "crates/nro-protocol",
+    "crates/nro-db",
+    "crates/nro-player",
+    "crates/nro-economy",
+    "crates/nro-boss",
+    "crates/nro-world",
+    "crates/nro-server",
+]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100.0"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace.dependencies]
+nro-core = { path = "crates/nro-core" }
+nro-consts = { path = "crates/nro-consts" }
+nro-protocol = { path = "crates/nro-protocol" }
+nro-db = { path = "crates/nro-db" }
+nro-player = { path = "crates/nro-player" }
+nro-economy = { path = "crates/nro-economy" }
+nro-boss = { path = "crates/nro-boss" }
+nro-world = { path = "crates/nro-world" }
+
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "net", "io-util", "io-std", "fs", "time", "sync", "macros", "signal"] }
+tokio-util = { version = "0.7.20", features = ["codec", "rt", "time", "net"] }
+bytes = { version = "1.12.1", features = ["serde"] }
+
+fjall = "3.1.13"
+postcard = { version = "1.1.3", default-features = false, features = ["alloc"] }
+chrono = { version = "0.4.45", features = ["serde"] }
+serde = { version = "1.0.229", features = ["derive", "rc"] }
+serde_json = { version = "1.0.154", features = ["raw_value"] }
+toml = { version = "1.2.1", features = ["preserve_order"] }
+
+slotmap = { version = "1.1.1", features = ["serde"] }
+dashmap = { version = "6.2.1", features = ["inline", "serde"] }
+parking_lot = { version = "0.13.0", features = ["send_guard", "serde"] }
+smallvec = { version = "1.16.5", features = ["const_generics", "const_new", "union", "serde", "write"] }
+bitflags = { version = "2.13.2", features = ["std", "serde"] }
+strum = { version = "0.28.0", features = ["derive"] }
+
+argon2 = { version = "0.6.0", features = ["zeroize"] }
+password-hash = { version = "0.6.1", features = ["alloc", "getrandom", "phc"] }
+rand = { version = "0.10.3", features = ["chacha", "serde"] }
+rand_chacha = { version = "0.10.0", features = ["serde"] }
+thiserror = { version = "2.0.21" }
+anyhow = { version = "1.0.104" }
+tracing = { version = "0.1.44", features = ["release_max_level_info"] }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json", "chrono"] }
+clap = { version = "4.6.7", features = ["derive", "env"] }
+
+proptest = { version = "1.12.0", features = ["attr-macro"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unsafe_op_in_unsafe_fn = "forbid"
+static_mut_refs = "forbid"
+unused_must_use = "deny"
+rust_2024_compatibility = { level = "deny", priority = -1 }
+future_incompatible = { level = "deny", priority = -1 }
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+await_holding_lock = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+large_futures = "warn"
+unwrap_used = "warn"
+cast_possible_truncation = "allow"
+cast_possible_wrap = "allow"
+cast_sign_loss = "allow"
+cast_lossless = "allow"
+cast_precision_loss = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+doc_markdown = "allow"
+module_name_repetitions = "allow"
+similar_names = "allow"
+too_many_lines = "allow"
+too_many_arguments = "allow"
+type_complexity = "allow"
+struct_excessive_bools = "allow"
+fn_params_excessive_bools = "allow"
+unused_async = "allow"
+if_not_else = "allow"
+trivially_copy_pass_by_ref = "allow"
+unreadable_literal = "allow"
+wildcard_imports = "allow"
+default_trait_access = "allow"
+field_reassign_with_default = "allow"
+range_plus_one = "allow"
+same_functions_in_if_condition = "allow"
+possible_missing_else = "allow"
+useless_conversion = "allow"
+unnecessary_cast = "allow"
+
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+incremental = false
+overflow-checks = false

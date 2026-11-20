@@ -1,0 +1,35 @@
+[package]
+name = "nro-db"
+version = "0.2.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "Safe embedded fjall storage engine, repositories, static template registry, and legacy SQL dump importer for Teamobi2026"
+publish = false
+
+[[bin]]
+name = "nro-import-sql"
+path = "src/bin/nro_import_sql.rs"
+
+[dependencies]
+nro-core = { workspace = true }
+nro-consts = { workspace = true }
+fjall = { workspace = true }
+postcard = { workspace = true }
+parking_lot = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+argon2 = { workspace = true }
+password-hash = { workspace = true }
+thiserror = { workspace = true }
+smallvec = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tokio = { workspace = true }
+clap = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true

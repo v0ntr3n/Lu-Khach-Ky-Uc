@@ -1,0 +1,22 @@
+[package]
+name = "nro-boss"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Safe, deterministic data-driven Boss, BigBoss, Mob, and RewardService engine for Teamobi2026 NRO (176 classes)."
+
+[dependencies]
+nro-core = { workspace = true }
+nro-consts = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+smallvec = { workspace = true, features = ["serde"] }
+bitflags = { workspace = true, features = ["serde"] }
+strum = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,96 @@
+# GitLab CI/CD Pipeline — Teamobi2026 Safe Rust Server (Rust 1.100.0, Edition 2024, Embedded fjall)
+# Enforces <=400 LOC per .rs file, #![forbid(unsafe_code)], zero-warning -D warnings gate, full tests, and PGO build.
+
+default:
+  image: rust:1.100.0-bookworm
+  cache:
+    key: "${CI_COMMIT_REF_SLUG}-rust-1.100.0"
+    when: always
+    paths:
+      - .cargo/bin/
+      - .cargo/registry/index/
+      - .cargo/registry/cache/
+      - .cargo/git/db/
+      - target/
+
+variables:
+  CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
+  CARGO_TERM_COLOR: "always"
+  RUST_BACKTRACE: "1"
+
+stages:
+  - lint
+  - test
+  - build_pgo
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+check_and_clippy:
+  stage: lint
+  before_script:
+    - rustc --version && cargo --version
+    - rustup component add clippy
+  script:
+    - |
+      set -euo pipefail
+      echo "=== Verifying workspace invariants (<= 400 lines, #![forbid(unsafe_code)], zero unsafe) ==="
+      while IFS= read -r -d '' file; do
+        lines="$(wc -l < "${file}")"
+        if [ "${lines}" -gt 400 ]; then
+          echo "ERROR: ${file} has ${lines} lines (exceeds 400-line limit)"
+          exit 1
+        fi
+      done < <(find crates -name '*.rs' -print0)
+      for root_file in crates/*/src/lib.rs crates/*/src/main.rs; do
+        if [ -f "${root_file}" ] && ! grep -q '#!\[forbid(unsafe_code)\]' "${root_file}"; then
+          echo "ERROR: Crate root ${root_file} is missing #![forbid(unsafe_code)]"
+          exit 1
+        fi
+      done
+      if grep -rn 'unsafe ' crates/ --include='*.rs'; then
+        echo "ERROR: Forbidden 'unsafe ' token detected under crates/"
+        exit 1
+      fi
+    - RUSTFLAGS="-D warnings" cargo check --workspace --all-targets
+    - cargo clippy --workspace --all-targets -- -D warnings
+
+workspace_tests:
+  stage: test
+  needs: []
+  script:
+    - cargo test --workspace --all-targets -- --nocapture
+    - cargo test --workspace --doc
+
+pgo_release_binary:
+  stage: build_pgo
+  needs: ["workspace_tests"]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "api"
+  before_script:
+    - rustup component add llvm-tools-preview
+  script:
+    - |
+      HOST_TRIPLE="$(rustc -vV | sed -n 's/^host: //p')"
+      SYSROOT="$(rustc --print sysroot)"
+      LLVM_PROFDATA="${SYSROOT}/lib/rustlib/${HOST_TRIPLE}/bin/llvm-profdata"
+      PGO_DIR="${CI_PROJECT_DIR}/pgo-profiles"
+      mkdir -p "${PGO_DIR}"
+      RUSTFLAGS="-Cprofile-generate=${PGO_DIR}" cargo build --release -p nro-server -p nro-db --target "${HOST_TRIPLE}"
+      "./target/${HOST_TRIPLE}/release/nro-server" --benchmark-replay --replay-scale 2500
+      "${LLVM_PROFDATA}" merge -o "${PGO_DIR}/merged.profdata" "${PGO_DIR}"
+      RUSTFLAGS="-Cprofile-use=${PGO_DIR}/merged.profdata -Cllvm-args=-pgo-warn-missing-function" cargo build --release -p nro-server -p nro-db --target "${HOST_TRIPLE}"
+      "./target/${HOST_TRIPLE}/release/nro-server" --benchmark-replay --replay-scale 1000
+      cp "./target/${HOST_TRIPLE}/release/nro-server" ./nro-server
+      cp "./target/${HOST_TRIPLE}/release/nro-import-sql" ./nro-import-sql
+  artifacts:
+    name: "nro-server-${CI_COMMIT_SHORT_SHA}"
+    expire_in: 14 days
+    paths:
+      - nro-server
+      - nro-import-sql

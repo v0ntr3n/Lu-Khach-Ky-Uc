@@ -1,0 +1,35 @@
+# Teamobi2026 Ngọc Rồng Online — Safe Rust Server Configuration
+# Target Toolchain: Rust 1.100.0 (edition = "2024", resolver = "3")
+
+server_name = "Ngọc Rồng Teamobi2026"
+domain = "127.0.0.1"
+bind_ip = "0.0.0.0"
+port = 14445
+active_seasonal_event_id = 0
+parity_mode = "Fixed" # "Fixed" (hardened 64-bit Safe Rust) or "Legacy" (Java bug-compatibility A/B mode)
+
+[rate_limit]
+login_wait_secs = 0
+login_cooldown_ms = 2000
+max_connections_per_ip = 12
+max_online_players = 2000
+
+[auto_maintenance]
+enabled = true
+hour = 5
+minute = 0
+countdown_secs = 60
+
+[rates]
+exp_multiplier = 2
+drop_multiplier = 1
+
+[storage]
+path = "data/nro.fjall"
+# Directory containing Teamobi2026 binary client assets (`update_data`, `icon`, `effect`, `effdata`, `map`, `res`)
+assets_dir = "SRC/data"
+memtable_mb = 16
+kv_separate_players = true
+strict_schema_check = true
+# Automatically imports the SQL dump on first boot if `data/nro.fjall` has not been seeded yet
+bootstrap_sql_path = "database team2026.sql"

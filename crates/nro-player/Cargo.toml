@@ -1,0 +1,25 @@
+# Workspace target: Rust 1.100.0, edition = "2024", resolver = "3"
+# Workspace version pins: serde = "1.0.229", smallvec = "1.16.5",
+# bitflags = "2.13.2", strum = "0.28.0", thiserror = "2.0.21", proptest = "1.12.0"
+
+[package]
+name = "nro-player"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "Safe, deterministic NRO player stats, combat, skills, set clothes, pets, tasks, clans, and AI bots"
+
+[dependencies]
+nro-core = { workspace = true }
+nro-consts = { workspace = true }
+serde = { workspace = true }
+smallvec = { workspace = true }
+bitflags = { workspace = true }
+strum = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,26 @@
+[package]
+name = "nro-world"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+nro-core = { workspace = true }
+nro-consts = { workspace = true }
+nro-protocol = { workspace = true }
+tokio = { workspace = true }
+slotmap = { workspace = true }
+dashmap = { workspace = true }
+bytes = { workspace = true }
+smallvec = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lints]
+workspace = true
