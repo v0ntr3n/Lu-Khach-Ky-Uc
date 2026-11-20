@@ -218,7 +218,7 @@ impl ServerSessionHandler {
         } else if action == 1 {
             let now_ms = unix_now_ms();
             let target_ok = self.shared.clients.authenticated.get(&target_sid).is_some_and(|t| t.snapshot.stats.hp > 0 && t.snapshot.location.map_id == loc.map_id && t.snapshot.location.zone_id == loc.zone_id);
-            if !target_ok || !pending_pvp().remove(&(target_pid, my_pid)).is_some_and(|(_, exp)| exp >= now_ms) { return Ok(()); }
+            if !target_ok || pending_pvp().remove(&(target_pid, my_pid)).is_none_or(|(_, exp)| exp < now_ms) { return Ok(()); }
             {
                 let mut pvp = lock_pvp();
                 if pvp.contains_key(&my_pid) || pvp.contains_key(&target_pid) { return Ok(()); }
