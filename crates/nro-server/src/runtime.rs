@@ -287,7 +287,7 @@ pub(crate) fn discover_bootstrap_sql_in(base: &Path, configured: Option<&Path>) 
     };
     let mut subdirs: Vec<PathBuf> = entries
         .filter_map(Result::ok)
-        .map(fs::DirEntry::path)
+        .map(|e| e.path())
         .filter(|p| p.is_dir())
         .collect();
     subdirs.sort();

@@ -329,14 +329,10 @@ impl ServerSessionHandler {
         Ok(())
     }
 
-    fn check_map_visit_subtask(
-        &self, e: &mut crate::state::ActivePlayerEntry, map_id: MapId, gender_idx: usize, out_pkts: &mut Vec<Packet>,
-    ) {
+    fn check_map_visit_subtask(&self, e: &mut crate::state::ActivePlayerEntry, map_id: MapId, gender_idx: usize, out_pkts: &mut Vec<Packet>) {
         let tid = i32::from(e.snapshot.main_task.task_id);
         let sub_idx = usize::from(e.snapshot.main_task.sub_index.max(0).cast_unsigned());
-        if let Some(t_tpl) = self.shared.templates.tasks.iter().find(|t| t.id == tid)
-            && let Some(sub) = t_tpl.sub_tasks.get(sub_idx)
-        {
+        if let Some(t_tpl) = self.shared.templates.tasks.iter().find(|t| t.id == tid) && let Some(sub) = t_tpl.sub_tasks.get(sub_idx) {
             let task11_home = tid == 11 && sub_idx == 3 && (sub.npc_id == 105 || sub.map_id.0 == 42) && matches!(map_id.0, 21..=23);
             if task11_home || (is_map_visit_subtask(sub) && resolve_task_map_id(sub.map_id.0, gender_idx) == map_id.0) {
                 let (sub_len, req_max) = (t_tpl.sub_tasks.len().min(127), sub.max_count.max(1));
@@ -345,10 +341,7 @@ impl ServerSessionHandler {
             }
         }
     }
-
-    fn advance_power_milestones(
-        &self, e: &mut crate::state::ActivePlayerEntry, gender_idx: usize, out_pkts: &mut Vec<Packet>,
-    ) {
+    fn advance_power_milestones(&self, e: &mut crate::state::ActivePlayerEntry, gender_idx: usize, out_pkts: &mut Vec<Packet>) {
         for _ in 0..4 {
             let tid = e.snapshot.main_task.task_id;
             let sub_idx = usize::from(e.snapshot.main_task.sub_index.max(0).cast_unsigned());
@@ -360,54 +353,31 @@ impl ServerSessionHandler {
             out_pkts.extend(self.apply_subtask_delta(e, sub_idx, sub_len, req_max, req_max, gender_idx));
         }
     }
-
-    fn apply_subtask_delta(
-        &self, e: &mut crate::state::ActivePlayerEntry, sub_idx: usize, sub_len: usize, req_max: i16, delta: i16, gender_idx: usize,
-    ) -> Vec<Packet> {
-        e.snapshot.main_task.count = e.snapshot.main_task.count.saturating_add(delta);
-        e.snapshot.main_task.last_time_ms = unix_now_ms();
-        if e.snapshot.main_task.count < req_max {
-            return vec![s2c_packets::task_update(e.snapshot.main_task.count)];
-        }
+    fn apply_subtask_delta(&self, e: &mut crate::state::ActivePlayerEntry, sub_idx: usize, sub_len: usize, req_max: i16, delta: i16, gender_idx: usize) -> Vec<Packet> {
+        e.snapshot.main_task.count = e.snapshot.main_task.count.saturating_add(delta); e.snapshot.main_task.last_time_ms = unix_now_ms();
+        if e.snapshot.main_task.count < req_max { return vec![s2c_packets::task_update(e.snapshot.main_task.count)]; }
         if sub_idx + 1 < sub_len {
-            e.snapshot.main_task.sub_index = (sub_idx + 1) as i8;
-            e.snapshot.main_task.count = 0;
+            e.snapshot.main_task.sub_index = (sub_idx + 1) as i8; e.snapshot.main_task.count = 0;
             self.shared.leaderboards.mark_dirty(LeaderboardSlot::Task);
             return vec![s2c_packets::task_next()];
         }
-        let done_id = e.snapshot.main_task.task_id;
-        self.complete_main_task(e, done_id, gender_idx)
+        let done_id = e.snapshot.main_task.task_id; self.complete_main_task(e, done_id, gender_idx)
     }
-
     fn complete_main_task(&self, e: &mut crate::state::ActivePlayerEntry, done_id: i8, gender_idx: usize) -> Vec<Packet> {
         let done_u16 = u16::from(done_id.max(0).cast_unsigned());
         let (early, _, both_smtn, gold) = TaskPlayer::main_task_reward(done_u16);
         let smtn_gain = i64::try_from(early.saturating_add(both_smtn).max(500)).unwrap_or(500);
         e.snapshot.stats.power = e.snapshot.stats.power.saturating_add(smtn_gain);
         e.snapshot.stats.tiem_nang = e.snapshot.stats.tiem_nang.saturating_add(smtn_gain);
-        if gold > 0 {
-            e.snapshot.wallet.gold = e.snapshot.wallet.gold.saturating_add(i64::try_from(gold).unwrap_or(0)).min(nro_db::player_repo::LIMIT_GOLD);
-        }
+        if gold > 0 { e.snapshot.wallet.gold = e.snapshot.wallet.gold.saturating_add(i64::try_from(gold).unwrap_or(0)).min(nro_db::player_repo::LIMIT_GOLD); }
         e.snapshot.main_task.task_id = next_main_task_id(&self.shared.templates, done_id, gender_idx);
-        e.snapshot.main_task.sub_index = 0;
-        e.snapshot.main_task.count = 0;
-        e.snapshot.main_task.last_time_ms = unix_now_ms();
-        self.shared.leaderboards.mark_dirty(LeaderboardSlot::Task);
-        self.shared.leaderboards.mark_dirty(LeaderboardSlot::Power);
+        e.snapshot.main_task.sub_index = 0; e.snapshot.main_task.count = 0; e.snapshot.main_task.last_time_ms = unix_now_ms();
+        self.shared.leaderboards.mark_dirty(LeaderboardSlot::Task); self.shared.leaderboards.mark_dirty(LeaderboardSlot::Power);
         if let (Some(ek), Ok(tx)) = (e.entity_key, self.shared.world_router.resolve_sender(e.snapshot.location.map_id, e.snapshot.location.zone_id)) {
             let _ = tx.try_send(ZoneCommand::UpdatePlayerStats(ek, e.snapshot.stats));
         }
-        let mut pkts = vec![
-            s2c_packets::player_up_exp(2, i32::try_from(smtn_gain).unwrap_or(i32::MAX)),
-            s2c_packets::me_load_point(&e.snapshot.stats),
-        ];
-        if gold > 0 {
-            pkts.push(s2c_packets::send_money(
-                e.snapshot.wallet.gold.max(0).cast_unsigned(),
-                u64::from(e.snapshot.wallet.gem.max(0).cast_unsigned()),
-                u64::from(e.snapshot.wallet.ruby.max(0).cast_unsigned()),
-            ));
-        }
+        let mut pkts = vec![s2c_packets::player_up_exp(2, i32::try_from(smtn_gain).unwrap_or(i32::MAX)), s2c_packets::me_load_point(&e.snapshot.stats)];
+        if gold > 0 { pkts.push(s2c_packets::send_money(e.snapshot.wallet.gold.max(0).cast_unsigned(), u64::from(e.snapshot.wallet.gem.max(0).cast_unsigned()), u64::from(e.snapshot.wallet.ruby.max(0).cast_unsigned()))); }
         pkts.push(pkt_task_get(&self.shared.templates, &e.snapshot));
         self.advance_power_milestones(e, gender_idx, &mut pkts);
         pkts

@@ -4,13 +4,21 @@
 #[path = "router_admin.rs"] mod router_admin;
 #[path = "router_auth.rs"] mod router_auth;
 #[path = "router_combat.rs"] mod router_combat;
+#[path = "router_combat_pvp.rs"] mod router_combat_pvp;
 #[path = "router_economy.rs"] mod router_economy;
+#[path = "router_economy_use.rs"] mod router_economy_use;
 #[path = "router_npc.rs"] mod router_npc;
+#[path = "router_npc_extra.rs"] mod router_npc_extra;
+#[path = "router_npc_home.rs"] mod router_npc_home;
 #[path = "router_secondary.rs"] mod router_secondary;
+#[path = "router_secondary_clan.rs"] mod router_secondary_clan;
+#[path = "router_secondary_clan_ops.rs"] mod router_secondary_clan_ops;
 #[path = "router_shop.rs"] mod router_shop;
+#[path = "router_shop_trade.rs"] mod router_shop_trade;
 #[path = "router_skill.rs"] mod router_skill;
 #[path = "router_task.rs"] mod router_task;
 #[path = "router_world.rs"] mod router_world;
+#[path = "router_world_tree.rs"] mod router_world_tree;
 
 use std::sync::{Arc, OnceLock};
 
@@ -367,34 +375,18 @@ pub(super) fn recalculate_session_stats(sid: u64, snap: &mut PlayerSnapshot, par
 }
 
 pub(super) fn send_dialog(session: &SessionHandle, text: &str) -> Result<(), ProtocolError> {
-    let mut pw = PacketWriter::with_capacity(text.len() + 4);
-    pw.write_utf(text)?;
-    let _ = session.try_send(pw.finish(cmd_message::DIALOG_MESSAGE));
-    Ok(())
+    let mut pw = PacketWriter::with_capacity(text.len() + 4); pw.write_utf(text)?; let _ = session.try_send(pw.finish(cmd_message::DIALOG_MESSAGE)); Ok(())
 }
-
 pub(super) fn send_thong_bao(session: &SessionHandle, text: &str) -> Result<(), ProtocolError> {
-    let pkt = s2c_packets::thong_bao(text)?;
-    let _ = session.try_send(pkt);
-    Ok(())
+    let pkt = s2c_packets::thong_bao(text)?; let _ = session.try_send(pkt); Ok(())
 }
-
 pub(super) fn wallet_money_pkt(w: &InventoryWallet) -> Packet {
     s2c_packets::send_money(w.gold.max(0).cast_unsigned(), u64::from(w.gem.max(0).cast_unsigned()), u64::from(w.ruby.max(0).cast_unsigned()))
 }
-
 pub(super) fn snapshot_to_economy_inv(snap: &PlayerSnapshot) -> Inventory {
-    Inventory {
-        gold: snap.wallet.gold.max(0).cast_unsigned(), gem: snap.wallet.gem.max(0).cast_unsigned(),
-        ruby: snap.wallet.ruby.max(0).cast_unsigned(), coupon: snap.wallet.coupon.max(0).cast_unsigned(),
-        body: snap.items_body.clone(), bag: snap.items_bag.clone(),
-        box_items: snap.items_box.clone(), lucky_round_box: snap.items_box_lucky_round.clone(),
-    }
+    Inventory { gold: snap.wallet.gold.max(0).cast_unsigned(), gem: snap.wallet.gem.max(0).cast_unsigned(), ruby: snap.wallet.ruby.max(0).cast_unsigned(), coupon: snap.wallet.coupon.max(0).cast_unsigned(), body: snap.items_body.clone(), bag: snap.items_bag.clone(), box_items: snap.items_box.clone(), lucky_round_box: snap.items_box_lucky_round.clone() }
 }
-
 pub(super) fn sync_economy_inv_to_snapshot(inv: &Inventory, snap: &mut PlayerSnapshot) {
-    snap.wallet.gold = i64::try_from(inv.gold).unwrap_or(i64::MAX); snap.wallet.gem = i32::try_from(inv.gem).unwrap_or(i32::MAX);
-    snap.wallet.ruby = i32::try_from(inv.ruby).unwrap_or(i32::MAX); snap.wallet.coupon = i32::try_from(inv.coupon).unwrap_or(i32::MAX);
-    snap.items_body.clone_from(&inv.body); snap.items_bag.clone_from(&inv.bag);
-    snap.items_box.clone_from(&inv.box_items); snap.items_box_lucky_round.clone_from(&inv.lucky_round_box);
+    snap.wallet.gold = i64::try_from(inv.gold).unwrap_or(i64::MAX); snap.wallet.gem = i32::try_from(inv.gem).unwrap_or(i32::MAX); snap.wallet.ruby = i32::try_from(inv.ruby).unwrap_or(i32::MAX); snap.wallet.coupon = i32::try_from(inv.coupon).unwrap_or(i32::MAX);
+    snap.items_body.clone_from(&inv.body); snap.items_bag.clone_from(&inv.bag); snap.items_box.clone_from(&inv.box_items); snap.items_box_lucky_round.clone_from(&inv.lucky_round_box);
 }
