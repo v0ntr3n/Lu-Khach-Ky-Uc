@@ -1,0 +1,138 @@
+name: Rust CI & PGO Release
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+
+jobs:
+  check_and_clippy:
+    name: Lint, Invariants & Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.100.0 + clippy
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.100.0"
+          components: clippy
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Verify workspace invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== Verifying workspace invariants (<= 400 lines, #![forbid(unsafe_code)], zero unsafe) ==="
+          while IFS= read -r -d '' file; do
+            lines="$(wc -l < "${file}")"
+            if [ "${lines}" -gt 400 ]; then
+              echo "ERROR: ${file} has ${lines} lines (exceeds 400-line limit)"
+              exit 1
+            fi
+          done < <(find crates -name '*.rs' -print0)
+
+          for root_file in crates/*/src/lib.rs crates/*/src/main.rs; do
+            if [ -f "${root_file}" ] && ! grep -q '#!\[forbid(unsafe_code)\]' "${root_file}"; then
+              echo "ERROR: Crate root ${root_file} is missing #![forbid(unsafe_code)]"
+              exit 1
+            fi
+          done
+
+          if grep -rn 'unsafe ' crates/ --include='*.rs'; then
+            echo "ERROR: Forbidden 'unsafe ' token detected under crates/"
+            exit 1
+          fi
+
+      - name: Cargo check (-D warnings)
+        env:
+          RUSTFLAGS: "-D warnings"
+        run: cargo check --workspace --all-targets
+
+      - name: Cargo clippy (-D warnings)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  workspace_tests:
+    name: Workspace & Doc Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.100.0
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.100.0"
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run workspace tests
+        run: cargo test --workspace --all-targets -- --nocapture
+
+      - name: Run doc tests
+        run: cargo test --workspace --doc
+
+  pgo_release_binary:
+    name: PGO Release Build
+    needs: [workspace_tests]
+    if: >-
+      github.ref == 'refs/heads/main' ||
+      github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.100.0 + llvm-tools-preview
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.100.0"
+          components: llvm-tools-preview
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build PGO-optimized binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          HOST_TRIPLE="$(rustc -vV | sed -n 's/^host: //p')"
+          SYSROOT="$(rustc --print sysroot)"
+          LLVM_PROFDATA="${SYSROOT}/lib/rustlib/${HOST_TRIPLE}/bin/llvm-profdata"
+          PGO_DIR="${GITHUB_WORKSPACE}/pgo-profiles"
+          mkdir -p "${PGO_DIR}"
+
+          RUSTFLAGS="-Cprofile-generate=${PGO_DIR}" cargo build --release -p nro-server -p nro-db --target "${HOST_TRIPLE}"
+          "./target/${HOST_TRIPLE}/release/nro-server" --benchmark-replay --replay-scale 2500
+          "${LLVM_PROFDATA}" merge -o "${PGO_DIR}/merged.profdata" "${PGO_DIR}"
+
+          RUSTFLAGS="-Cprofile-use=${PGO_DIR}/merged.profdata -Cllvm-args=-pgo-warn-missing-function" cargo build --release -p nro-server -p nro-db --target "${HOST_TRIPLE}"
+          "./target/${HOST_TRIPLE}/release/nro-server" --benchmark-replay --replay-scale 1000
+
+          cp "./target/${HOST_TRIPLE}/release/nro-server" ./nro-server
+          cp "./target/${HOST_TRIPLE}/release/nro-import-sql" ./nro-import-sql
+
+      - name: Upload PGO release binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: nro-server-${{ github.sha }}
+          retention-days: 14
+          path: |
+            nro-server
+            nro-import-sql
