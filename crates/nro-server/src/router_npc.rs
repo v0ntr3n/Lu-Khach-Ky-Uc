@@ -323,7 +323,8 @@ impl ServerSessionHandler {
             let spun = LuckyRoundService::spin(&mut inv, LuckyRoundMode::StandardGem, n, &mut rng)
                 .map_err(|err| format!("Vòng quay: {err}"))?;
             let mut icons = Vec::with_capacity(usize::from(spun));
-            for item in inv.lucky_round_box.drain(prev_len..).flatten() {
+            let drained: Vec<_> = inv.lucky_round_box.drain(prev_len..).flatten().collect();
+            for item in drained {
                 let tpl = self.shared.templates.items.iter().find(|t| t.id == i32::from(item.template_id.0));
                 let icon = tpl.map_or(420_i16, |t| t.icon_id as i16);
                 inv.add_to_bag(item, tpl.is_some_and(|t| t.is_up_to_up)).map_err(|_| "Hành trang đã đầy!".to_owned())?;
