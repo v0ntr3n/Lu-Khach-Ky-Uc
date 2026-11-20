@@ -242,7 +242,9 @@ impl ServerSessionHandler {
             ClientPacket::ClanLeaveMenu => self.handle_clan_leave_menu(session, sid).await?,
             ClientPacket::ClanInvite(act) => self.handle_clan_invite(session, sid, act).await?,
             ClientPacket::ClanRemote(pid, role) => self.handle_clan_remote(session, sid, pid, role).await?,
-            ClientPacket::ClanDonate(_) | ClientPacket::ClanJoinDecision(_, _) | ClientPacket::SuperRankOrAdminBoss(_) => {
+            ClientPacket::ClanDonate(msg_id) => self.handle_clan_donate(session, sid, msg_id).await?,
+            ClientPacket::ClanJoinDecision(msg_id, decision) => self.handle_clan_join_decision(session, sid, msg_id, decision).await?,
+            ClientPacket::SuperRankOrAdminBoss(_) => {
                 session.send(s2c_packets::thong_bao("Tính năng đang được phát triển!")?).await?;
             }
             ClientPacket::Radar(act) => self.handle_radar(session, sid, act).await?,

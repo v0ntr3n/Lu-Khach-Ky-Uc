@@ -208,8 +208,8 @@ impl TradeSession {
     }
 
     /// Removes staged item chunks originating from `bag_slot` and restores them to `working_1`/`working_2`.
-    pub fn remove_item_offer(&mut self, is_p1: bool, bag_slot: usize) -> Result<(), TradeError> {
-        if !self.can_edit_offer(is_p1) { return Err(TradeError::InvalidState(self.state)); }
+    pub fn remove_item_offer(&mut self, is_p1: bool, bag_slot: usize, now_ms: i64) -> Result<(), TradeError> {
+        self.ensure_open_for(is_p1, now_ms)?;
         let (bag, escrow, slots) = if is_p1 {
             (&mut self.working_1, &mut self.escrow_items_1, &mut self.escrow_slots_1)
         } else {
@@ -323,9 +323,10 @@ mod tests {
         sess.add_item_offer(true, 1, 0, &BuiltinCatalog, 20_100).unwrap();
         assert_eq!(sess.escrow_offers().0.len(), 1);
         assert_eq!(sess.escrow_offers().0[0].quantity, 1);
-        sess.remove_item_offer(true, 1).unwrap();
+        sess.remove_item_offer(true, 1, 20_200).unwrap();
         assert_eq!(sess.escrow_offers().0.len(), 0);
         assert_eq!(sess.working_1.bag_item(1).unwrap().quantity, 10);
+        assert_eq!(sess.remove_item_offer(true, 1, 20_000 + TRADE_TIMEOUT_MS + 1), Err(TradeError::SessionTimedOut));
     }
 
     proptest! {

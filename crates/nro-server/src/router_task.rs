@@ -286,6 +286,24 @@ impl ServerSessionHandler {
     pub(super) async fn advance_task_on_mob_kill(
         &self, session: &SessionHandle, sid: u64, mob_temp_id: i16,
     ) -> Result<(), ProtocolError> {
+        let coop_info = self.shared.clients.authenticated.get(&sid).map(|e| {
+            (e.snapshot.main_task.task_id, e.snapshot.clan_id, e.snapshot.location.map_id, e.snapshot.location.zone_id)
+        });
+        let coop_delta: Option<i16> = match coop_info {
+            Some((14 | 15, clan_id, map_id, zone_id)) => {
+                let in_clan = clan_id.0 >= 0;
+                let same_clan_in_zone = if in_clan {
+                    self.shared.clients.authenticated.iter().filter(|rec| {
+                        let s = &rec.value().snapshot;
+                        s.clan_id == clan_id && s.location.map_id == map_id && s.location.zone_id == zone_id
+                    }).count()
+                } else {
+                    0
+                };
+                Some(i16::try_from(TaskPlayer::clan_coop_kill_credit(in_clan, same_clan_in_zone)).unwrap_or(0))
+            }
+            _ => None,
+        };
         let mut out_pkts: Vec<Packet> = Vec::new();
         if let Some(mut e) = self.shared.clients.authenticated.get_mut(&sid) {
             let task_id = e.snapshot.main_task.task_id;
@@ -299,8 +317,11 @@ impl ServerSessionHandler {
                     && !is_map_visit_subtask(sub)
                     && mob_matches_subtask(&self.shared.templates, task_id, sub_idx, sub, &t_tpl.detail, g, cur_map, mob_temp_id)
                 {
-                    let sub_len = t_tpl.sub_tasks.len().min(127);
-                    out_pkts = self.apply_subtask_delta(&mut e, sub_idx, sub_len, sub.max_count.max(1), 1, g);
+                    let delta = if matches!(task_id, 14 | 15) { coop_delta.unwrap_or(0) } else { 1 };
+                    if delta > 0 {
+                        let sub_len = t_tpl.sub_tasks.len().min(127);
+                        out_pkts = self.apply_subtask_delta(&mut e, sub_idx, sub_len, sub.max_count.max(1), delta, g);
+                    }
                 }
             }
         }
@@ -361,7 +382,7 @@ impl ServerSessionHandler {
     fn complete_main_task(&self, e: &mut crate::state::ActivePlayerEntry, done_id: i8, gender_idx: usize) -> Vec<Packet> {
         let done_u16 = u16::from(done_id.max(0).cast_unsigned());
         let (early, _, both_smtn, gold) = TaskPlayer::main_task_reward(done_u16);
-        let smtn_gain = i64::try_from(both_smtn.max(early).max(500)).unwrap_or(500);
+        let smtn_gain = i64::try_from(early.saturating_add(both_smtn).max(500)).unwrap_or(500);
         e.snapshot.stats.power = e.snapshot.stats.power.saturating_add(smtn_gain);
         e.snapshot.stats.tiem_nang = e.snapshot.stats.tiem_nang.saturating_add(smtn_gain);
         if gold > 0 {

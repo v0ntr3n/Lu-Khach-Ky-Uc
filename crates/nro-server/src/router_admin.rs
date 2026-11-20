@@ -1,11 +1,14 @@
 //! Operator / administrator chat command execution (`exec_admin_chat_cmd` and base-stat overrides).
 
+use nro_boss::BossStatus;
+use nro_consts::const_npc;
 use nro_core::{ItemInstance, ItemOption, ZoneId};
 use nro_protocol::{AdminCommand as ChatAdminCommand, ProtocolError, SessionHandle};
 use nro_world::{ZoneCommand, s2c_packets};
 
 use super::{
-    ServerSessionHandler, send_thong_bao, snapshot_to_economy_inv, sync_economy_inv_to_snapshot,
+    ServerSessionHandler, con_meo_state, send_thong_bao, snapshot_to_economy_inv,
+    sync_economy_inv_to_snapshot,
 };
 use crate::data_game_tpl::pkt_task_get;
 use crate::runtime::{LeaderboardSlot, unix_now_ms};
@@ -83,7 +86,67 @@ impl ServerSessionHandler {
             ChatAdminCommand::SetBaseDamage { damage } => self.set_admin_base_stat(session, sid, Some(i64::from(damage)), None, None).await?,
             ChatAdminCommand::SetBaseHp { hp_base } => self.set_admin_base_stat(session, sid, None, Some(i64::from(hp_base)), None).await?,
             ChatAdminCommand::SetBaseKi { mp_base } => self.set_admin_base_stat(session, sid, None, None, Some(i64::from(mp_base))).await?,
-            _ => send_thong_bao(session, "Đã thực thi lệnh Quản Trị Viên!")?,
+            ChatAdminCommand::NudgeDown { delta_y } => {
+                if let Some(loc) = self.shared.clients.authenticated.get_mut(&sid).map(|mut e| {
+                    e.snapshot.location.y = e.snapshot.location.y.saturating_add(delta_y);
+                    let loc = e.snapshot.location;
+                    if let (Some(ek), Ok(tx)) = (e.entity_key, self.shared.world_router.resolve_sender(loc.map_id, loc.zone_id)) {
+                        let _ = tx.try_send(ZoneCommand::MovePlayer(ek, loc));
+                    }
+                    loc
+                }) {
+                    session.send(s2c_packets::reset_point(loc)).await?;
+                }
+            }
+            ChatAdminCommand::AddPetPower { power } => {
+                let pet_pkt = self.shared.clients.authenticated.get_mut(&sid).and_then(|mut e| {
+                    let pet = e.snapshot.pet.as_mut()?;
+                    pet.stats.power = pet.stats.power.saturating_add(power);
+                    pet.stats.tiem_nang = pet.stats.tiem_nang.saturating_add(power);
+                    self.pkt_pet_detail(&e.snapshot)
+                });
+                if let Some(pkt) = pet_pkt {
+                    session.send(pkt).await?;
+                    send_thong_bao(session, &format!("Đã cộng {power} sức mạnh cho đệ tử!"))?;
+                } else {
+                    send_thong_bao(session, "Bạn chưa có đệ tử!")?;
+                }
+            }
+            ChatAdminCommand::OpenGiveItemForm => self.handle_open_input(session, sid, "admin_give_item").await?,
+            ChatAdminCommand::OpenGetItemForm => self.handle_open_input(session, sid, "admin_get_item").await?,
+            ChatAdminCommand::OpenAdminDashboard => {
+                let online = self.shared.clients.authenticated.len();
+                if let Some(pid) = self.shared.clients.authenticated.get(&sid).map(|e| e.snapshot.id) {
+                    con_meo_state().insert(pid, const_npc::MENU_ADMIN);
+                }
+                session.send(s2c_packets::npc_open_menu(
+                    i16::from(const_npc::CON_MEO),
+                    &format!("Bảng điều khiển Quản Trị Viên\nNgười chơi đang trực tuyến: {online}"),
+                    &["Đóng"],
+                    None,
+                )?).await?;
+            }
+            ChatAdminCommand::ShowBrolyBossList => {
+                let lines: Vec<String> = {
+                    let mgr = self.shared.bosses.lock();
+                    mgr.instances()
+                        .values()
+                        .filter(|b| b.lifecycle.status != BossStatus::Rest)
+                        .take(20)
+                        .map(|b| {
+                            let mname = self.shared.templates.maps.iter().find(|m| m.id == b.map_id).map_or("Map", |m| m.name.as_str());
+                            format!("{:?} - {mname} (ID {}, Khu {}) [HP: {}/{}]", b.boss_type, b.map_id.0, b.zone_id.0, b.stats.hp, b.stats.hp_max)
+                        })
+                        .collect()
+                };
+                let msg = if lines.is_empty() {
+                    "Hiện chưa có Boss nào đang hoạt động!".to_owned()
+                } else {
+                    format!("Danh sách Boss đang hoạt động ({}):\n{}", lines.len(), lines.join("\n"))
+                };
+                send_thong_bao(session, &msg)?;
+            }
+            _ => send_thong_bao(session, "Lệnh quản trị này chưa được bật trên server!")?,
         }
         Ok(())
     }

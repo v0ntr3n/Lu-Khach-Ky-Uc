@@ -59,6 +59,30 @@ impl MagicTreeState {
         5 + self.level.saturating_sub(1) * 2
     }
 
+    /// Gold cost to upgrade from `level` to `level + 1`, or `None` when already at max level (`>= 10`).
+    #[must_use]
+    pub const fn upgrade_gold_cost(&self) -> Option<u64> {
+        if self.level >= 10 {
+            None
+        } else {
+            Some(Self::UP_GOLD[self.level.saturating_sub(1) as usize])
+        }
+    }
+
+    /// Gem cost to refill peas immediately at the current level.
+    #[must_use]
+    pub const fn fast_harvest_gem_cost(&self) -> u32 {
+        let idx = self.level.saturating_sub(1);
+        Self::FAST_HV_GEM[if idx > 9 { 9 } else { idx as usize }]
+    }
+
+    /// Gem cost to finish an active upgrade immediately at the current level.
+    #[must_use]
+    pub const fn fast_upgrade_gem_cost(&self) -> u32 {
+        let idx = self.level.saturating_sub(1);
+        Self::FAST_UP_GEM[if idx > 9 { 9 } else { idx as usize }]
+    }
+
     /// Advances regeneration or completes a due upgrade at `now_ms`.
     pub fn tick(&mut self, now_ms: i64) {
         if self.is_upgrading && now_ms >= self.timer_ms {
@@ -112,6 +136,19 @@ impl MagicTreeState {
         self.is_upgrading = true;
         self.timer_ms = now_ms + Self::UP_MS[idx];
         Ok(())
+    }
+
+    /// Cancels an active upgrade, refunding 50% of the upgrade gold cost into `inv`.
+    pub fn cancel_upgrade(&mut self, inv: &mut Inventory, now_ms: i64) -> Result<u64, UseItemError> {
+        if !self.is_upgrading {
+            return Err(UseItemError::PreconditionFailed("tree is not upgrading"));
+        }
+        let idx = (self.level.clamp(1, 9) - 1) as usize;
+        let refund = Self::UP_GOLD[idx] / 2;
+        inv.add_gold_clamped(refund);
+        self.is_upgrading = false;
+        self.timer_ms = now_ms;
+        Ok(refund)
     }
 
     /// Completes active upgrade or refills peas instantly using Gems.
@@ -250,5 +287,33 @@ mod tests {
         ctx.now_ms = 4_000;
         assert_eq!(UseItemService::use_bag_item(&mut inv, 2, &mut ctx, &BuiltinCatalog, &mut rng), Ok(UseItemEffect::Applied));
         assert_eq!(ctx.stats.hp, 6_500);
+    }
+
+    #[test]
+    fn magic_tree_costs_and_cancel_upgrade_refund() {
+        let mut inv = Inventory::new(8, 8, 12);
+        inv.gold = 20_000;
+        let mut tree = MagicTreeState { level: 1, curr_peas: 5, is_upgrading: false, timer_ms: 0 };
+        assert_eq!(tree.upgrade_gold_cost(), Some(5_000));
+        assert_eq!(tree.fast_harvest_gem_cost(), 1);
+        assert_eq!(tree.fast_upgrade_gem_cost(), 20);
+        assert_eq!(
+            tree.cancel_upgrade(&mut inv, 1_000),
+            Err(UseItemError::PreconditionFailed("tree is not upgrading"))
+        );
+
+        tree.start_upgrade(&mut inv, 1_000).unwrap();
+        assert!(tree.is_upgrading);
+        assert_eq!(inv.gold, 15_000);
+        let refund = tree.cancel_upgrade(&mut inv, 5_000).unwrap();
+        assert_eq!(refund, 2_500);
+        assert!(!tree.is_upgrading);
+        assert_eq!(tree.timer_ms, 5_000);
+        assert_eq!(inv.gold, 17_500);
+
+        let max_tree = MagicTreeState { level: 10, curr_peas: 23, is_upgrading: false, timer_ms: 0 };
+        assert_eq!(max_tree.upgrade_gold_cost(), None);
+        assert_eq!(max_tree.fast_harvest_gem_cost(), 30);
+        assert_eq!(max_tree.fast_upgrade_gem_cost(), 10_000);
     }
 }

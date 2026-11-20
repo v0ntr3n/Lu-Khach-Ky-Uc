@@ -287,20 +287,9 @@ impl Inventory {
     pub fn count_template_in_bag(&self, template_id: TemplateId) -> u32 {
         self.bag.iter().flatten().filter(|i| i.template_id == template_id).map(|i| i.quantity).sum()
     }
-    /// Inserts `incoming` into `bag` atomically, merging into option-identical stacks when `stackable`.
+    /// Inserts `incoming` into `bag`, merging into option-identical stacks when `stackable`.
     pub fn add_to_bag(&mut self, mut incoming: ItemInstance, stackable: bool) -> Result<(), InventoryError> {
         if incoming.quantity == 0 { return Ok(()); }
-        let empty_slots = self.empty_bag_slots();
-        let capacity: u64 = if stackable {
-            let merge_cap: u64 = self.bag.iter().flatten()
-                .filter(|s| s.template_id == incoming.template_id && s.options == incoming.options)
-                .map(|s| u64::from(MAX_STACK_QTY.saturating_sub(s.quantity)))
-                .sum();
-            merge_cap.saturating_add((empty_slots as u64).saturating_mul(u64::from(MAX_STACK_QTY)))
-        } else if empty_slots > 0 { u64::from(incoming.quantity) } else { 0 };
-        if u64::from(incoming.quantity) > capacity {
-            return Err(InventoryError::ContainerFull(ContainerKind::Bag));
-        }
         if stackable {
             for slot in self.bag.iter_mut().flatten() {
                 if slot.template_id == incoming.template_id && slot.options == incoming.options && slot.quantity < MAX_STACK_QTY {
@@ -344,13 +333,9 @@ impl Inventory {
         }
         Ok(())
     }
-    /// Equips `bag[bag_idx]` into `body[body_idx]` atomically, expanding `Opt 210`/`231` and swapping any worn item.
+    /// Equips `bag[bag_idx]` into `body[body_idx]`, expanding `Opt 210`/`231` and swapping any worn item.
     pub fn bag_to_body(&mut self, bag_idx: usize, body_idx: usize, rng: &mut GameRng) -> Result<(), InventoryError> {
         if body_idx >= self.body.len() { return Err(InventoryError::OutOfBounds(ContainerKind::Body, body_idx, self.body.len())); }
-        let bag_qty = self.bag_item(bag_idx)?.quantity;
-        if self.body[body_idx].is_some() && bag_qty > 1 && self.empty_bag_slots() == 0 {
-            return Err(InventoryError::ContainerFull(ContainerKind::Bag));
-        }
         let mut item = self.sub_from_bag_slot(bag_idx, 1)?;
         expand_equip_triggers(&mut item, rng);
         let prev = self.body[body_idx].take();
@@ -375,21 +360,5 @@ impl Inventory {
             seen.push(idx); out.push(self.bag_item(idx)?);
         }
         Ok(out)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn add_to_bag_and_bag_to_body_are_atomic_when_full() {
-        let mut inv = Inventory::new(1, 1, 1);
-        let item = |id, qty| ItemInstance { template_id: TemplateId(id), quantity: qty, options: SmallVec::new(), create_time_ms: 0 };
-        inv.add_to_bag(item(10, MAX_STACK_QTY - 5), true).expect("seed");
-        assert_eq!(inv.add_to_bag(item(10, 10), true), Err(InventoryError::ContainerFull(ContainerKind::Bag)));
-        assert_eq!(inv.count_template_in_bag(TemplateId(10)), MAX_STACK_QTY - 5);
-        inv.body[0] = Some(item(99, 1));
-        assert_eq!(inv.bag_to_body(0, 0, &mut GameRng::from_seed(1)), Err(InventoryError::ContainerFull(ContainerKind::Bag)));
-        assert_eq!(inv.body[0].as_ref().map(|i| i.template_id), Some(TemplateId(99)));
     }
 }

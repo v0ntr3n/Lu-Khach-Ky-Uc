@@ -115,7 +115,7 @@ impl DataGameAssets {
                 self.files_bytes.store(sz, Ordering::Relaxed);
             }
             if let Some(old) = self.files.insert(rel.to_owned(), bytes.clone()) {
-                let _ = self.files_bytes.try_update(Ordering::Relaxed, Ordering::Relaxed, |cur| {
+                let _ = self.files_bytes.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |cur| {
                     Some(cur.saturating_sub(old.len()))
                 });
             }

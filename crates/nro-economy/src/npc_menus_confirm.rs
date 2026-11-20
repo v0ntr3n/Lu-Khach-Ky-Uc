@@ -90,7 +90,26 @@ impl NpcMenuRouter {
                 let adj = usize::from(if !pgg && select >= 1 { select + 1 } else { select });
                 if adj == 3 { Ok(NpcEffect::OpenInput("GIFT_CODE")) } else { Ok(NpcEffect::OpenShop(["SANTA", "SANTA_GIAM_GIA_1", "SANTA_MO_RONG_HANH_TRANG", "", "SANTA_HAN_SU_DUNG", "SANTA_HEAD", "SANTA_DANH_HIEU"][adj])) }
             }
-            NpcKind::BaHatMit if map == 5 => Ok(NpcEffect::OpenCombine([CombineOp::EpSaoTrangBi, CombineOp::PhaLeHoaTrangBi, CombineOp::PhanRaTrangBiKichHoat, CombineOp::TaiTaoCapsuleKichHoat, CombineOp::NangCapSaoPhaLe, CombineOp::DanhBongSaoPhaLe, CombineOp::CuongHoaLoSaoPhaLe, CombineOp::ChuyenHoaTrangBiVang, CombineOp::ChuyenHoaTrangBiNgoc][usize::from(select.min(8))])),
+            NpcKind::BaHatMit if map == 5 => match (menu_index, select) {
+                (const_npc::MENU_PHAN_RA_DO_THAN_LINH, 0) => Ok(NpcEffect::OpenCombine(CombineOp::TaoDaHematite)),
+                (const_npc::MENU_PHAN_RA_DO_THAN_LINH, 1) => Ok(NpcEffect::OpenCombine(CombineOp::CheTaoDuiDuc)),
+                (const_npc::MENU_PHAN_RA_DO_THAN_LINH, 2) => Ok(NpcEffect::OpenCombine(CombineOp::TaoDaMai)),
+                (const_npc::MENU_PHAN_RA_DO_THAN_LINH, 3) => Ok(NpcEffect::OpenCombine(CombineOp::PhanRaDoThanLinh)),
+                (const_npc::MENU_PHAN_RA_DO_THAN_LINH, 4) => Ok(NpcEffect::OpenCombine(CombineOp::LamPhepNhapDa)),
+                (const_npc::MENU_PHAN_RA_DO_THAN_LINH, _) => Ok(NpcEffect::NoOp),
+                (_, 9) => Ok(NpcEffect::ShowMenu(MenuPrompt {
+                    npc,
+                    menu_index: const_npc::MENU_PHAN_RA_DO_THAN_LINH,
+                    say: "Chọn công thức chế tác đá & phân rã:",
+                    options: smallvec!["Tạo đá Hematite", "Chế tạo Dùi đục", "Tạo Đá mài", "Phân rã Thần Linh", "Làm phép nhập đá", "Đóng"],
+                })),
+                (_, s) if s <= 8 => Ok(NpcEffect::OpenCombine([
+                    CombineOp::EpSaoTrangBi, CombineOp::PhaLeHoaTrangBi, CombineOp::PhanRaTrangBiKichHoat,
+                    CombineOp::TaiTaoCapsuleKichHoat, CombineOp::NangCapSaoPhaLe, CombineOp::DanhBongSaoPhaLe,
+                    CombineOp::CuongHoaLoSaoPhaLe, CombineOp::ChuyenHoaTrangBiVang, CombineOp::ChuyenHoaTrangBiNgoc,
+                ][usize::from(s)])),
+                _ => Ok(NpcEffect::NoOp),
+            },
             NpcKind::BaHatMit => match (menu_index, select) {
                 (const_npc::BASE_MENU, 0) => Ok(NpcEffect::ShowMenu(MenuPrompt {
                     npc,
@@ -102,15 +121,34 @@ impl NpcMenuRouter {
                 (const_npc::MENU_OPTION_SHOP_BUA, 1) => Ok(NpcEffect::OpenShop("BUA_8H")),
                 (const_npc::MENU_OPTION_SHOP_BUA, 2) => Ok(NpcEffect::OpenShop("BUA_1M")),
                 (const_npc::MENU_OPTION_SHOP_BUA, _) => Ok(NpcEffect::NoOp),
-                (_, s) if s >= 1 => Ok(NpcEffect::OpenCombine([
+                (const_npc::MENU_SACH_TUYET_KY, 0) => Ok(NpcEffect::OpenCombine(CombineOp::CheTaoCuonSachCu)),
+                (const_npc::MENU_SACH_TUYET_KY, 1) => Ok(NpcEffect::OpenCombine(CombineOp::DoiSachTuyetKy)),
+                (const_npc::MENU_SACH_TUYET_KY, 2) => Ok(NpcEffect::OpenCombine(CombineOp::DoiSachTuyetKySealed)),
+                (const_npc::MENU_SACH_TUYET_KY, 3) => Ok(NpcEffect::OpenCombine(CombineOp::GiamDinhSach)),
+                (const_npc::MENU_SACH_TUYET_KY, 4) => Ok(NpcEffect::OpenCombine(CombineOp::TaySach)),
+                (const_npc::MENU_SACH_TUYET_KY, 5) => Ok(NpcEffect::OpenCombine(CombineOp::NangCapSachTuyetKy)),
+                (const_npc::MENU_SACH_TUYET_KY, 6) => Ok(NpcEffect::OpenCombine(CombineOp::HoiPhucSach)),
+                (const_npc::MENU_SACH_TUYET_KY, 7) => Ok(NpcEffect::OpenCombine(CombineOp::PhanRaSach)),
+                (const_npc::MENU_SACH_TUYET_KY, _) => Ok(NpcEffect::NoOp),
+                (_, 7) => Ok(NpcEffect::ShowMenu(MenuPrompt {
+                    npc,
+                    menu_index: const_npc::MENU_SACH_TUYET_KY,
+                    say: "Chọn thao tác Sách Tuyệt Kỹ:",
+                    options: smallvec![
+                        "Chế tạo sách cũ", "Đổi Sách Tuyệt Kỹ", "Đổi STK (Con dấu)",
+                        "Giám định sách", "Tẩy sách", "Nâng cấp STK", "Hồi phục sách", "Phân rã sách", "Đóng"
+                    ],
+                })),
+                (_, 8) => Ok(NpcEffect::OpenCombine(CombineOp::LamPhepNhapDa)),
+                (_, 9) => Ok(NpcEffect::OpenCombine(CombineOp::PhanRaDoThanLinh)),
+                (_, s) if (1..=6).contains(&s) => Ok(NpcEffect::OpenCombine([
                     CombineOp::NangCapVatPham,
                     CombineOp::NangCapBongTai,
                     CombineOp::NangChiSoBongTai,
                     CombineOp::NangCapBongTai3,
                     CombineOp::NangChiSoBongTai3,
                     CombineOp::NhapNgocRong,
-                    CombineOp::GiamDinhSach,
-                ][usize::from((s - 1).min(6))])),
+                ][usize::from(s - 1)])),
                 _ => Ok(NpcEffect::NoOp),
             },
             NpcKind::BoMong if menu_index == const_npc::BASE_MENU && select == 3 => { ctx.inventory.add_to_bag(ItemInstance { template_id: TemplateId(457), quantity: 100, options: smallvec![], create_time_ms: 0 }, true)?; ctx.inventory.gem = ctx.inventory.gem.saturating_add(10_000); Ok(NpcEffect::ClaimedDailyCheckIn) }
@@ -153,16 +191,28 @@ impl NpcMenuRouter {
                 50 => if select == 0 { Ok(NpcEffect::ChangeMap(MapId(48), 300, 312)) } else if select == 1 { Ok(NpcEffect::ChangeMap(MapId(154), 300, 312)) } else { Ok(NpcEffect::NoOp) },
                 154 | 155 => if select == 0 { Ok(NpcEffect::ChangeMap(MapId(if map == 154 { 155 } else { 154 }), 200, 312)) } else { Ok(NpcEffect::NoOp) },
                 165 => if select == 1 { Err(NpcMenuError::GuardFailed("Tính năng đang được phát triển!")) } else if select == 0 { Ok(NpcEffect::ChangeMap(MapId(21 + i16::from(ctx.gender)), 250, 336)) } else { Ok(NpcEffect::NoOp) },
-                114..=120 => if select == 0 { Ok(NpcEffect::Tutorial("Hạ quái tích điểm xuống tầng dưới")) } else if select == 1 && !ctx.is_use_gtpt { ctx.inventory.sub_gem(1)?; ctx.is_use_gtpt = true; Ok(NpcEffect::ApplyGtpt) } else if ctx.mabu_points >= 10 && map < 120 { Ok(NpcEffect::ChangeMap(MapId(map + 1), 250, 312)) } else { Err(NpcMenuError::GuardFailed("insufficient Mabu points")) },
+                114..=120 => if select == 0 { Ok(NpcEffect::Tutorial("Hạ quái tích điểm xuống tầng dưới")) } else if select == 1 && !ctx.is_use_gtpt { Err(NpcMenuError::GuardFailed("Tính năng đang được phát triển!")) } else if ctx.mabu_points >= 10 && map < 120 { Ok(NpcEffect::ChangeMap(MapId(map + 1), 250, 312)) } else { Err(NpcMenuError::GuardFailed("insufficient Mabu points")) },
                 127 => if select == 0 && !ctx.is_phu_ho_mabu { Err(NpcMenuError::GuardFailed("Tính năng đang được phát triển!")) } else { Ok(NpcEffect::ChangeMap(MapId(52), 200, 336)) },
                 _ => if select == 0 { Ok(NpcEffect::ChangeMap(MapId(114), 250, 312)) } else if select == 1 { Ok(NpcEffect::ChangeMap(MapId(165), 250, 312)) } else { Ok(NpcEffect::NoOp) },
             },
             NpcKind::Babiday => if select == 1 && !ctx.is_use_gtpt { Err(NpcMenuError::GuardFailed("Tính năng đang được phát triển!")) } else if select == 2 { Ok(NpcEffect::ChangeMap(MapId(52), 200, 336)) } else { Ok(NpcEffect::Tutorial("Chiến đấu cho Babiđây!")) },
             NpcKind::Bill => if map == 48 && menu_index == 100 && select == 0 { Ok(NpcEffect::OpenShop("BILL")) } else if select == 0 { Ok(NpcEffect::ChangeMap(MapId(50), 300, 312)) } else { Ok(NpcEffect::NoOp) },
-            NpcKind::Whis => match select {
-                0 => Ok(NpcEffect::OpenShop("THIEN_SU")),
-                1 => if ctx.wearing_full_destroyer { Ok(NpcEffect::OpenCombine(CombineOp::CheTaoTrangBiThienSu)) } else { Err(NpcMenuError::GuardFailed("need 5 Hủy Diệt")) },
-                2 => Ok(NpcEffect::OpenCombine(CombineOp::HocTuyetKy)), _ => Ok(NpcEffect::LaunchActivity("TRAIN_WHIS")),
+            NpcKind::Whis => match (menu_index, select) {
+                (const_npc::MENU_SACH_TUYET_KY, 0) => Ok(NpcEffect::OpenCombine(CombineOp::CheTaoCuonSachCu)),
+                (const_npc::MENU_SACH_TUYET_KY, 1) => Ok(NpcEffect::OpenCombine(CombineOp::DoiSachTuyetKy)),
+                (const_npc::MENU_SACH_TUYET_KY, 2) => Ok(NpcEffect::OpenCombine(CombineOp::DoiSachTuyetKySealed)),
+                (const_npc::MENU_SACH_TUYET_KY, _) => Ok(NpcEffect::NoOp),
+                (_, 0) => Ok(NpcEffect::OpenShop("THIEN_SU")),
+                (_, 1) => if ctx.wearing_full_destroyer { Ok(NpcEffect::OpenCombine(CombineOp::CheTaoTrangBiThienSu)) } else { Err(NpcMenuError::GuardFailed("need 5 Hủy Diệt")) },
+                (_, 2) => Ok(NpcEffect::OpenCombine(CombineOp::HocTuyetKy)),
+                (_, 3) => Ok(NpcEffect::LaunchActivity("TRAIN_WHIS")),
+                (_, 4) => Ok(NpcEffect::ShowMenu(MenuPrompt {
+                    npc,
+                    menu_index: const_npc::MENU_SACH_TUYET_KY,
+                    say: "Ngươi muốn chế tạo hay đổi Sách Tuyệt Kỹ?",
+                    options: smallvec!["Chế tạo sách cũ", "Đổi Sách Tuyệt Kỹ", "Đổi STK (Con dấu)", "Đóng"],
+                })),
+                _ => Ok(NpcEffect::NoOp),
             },
             NpcKind::Rong1Sao | NpcKind::Rong2Sao | NpcKind::Rong3Sao | NpcKind::Rong4Sao | NpcKind::Rong5Sao | NpcKind::Rong6Sao | NpcKind::Rong7Sao => if select <= 4 {
                 Err(NpcMenuError::GuardFailed("Tính năng đang được phát triển!"))

@@ -18,13 +18,14 @@ use crate::runtime::{LeaderboardSlot, unix_now_ms};
 use crate::state::ActivePlayerEntry;
 
 const DEFAULT_FLAGS: &[(i16, i16)] = &[(519, 2325), (520, 2326), (521, 2327), (522, 2328), (523, 2329), (524, 2330), (525, 2331), (526, 2332), (527, 2333)];
+const PVP_CHALLENGE_STAKE: i64 = 1_000;
 
-static ACTIVE_PVP: OnceLock<Mutex<HashMap<PlayerId, PlayerId>>> = OnceLock::new();
-fn lock_pvp() -> MutexGuard<'static, HashMap<PlayerId, PlayerId>> {
+static ACTIVE_PVP: OnceLock<Mutex<HashMap<PlayerId, (PlayerId, i64)>>> = OnceLock::new();
+fn lock_pvp() -> MutexGuard<'static, HashMap<PlayerId, (PlayerId, i64)>> {
     ACTIVE_PVP.get_or_init(|| Mutex::new(HashMap::new())).lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
-static PENDING_PVP: OnceLock<DashMap<(PlayerId, PlayerId), i64>> = OnceLock::new();
-fn pending_pvp() -> &'static DashMap<(PlayerId, PlayerId), i64> { PENDING_PVP.get_or_init(DashMap::new) }
+static PENDING_PVP: OnceLock<DashMap<(PlayerId, PlayerId), (i64, i64)>> = OnceLock::new();
+fn pending_pvp() -> &'static DashMap<(PlayerId, PlayerId), (i64, i64)> { PENDING_PVP.get_or_init(DashMap::new) }
 
 #[inline]
 pub(super) const fn is_offline_map(map_id: MapId) -> bool { matches!(map_id.0, 21..=23 | 39..=41 | 45..=50) }
@@ -104,28 +105,72 @@ impl ServerSessionHandler {
             let hit = self.shared.clients.authenticated.get_mut(&target_sid).and_then(|mut victim| {
                 let vloc = victim.snapshot.location;
                 if vloc.map_id != loc.map_id || vloc.zone_id != loc.zone_id || victim.snapshot.stats.hp <= 0 { return None; }
-                let pvp_ok = (atk_flag > 0 && victim.c_flag > 0 && (atk_flag != victim.c_flag || atk_flag == 8)) || lock_pvp().get(&atk_pid) == Some(&tpid);
+                let pvp_ok = (atk_flag > 0 && victim.c_flag > 0 && (atk_flag != victim.c_flag || atk_flag == 8))
+                    || lock_pvp().get(&atk_pid).is_some_and(|&(opp, _)| opp == tpid);
                 if !pvp_ok { return None; }
                 let mut np = NPoint::new(victim.snapshot.stats);
                 np.hp_max = i32::try_from(victim.snapshot.stats.hp_max.clamp(1, i64::from(i32::MAX))).unwrap_or(i32::MAX);
                 np.hp = i32::try_from(victim.snapshot.stats.hp.clamp(0, i64::from(i32::MAX))).unwrap_or(i32::MAX);
                 np.def = victim.snapshot.stats.def.max(0);
+                for opt in victim.snapshot.items_body.iter().flatten().flat_map(|it| it.options.iter()) {
+                    let ps = opt.param.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
+                    match opt.id {
+                        3 => np.mods.vo_hieu_chuong = np.mods.vo_hieu_chuong.saturating_add(opt.param),
+                        94 => np.mods.tl_giap = np.mods.tl_giap.saturating_add(ps),
+                        97 => np.mods.utils[0] = np.mods.utils[0].saturating_add(ps),
+                        108 | 111 => np.mods.tl_ne_don = np.mods.tl_ne_don.saturating_add(ps),
+                        _ => {}
+                    }
+                }
                 let mut rng = GameRng::from_seed(cast.now_ms.cast_unsigned() ^ target_sid);
                 let shield = super::router_skill::is_shield_active(tpid, cast.now_ms);
                 let out = np.apply_injured(&IncomingHit { raw_damage: raw_dmg, attacker_skill: None, attacker_pen: (0, 0, 0), hit_flags: (false, false, false), defense_state: (false, false, shield, false, false) }, &mut rng);
                 if out.shield_broken { super::router_skill::clear_shield(tpid); }
-                let final_dmg = i64::from(out.damage_taken.max(0));
-                let hp_after = victim.snapshot.stats.hp.saturating_sub(final_dmg).max(0);
+                let final_dmg = if out.dodged { 0 } else { i64::from(out.damage_taken.max(0)) };
+                let hp_after = if out.dodged {
+                    victim.snapshot.stats.hp
+                } else {
+                    victim.snapshot.stats.hp.saturating_sub(final_dmg).max(0)
+                };
                 victim.snapshot.stats.hp = hp_after;
+                if out.mp_absorbed > 0 {
+                    let mp_max = victim.snapshot.stats.mp_max.max(1);
+                    victim.snapshot.stats.mp = victim.snapshot.stats.mp.saturating_add(i64::from(out.mp_absorbed)).min(mp_max);
+                }
+                let reflect_pct = i64::from(np.mods.utils[0].max(0));
+                let reflect_dmg = if out.reflect_base_damage > 0 && reflect_pct > 0 {
+                    (i64::from(out.reflect_base_damage).saturating_mul(reflect_pct) / 100).max(1)
+                } else {
+                    0
+                };
                 if let (Some(vek), Ok(tx)) = (victim.entity_key, self.shared.world_router.resolve_sender(loc.map_id, loc.zone_id)) { let _ = tx.try_send(ZoneCommand::UpdatePlayerStats(vek, victim.snapshot.stats)); }
-                Some((victim.handle.clone(), hp_after, final_dmg, victim.snapshot.stats, vloc))
+                Some((victim.handle.clone(), hp_after, final_dmg, out.dodged, reflect_dmg, victim.snapshot.stats, vloc))
             });
-            if let Some((vh, hp_after, final_dmg, vstats, vloc)) = hit {
-                super::router_skill::clear_ttnl(tpid);
+            if let Some((vh, hp_after, final_dmg, dodged, reflect_dmg, vstats, vloc)) = hit {
+                if !dodged && final_dmg > 0 {
+                    super::router_skill::clear_ttnl(tpid);
+                }
                 let _ = vh.try_send(s2c_packets::me_load_point(&vstats));
-                self.broadcast_to_zone_peers(loc, None, &s2c_packets::have_attack_player(tpid, hp_after, final_dmg, cast.is_crit, -1));
+                self.broadcast_to_zone_peers(loc, None, &s2c_packets::have_attack_player(tpid, hp_after, final_dmg, cast.is_crit && !dodged, -1));
+                if reflect_dmg > 0 {
+                    let atk_reflected = self.shared.clients.authenticated.get_mut(&attacker_sid).and_then(|mut atk| {
+                        if atk.snapshot.stats.hp <= 1 { return None; }
+                        let atk_hp_after = atk.snapshot.stats.hp.saturating_sub(reflect_dmg).max(1);
+                        let applied = atk.snapshot.stats.hp.saturating_sub(atk_hp_after);
+                        if applied <= 0 { return None; }
+                        atk.snapshot.stats.hp = atk_hp_after;
+                        if let (Some(aek), Ok(tx)) = (atk.entity_key, self.shared.world_router.resolve_sender(loc.map_id, loc.zone_id)) {
+                            let _ = tx.try_send(ZoneCommand::UpdatePlayerStats(aek, atk.snapshot.stats));
+                        }
+                        Some((atk.handle.clone(), atk_hp_after, applied, atk.snapshot.stats))
+                    });
+                    if let Some((ah, atk_hp_after, applied, astats)) = atk_reflected {
+                        let _ = ah.try_send(s2c_packets::me_load_point(&astats));
+                        self.broadcast_to_zone_peers(loc, None, &s2c_packets::have_attack_player(atk_pid, atk_hp_after, applied, false, -1));
+                    }
+                }
                 if hp_after == 0 {
-                    self.handle_player_death_cleanup(tpid, loc, target_sid);
+                    self.handle_player_death_cleanup_with_killer(tpid, loc, target_sid, Some(atk_pid));
                     let (me_die, peer_die) = s2c_packets::char_die_packets(tpid, 0, vloc, vstats.power);
                     let _ = vh.try_send(me_die); self.broadcast_to_zone_peers(loc, Some(target_sid), &peer_die);
                 }
@@ -178,16 +223,67 @@ impl ServerSessionHandler {
     }
 
     pub(crate) fn handle_player_death_cleanup(&self, pid: PlayerId, loc: Location, sid: u64) {
+        self.handle_player_death_cleanup_with_killer(pid, loc, sid, None);
+    }
+
+    fn handle_player_death_cleanup_with_killer(&self, pid: PlayerId, loc: Location, sid: u64, killer_pid: Option<PlayerId>) {
+        if let Some(kpid) = killer_pid && kpid != pid {
+            let killer_peer = self.shared.clients.players.get(&kpid).map(|s| *s.value()).and_then(|ksid| {
+                let e = self.shared.clients.authenticated.get(&ksid)?;
+                let (h, b, l, bg, _) = effective_appearance(&self.shared.templates, &e.snapshot);
+                Some(SocialPeer {
+                    id: kpid.0 as i32,
+                    name: e.snapshot.name.clone(),
+                    head: h,
+                    body: b,
+                    leg: l,
+                    bag: bg as i8,
+                    power: e.snapshot.stats.power,
+                })
+            });
+            if let Some(peer) = killer_peer
+                && let Some(mut victim) = self.shared.clients.authenticated.get_mut(&sid)
+                && !victim.snapshot.enemies.iter().any(|e| e.id == peer.id)
+            {
+                victim.snapshot.enemies.push(peer);
+            }
+        }
         let opp_opt = {
             let mut pvp = lock_pvp();
             let opp = pvp.remove(&pid);
-            if let Some(opp_id) = opp && pvp.get(&opp_id) == Some(&pid) { pvp.remove(&opp_id); }
+            if let Some((opp_id, _)) = opp && pvp.get(&opp_id).is_some_and(|&(other, _)| other == pid) { pvp.remove(&opp_id); }
             opp
         };
-        if let Some(opp) = opp_opt {
-            let (opp_sid, opp_loc) = self.shared.clients.players.get(&opp).map(|s| *s.value())
-                .and_then(|os| self.shared.clients.authenticated.get(&os).map(|e| (os, e.snapshot.location))).unwrap_or((sid, loc));
-            self.broadcast_pk_type(loc, sid, pid, 0); self.broadcast_pk_type(opp_loc, opp_sid, opp, 0);
+        if let Some((opp, stake)) = opp_opt {
+            let opp_sid_opt = self.shared.clients.players.get(&opp).map(|s| *s.value());
+            let opp_loc = opp_sid_opt
+                .and_then(|os| self.shared.clients.authenticated.get(&os).map(|e| e.snapshot.location))
+                .unwrap_or(loc);
+            self.broadcast_pk_type(loc, sid, pid, 0);
+            self.broadcast_pk_type(opp_loc, opp_sid_opt.unwrap_or(sid), opp, 0);
+            if stake > 0
+                && let Some(opp_sid) = opp_sid_opt
+                && let Some((transferred, loser_handle, loser_money_pkt)) = self.shared.clients.authenticated.get_mut(&sid).map(|mut loser| {
+                    let transferred = stake.min(loser.snapshot.wallet.gold.max(0));
+                    loser.snapshot.wallet.gold = loser.snapshot.wallet.gold.saturating_sub(transferred).max(0);
+                    (transferred, loser.handle.clone(), wallet_money_pkt(&loser.snapshot.wallet))
+                })
+            {
+                let winner_res = self.shared.clients.authenticated.get_mut(&opp_sid).map(|mut winner| {
+                    winner.snapshot.wallet.gold = winner.snapshot.wallet.gold.saturating_add(transferred);
+                    (winner.handle.clone(), wallet_money_pkt(&winner.snapshot.wallet))
+                });
+                let _ = loser_handle.try_send(loser_money_pkt);
+                if let Ok(tb) = s2c_packets::thong_bao(&format!("Bạn đã thua thách đấu và mất {transferred} vàng!")) {
+                    let _ = loser_handle.try_send(tb);
+                }
+                if let Some((winner_handle, winner_money_pkt)) = winner_res {
+                    let _ = winner_handle.try_send(winner_money_pkt);
+                    if let Ok(tb) = s2c_packets::thong_bao(&format!("Bạn đã thắng thách đấu và nhận được {transferred} vàng!")) {
+                        let _ = winner_handle.try_send(tb);
+                    }
+                }
+            }
         }
         super::router_skill::clear_skill_state(pid);
         self.cleanup_trade_on_disconnect(pid);
@@ -196,6 +292,10 @@ impl ServerSessionHandler {
     pub(super) fn cleanup_combat_on_disconnect(&self, pid: PlayerId, loc: Location, sid: u64) {
         self.handle_player_death_cleanup(pid, loc, sid);
         pending_pvp().retain(|k, _| k.0 != pid && k.1 != pid);
+    }
+
+    pub(crate) async fn teleport_player(&self, session: &SessionHandle, sid: u64, map_id: MapId, zone_id: ZoneId, coords: (i16, i16)) -> Result<(), ProtocolError> {
+        self.switch_player_zone(session, sid, Some(map_id), zone_id, Some(coords)).await
     }
 
     fn broadcast_pk_type(&self, loc: Location, actor_sid: u64, pid: PlayerId, pk_type: i8) {
@@ -211,19 +311,20 @@ impl ServerSessionHandler {
         if action == 0 && let Some(t_entry) = self.shared.clients.authenticated.get(&target_sid) {
             let tloc = t_entry.snapshot.location;
             if t_entry.snapshot.stats.hp <= 0 || tloc.map_id != loc.map_id || tloc.zone_id != loc.zone_id || { let pvp = lock_pvp(); pvp.contains_key(&my_pid) || pvp.contains_key(&target_pid) } { return Ok(()); }
-            pending_pvp().insert((my_pid, target_pid), unix_now_ms().saturating_add(30_000));
+            pending_pvp().insert((my_pid, target_pid), (unix_now_ms().saturating_add(30_000), PVP_CHALLENGE_STAKE));
             let mut pw = PacketWriter::with_capacity(24 + my_name.len());
-            pw.write_i8(pvp_type); pw.write_i32(my_pid.0 as i32); pw.write_i32(1_000); pw.write_utf(&format!("{my_name} mời bạn thách đấu!"))?;
+            pw.write_i8(pvp_type); pw.write_i32(my_pid.0 as i32); pw.write_i32(PVP_CHALLENGE_STAKE as i32); pw.write_utf(&format!("{my_name} mời bạn thách đấu!"))?;
             let _ = t_entry.handle.try_send(pw.finish(cmd_message::PLAYER_VS_PLAYER));
         } else if action == 1 {
             let now_ms = unix_now_ms();
             let target_ok = self.shared.clients.authenticated.get(&target_sid).is_some_and(|t| t.snapshot.stats.hp > 0 && t.snapshot.location.map_id == loc.map_id && t.snapshot.location.zone_id == loc.zone_id);
-            if !target_ok || pending_pvp().remove(&(target_pid, my_pid)).is_none_or(|(_, exp)| exp < now_ms) { return Ok(()); }
+            let Some((_, (exp, stake))) = pending_pvp().remove(&(target_pid, my_pid)) else { return Ok(()); };
+            if !target_ok || exp < now_ms { return Ok(()); }
             {
                 let mut pvp = lock_pvp();
                 if pvp.contains_key(&my_pid) || pvp.contains_key(&target_pid) { return Ok(()); }
-                pvp.insert(my_pid, target_pid);
-                pvp.insert(target_pid, my_pid);
+                pvp.insert(my_pid, (target_pid, stake));
+                pvp.insert(target_pid, (my_pid, stake));
             }
             for pid in [my_pid, target_pid] { self.broadcast_pk_type(loc, sid, pid, 3); }
         }
@@ -259,15 +360,89 @@ impl ServerSessionHandler {
     pub(super) async fn handle_social(&self, session: &SessionHandle, sid: u64, action: SocialAction, is_friend: bool) -> Result<(), ProtocolError> {
         match action {
             SocialAction::PrimaryTarget(tpid) if is_friend => {
-                if let Some(peer) = self.shared.clients.players.get(&tpid).and_then(|s| {
-                    let e = self.shared.clients.authenticated.get(s.value())?;
+                let peer = self.shared.clients.players.get(&tpid).map(|s| *s.value()).and_then(|tsid| {
+                    let e = self.shared.clients.authenticated.get(&tsid)?;
                     let (h, b, l, bg, _) = effective_appearance(&self.shared.templates, &e.snapshot);
                     Some(SocialPeer { id: tpid.0 as i32, name: e.snapshot.name.clone(), head: h, body: b, leg: l, bag: bg as i8, power: e.snapshot.stats.power })
-                }) && let Some(mut me) = self.shared.clients.authenticated.get_mut(&sid) && !me.snapshot.friends.iter().any(|f| f.id == peer.id) { me.snapshot.friends.push(peer); }
-                session.send(s2c_packets::thong_bao("Đã thêm vào danh sách bạn bè!")?).await?;
+                });
+                let msg = match peer {
+                    None => "Người chơi hiện không trực tuyến!",
+                    Some(peer) => {
+                        let added = self.shared.clients.authenticated.get_mut(&sid).map(|mut me| {
+                            if me.snapshot.friends.iter().any(|f| f.id == peer.id) {
+                                false
+                            } else {
+                                me.snapshot.friends.push(peer);
+                                true
+                            }
+                        });
+                        match added {
+                            Some(true) => "Đã thêm vào danh sách bạn bè!",
+                            Some(false) => "Người chơi đã có trong danh sách bạn bè!",
+                            None => "Không thể thêm bạn bè lúc này!",
+                        }
+                    }
+                };
+                session.send(s2c_packets::thong_bao(msg)?).await?;
             }
             SocialAction::PrimaryTarget(tpid) => {
-                if i32::try_from(tpid.0).is_ok_and(|id| self.shared.clients.authenticated.get(&sid).is_some_and(|me| me.snapshot.enemies.iter().any(|e| e.id == id))) { self.handle_goto_player(session, sid, tpid).await?; }
+                let target_loc = self.shared.clients.players.get(&tpid).map(|s| *s.value()).and_then(|tsid| {
+                    self.shared.clients.authenticated.get(&tsid).map(|e| e.snapshot.location)
+                });
+                let revenge_prep = i32::try_from(tpid.0).ok().and_then(|id| {
+                    self.shared.clients.authenticated.get_mut(&sid).and_then(|mut me| {
+                        if !me.snapshot.enemies.iter().any(|e| e.id == id) {
+                            return None;
+                        }
+                        if me.snapshot.stats.hp <= 0 || super::router_shop::is_in_trade(me.snapshot.id) {
+                            return Some(Err("Không thể dịch chuyển lúc này!"));
+                        }
+                        let Some(tloc) = target_loc else {
+                            return Some(Err("Kẻ thù hiện không trực tuyến!"));
+                        };
+                        let non_normal = self.shared.templates.maps.iter().find(|m| m.id == tloc.map_id).is_some_and(|m| m.map_type != nro_consts::const_map::MAP_NORMAL);
+                        if non_normal || matches!(tloc.map_id.0, 21..=23 | 39..=41 | 45..=51 | 53..=62 | 85..=91 | 112..=120 | 127..=129) || tloc.map_id.0 >= 135 {
+                            return Some(Err("Không thể dịch chuyển đến khu vực này!"));
+                        }
+                        if me.snapshot.wallet.ruby >= 1 {
+                            me.snapshot.wallet.ruby -= 1;
+                        } else if me.snapshot.wallet.gem >= 1 {
+                            me.snapshot.wallet.gem -= 1;
+                        } else {
+                            return Some(Err("Bạn không đủ ngọc để trả thù!"));
+                        }
+                        Some(Ok((me.snapshot.id, me.snapshot.location, tloc, wallet_money_pkt(&me.snapshot.wallet))))
+                    })
+                });
+                match revenge_prep {
+                    Some(Err(err_msg)) => {
+                        session.send(s2c_packets::thong_bao(err_msg)?).await?;
+                    }
+                    Some(Ok((my_pid, orig_loc, tloc, money_pkt))) => {
+                        session.send(money_pkt).await?;
+                        self.broadcast_pk_type(orig_loc, sid, my_pid, 3);
+                        self.switch_player_zone(session, sid, Some(tloc.map_id), tloc.zone_id, Some((tloc.x, tloc.y))).await?;
+                        let arrived_loc = self.shared.clients.authenticated.get(&sid).map(|e| e.snapshot.location);
+                        let target_loc = self.shared.clients.players.get(&tpid).map(|s| *s.value()).and_then(|tsid| {
+                            self.shared.clients.authenticated.get(&tsid).map(|e| e.snapshot.location)
+                        });
+                        if let (Some(mloc), Some(tloc)) = (arrived_loc, target_loc)
+                            && mloc.map_id == tloc.map_id
+                            && mloc.zone_id == tloc.zone_id
+                        {
+                            {
+                                let mut pvp = lock_pvp();
+                                if !pvp.contains_key(&my_pid) && !pvp.contains_key(&tpid) {
+                                    pvp.insert(my_pid, (tpid, 0));
+                                    pvp.insert(tpid, (my_pid, 0));
+                                }
+                            }
+                            self.broadcast_pk_type(mloc, sid, my_pid, 3);
+                            self.broadcast_pk_type(tloc, sid, tpid, 3);
+                        }
+                    }
+                    None => {}
+                }
             }
             SocialAction::RemoveTarget(tpid) => {
                 if let Some(mut me) = self.shared.clients.authenticated.get_mut(&sid) { (if is_friend { &mut me.snapshot.friends } else { &mut me.snapshot.enemies }).retain(|p| p.id != tpid.0 as i32); }
@@ -338,12 +513,18 @@ impl ServerSessionHandler {
             else if matches!(prep, Some(RevivePrep::InTrade)) { send_thong_bao(session, "Không thể hồi sinh tại chỗ khi đang giao dịch!")?; }
             return Ok(());
         };
-        if let (Some(entity_key), Ok(tx)) = (ek, self.shared.world_router.resolve_sender(orig_loc.map_id, orig_loc.zone_id)) { let _ = tx.send(ZoneCommand::UpdatePlayerStats(entity_key, stats)).await; }
-        let (me_live_pkt, _) = s2c_packets::char_revive_packets(pid, stats.hp, stats.hp_max, orig_loc);
+        if return_home {
+            self.switch_player_zone(session, sid, Some(MapId(21 + i16::from(gender))), ZoneId(0), Some((300, 336))).await?;
+        }
+        let (final_loc, final_ek) = self.shared.clients.authenticated.get(&sid).map_or((orig_loc, ek), |e| (e.snapshot.location, e.entity_key));
+        if let (Some(entity_key), Ok(tx)) = (final_ek, self.shared.world_router.resolve_sender(final_loc.map_id, final_loc.zone_id)) {
+            let _ = tx.send(ZoneCommand::UpdatePlayerStats(entity_key, stats)).await;
+        }
+        let (me_live_pkt, peer_live_pkt) = s2c_packets::char_revive_packets(pid, stats.hp, stats.hp_max, final_loc);
         session.send(me_live_pkt).await?;
-        if return_home { self.switch_player_zone(session, sid, Some(MapId(21 + i16::from(gender))), ZoneId(0), Some((300, 336))).await?; } else { session.send(money_pkt).await?; }
-        let final_loc = self.shared.clients.authenticated.get(&sid).map_or(orig_loc, |e| e.snapshot.location);
-        let (_, peer_live_pkt) = s2c_packets::char_revive_packets(pid, stats.hp, stats.hp_max, final_loc);
+        if !return_home {
+            session.send(money_pkt).await?;
+        }
         session.send(s2c_packets::me_load_point(&stats)).await?;
         self.broadcast_to_zone_peers(final_loc, Some(sid), &peer_live_pkt);
         Ok(())

@@ -1,6 +1,9 @@
 //! Secondary gameplay systems: Pets (`-107`, `-108`, `125`), Clans (`-46..-57`), and Radar (`127`).
 
-use std::sync::OnceLock;
+use std::sync::{
+    OnceLock,
+    atomic::{AtomicI32, Ordering},
+};
 
 use chrono::Utc;
 use dashmap::DashMap;
@@ -11,16 +14,73 @@ use nro_protocol::{ClanInfoAction, ClanInviteAction, ClanMessageAction, Packet, 
 use nro_world::{ZoneCommand, s2c_packets};
 use tokio::sync::Mutex;
 
-use super::{ServerSessionHandler, con_meo_state, effective_appearance, wallet_money_pkt};
+use super::{
+    ServerSessionHandler, con_meo_state, effective_appearance, snapshot_to_economy_inv,
+    sync_economy_inv_to_snapshot, wallet_money_pkt,
+};
 use crate::runtime::unix_now_ms;
+
+const PEA_IDS: [i16; 10] = [13, 60, 61, 62, 63, 64, 65, 295, 523, 595];
+const ASK_PEA_COOLDOWN_MS: i64 = 300_000;
+const PET_FUSION_COOLDOWN_MS: i64 = 5_000;
+
+#[derive(Clone)]
+struct ClanPeaRequest {
+    clan_id: ClanId,
+    requester_id: PlayerId,
+    requester_name: String,
+    requester_role: i8,
+    received: u8,
+    max_donate: u8,
+    created_sec: i32,
+}
+
+#[derive(Clone)]
+struct ClanJoinRequest {
+    clan_id: ClanId,
+    applicant_id: PlayerId,
+    applicant_name: String,
+}
 
 static PENDING_CLAN_INVITES: OnceLock<DashMap<(PlayerId, ClanId), i64>> = OnceLock::new();
 fn pending_clan_invites() -> &'static DashMap<(PlayerId, ClanId), i64> { PENDING_CLAN_INVITES.get_or_init(DashMap::new) }
+static CLAN_PEA_REQUESTS: OnceLock<DashMap<i32, ClanPeaRequest>> = OnceLock::new();
+fn clan_pea_requests() -> &'static DashMap<i32, ClanPeaRequest> { CLAN_PEA_REQUESTS.get_or_init(DashMap::new) }
+static CLAN_JOIN_REQUESTS: OnceLock<DashMap<i32, ClanJoinRequest>> = OnceLock::new();
+fn clan_join_requests() -> &'static DashMap<i32, ClanJoinRequest> { CLAN_JOIN_REQUESTS.get_or_init(DashMap::new) }
+static PET_FUSION_COOLDOWN: OnceLock<DashMap<PlayerId, i64>> = OnceLock::new();
+fn pet_fusion_cooldown() -> &'static DashMap<PlayerId, i64> { PET_FUSION_COOLDOWN.get_or_init(DashMap::new) }
+static CLAN_MSG_SEQ: AtomicI32 = AtomicI32::new(1);
 static CLAN_OP_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 fn clan_op_lock() -> &'static Mutex<()> { CLAN_OP_LOCK.get_or_init(|| Mutex::new(())) }
-pub(super) fn clear_clan_invites(pid: PlayerId) { pending_clan_invites().retain(|k, _| k.0 != pid); }
+
+fn next_clan_msg_id() -> i32 {
+    let id = CLAN_MSG_SEQ.fetch_add(1, Ordering::Relaxed);
+    if id <= 0 {
+        CLAN_MSG_SEQ.store(2, Ordering::Relaxed);
+        1
+    } else {
+        id
+    }
+}
+
+pub(super) fn clear_clan_invites(pid: PlayerId) {
+    pending_clan_invites().retain(|k, _| k.0 != pid);
+    clan_join_requests().retain(|_, r| r.applicant_id != pid);
+    pet_fusion_cooldown().remove(&pid);
+}
 
 impl ServerSessionHandler {
+    fn broadcast_clan_info(&self, clan: &ClanRecord) {
+        for rec in &self.shared.clients.authenticated {
+            if rec.value().snapshot.clan_id == clan.id
+                && let Ok(pkt) = build_clan_info_pkt(Some(clan), rec.value().snapshot.id)
+            {
+                let _ = rec.value().handle.try_send(pkt);
+            }
+        }
+    }
+
     pub(super) async fn send_login_secondary(&self, session: &SessionHandle, snap: &PlayerSnapshot) -> Result<(), ProtocolError> {
         if let Some(pet_pkt) = self.pkt_pet_detail(snap) { session.send(pet_pkt).await?; }
         if snap.intrinsic.intrinsic_id > 0 && let Some(intr) = self.shared.templates.intrinsics.iter().find(|r| r.id == i32::from(snap.intrinsic.intrinsic_id)) {
@@ -90,21 +150,98 @@ impl ServerSessionHandler {
     }
 
     pub(super) async fn handle_pet_status(&self, session: &SessionHandle, sid: u64, val: i8, is_fusion: bool) -> Result<(), ProtocolError> {
-        if !is_fusion && val != 5 {
-            if let Some(p) = self.shared.clients.authenticated.get_mut(&sid).and_then(|mut e| { e.snapshot.pet.as_mut()?.status = val.clamp(0, 4); self.pkt_pet_detail(&e.snapshot) }) { session.send(p).await?; }
+        if !is_fusion {
+            if val == 5 {
+                let res = self.shared.clients.authenticated.get_mut(&sid).map(|mut entry| {
+                    if entry.snapshot.gender != Gender::Namec {
+                        return Err("Chỉ hành tinh Namec mới có thể thực hiện hợp thể vĩnh viễn!");
+                    }
+                    let Some(pet) = entry.snapshot.pet.as_ref() else {
+                        return Err("Bạn chưa có đệ tử!");
+                    };
+                    if pet.stats.hp <= 0 {
+                        return Err("Đệ tử đã chết, không thể hợp thể vĩnh viễn!");
+                    }
+                    if pet.fusion_type != const_player::NON_FUSION {
+                        return Err("Vui lòng tách hợp thể trước khi hợp thể vĩnh viễn!");
+                    }
+                    let bonus = pet.stats.power.max(0);
+                    entry.snapshot.stats.power = entry.snapshot.stats.power.saturating_add(bonus);
+                    entry.snapshot.stats.tiem_nang = entry.snapshot.stats.tiem_nang.saturating_add(bonus);
+                    entry.snapshot.pet = None;
+                    super::recalculate_session_stats(sid, &mut entry.snapshot, self.shared.config.parity_mode);
+                    let loc = entry.snapshot.location;
+                    if let (Some(ek), Ok(tx)) = (entry.entity_key, self.shared.world_router.resolve_sender(loc.map_id, loc.zone_id)) {
+                        let _ = tx.try_send(ZoneCommand::UpdatePlayerStats(ek, entry.snapshot.stats));
+                    }
+                    Ok((s2c_packets::have_pet(false), s2c_packets::me_load_point(&entry.snapshot.stats)))
+                });
+                match res {
+                    Some(Ok((have_pkt, pt_pkt))) => {
+                        session.send(have_pkt).await?;
+                        session.send(pt_pkt).await?;
+                        session.send(s2c_packets::thong_bao("Hợp thể vĩnh viễn thành công!")?).await?;
+                    }
+                    Some(Err(msg)) => session.send(s2c_packets::thong_bao(msg)?).await?,
+                    None => {}
+                }
+                return Ok(());
+            }
+            if let Some(p) = self.shared.clients.authenticated.get_mut(&sid).and_then(|mut e| {
+                e.snapshot.pet.as_mut()?.status = val.clamp(0, 4);
+                self.pkt_pet_detail(&e.snapshot)
+            }) {
+                session.send(p).await?;
+            }
             return Ok(());
         }
-        if let Some((f_pkt, pt_pkt, loc)) = self.shared.clients.authenticated.get_mut(&sid).and_then(|mut entry| {
-            let (pid, loc) = (entry.snapshot.id, entry.snapshot.location);
-            let pet = entry.snapshot.pet.as_mut()?;
-            pet.fusion_type = if pet.fusion_type == const_player::NON_FUSION { const_player::LUONG_LONG_NHAT_THE } else { const_player::NON_FUSION };
-            let wire_mode = if pet.fusion_type == const_player::NON_FUSION { 1_i8 } else { pet.fusion_type };
+
+        let now_ms = unix_now_ms();
+        let outcome = self.shared.clients.authenticated.get_mut(&sid).map(|mut entry| {
+            let (pid, loc, gender) = (entry.snapshot.id, entry.snapshot.location, entry.snapshot.gender);
+            let Some(pet) = entry.snapshot.pet.as_mut() else {
+                return Err("Bạn chưa có đệ tử để hợp thể!");
+            };
+            if pet.stats.hp <= 0 {
+                return Err("Đệ tử đã chết, không thể hợp thể!");
+            }
+            if pet_fusion_cooldown().get(&pid).is_some_and(|t| now_ms.saturating_sub(*t) < PET_FUSION_COOLDOWN_MS) {
+                return Err("Vui lòng đợi 5 giây giữa các lần hợp thể và tách hợp thể!");
+            }
+            pet_fusion_cooldown().insert(pid, now_ms);
+            let entering_fusion = pet.fusion_type == const_player::NON_FUSION;
+            pet.fusion_type = if entering_fusion { const_player::LUONG_LONG_NHAT_THE } else { const_player::NON_FUSION };
+            pet.status = if entering_fusion { 4 } else { 0 };
+            let wire_mode = if entering_fusion { pet.fusion_type } else { 1_i8 };
             super::recalculate_session_stats(sid, &mut entry.snapshot, self.shared.config.parity_mode);
-            if let (Some(ek), Ok(tx)) = (entry.entity_key, self.shared.world_router.resolve_sender(loc.map_id, loc.zone_id)) { let _ = tx.try_send(ZoneCommand::UpdatePlayerStats(ek, entry.snapshot.stats)); }
-            let mut w = PacketWriter::with_capacity(5); w.write_i8(wire_mode); w.write_i32(pid.0 as i32);
-            Some((w.finish(cmd_message::FUSION), s2c_packets::me_load_point(&entry.snapshot.stats), loc))
-        }) { self.broadcast_to_zone_peers(loc, None, &f_pkt); session.send(pt_pkt).await }
-        else { session.send(s2c_packets::thong_bao("Bạn chưa có đệ tử để hợp thể!")?).await }
+            let (eh, eb, el, _, is_disg) = effective_appearance(&self.shared.templates, &entry.snapshot);
+            let (parts, upd_body) = if entering_fusion {
+                let fp = match gender {
+                    Gender::Namec => (391_i16, 392_i16, 393_i16),
+                    Gender::TraiDat | Gender::Xayda => (380_i16, 381_i16, 382_i16),
+                };
+                (fp, s2c_packets::update_body(pid, Some((fp.0, fp.1, fp.2, 0))))
+            } else {
+                ((eh, eb, el), s2c_packets::update_body(pid, is_disg.then_some((eh, eb, el, 0))))
+            };
+            if let (Some(ek), Ok(tx)) = (entry.entity_key, self.shared.world_router.resolve_sender(loc.map_id, loc.zone_id)) {
+                let _ = tx.try_send(ZoneCommand::UpdatePlayerParts(ek, parts));
+                let _ = tx.try_send(ZoneCommand::UpdatePlayerStats(ek, entry.snapshot.stats));
+            }
+            let mut w = PacketWriter::with_capacity(5);
+            w.write_i8(wire_mode);
+            w.write_i32(pid.0 as i32);
+            Ok((w.finish(cmd_message::FUSION), upd_body, s2c_packets::me_load_point(&entry.snapshot.stats), loc))
+        });
+        match outcome {
+            Some(Ok((f_pkt, upd_body, pt_pkt, loc))) => {
+                self.broadcast_to_zone_peers(loc, None, &f_pkt);
+                self.broadcast_to_zone_peers(loc, None, &upd_body);
+                session.send(pt_pkt).await
+            }
+            Some(Err(msg)) => session.send(s2c_packets::thong_bao(msg)?).await,
+            None => Ok(()),
+        }
     }
 
     pub(super) async fn handle_clan_create_info(&self, session: &SessionHandle, sid: u64, action: &ClanInfoAction) -> Result<(), ProtocolError> {
@@ -178,7 +315,8 @@ impl ServerSessionHandler {
                     drop(guard);
                     if let Some(p) = mp { session.send(p).await?; }
                     let mut w = PacketWriter::with_capacity(8 + slogan.len()); w.write_i8(4); w.write_i16(*img_id); w.write_utf(slogan)?;
-                    session.send(w.finish(cmd_message::CLAN_CREATE_INFO)).await?; session.send(build_clan_info_pkt(Some(clan), pid)?).await?;
+                    session.send(w.finish(cmd_message::CLAN_CREATE_INFO)).await?;
+                    self.broadcast_clan_info(clan);
                 }
             }
             ClanInfoAction::Unknown(_) => {}
@@ -219,16 +357,251 @@ impl ServerSessionHandler {
         let Some((pid, name, cid)) = self.shared.clients.authenticated.get(&sid).map(|e| (e.snapshot.id, e.snapshot.name.clone(), e.snapshot.clan_id)) else { return Ok(()); };
         match act {
             ClanMessageAction::Chat(text) if cid.0 >= 0 => {
+                let clans = self.shared.clans_repo.load_all().await.unwrap_or_default();
+                let role = clans.iter().find(|c| c.id == cid)
+                    .and_then(|c| c.members.iter().find(|m| m.id == pid.0 as i32))
+                    .map_or(2, |m| m.role);
                 let mut w = PacketWriter::with_capacity(24 + name.len() + text.len());
-                w.write_i8(0); w.write_i32((unix_now_ms() & 0x7fff_ffff) as i32); w.write_i32(pid.0 as i32);
-                w.write_utf(&name)?; w.write_i8(0); w.write_i32((unix_now_ms() / 1_000) as i32); w.write_utf(text)?; w.write_i8(0);
+                w.write_i8(0); w.write_i32(next_clan_msg_id()); w.write_i32(pid.0 as i32);
+                w.write_utf(&name)?; w.write_i8(role); w.write_i32((unix_now_ms() / 1_000) as i32); w.write_utf(text)?; w.write_i8(0);
                 let pkt = w.finish(cmd_message::CLAN_MESSAGE);
                 for rec in &self.shared.clients.authenticated { if rec.value().snapshot.clan_id == cid { let _ = rec.value().handle.try_send(pkt.clone()); } }
             }
-            ClanMessageAction::AskForJoin(_) => session.send(s2c_packets::thong_bao("Đã gửi yêu cầu xin vào bang hội!")?).await?,
+            ClanMessageAction::AskForPea if cid.0 >= 0 => {
+                let guard = clan_op_lock().lock().await;
+                let now_ms = unix_now_ms();
+                let Ok(mut clans) = self.shared.clans_repo.load_all().await else {
+                    drop(guard);
+                    return session.send(s2c_packets::thong_bao("Không thể xin đậu lúc này!")?).await;
+                };
+                let Some(clan) = clans.iter_mut().find(|c| c.id == cid) else { return Ok(()); };
+                let Some(member) = clan.members.iter_mut().find(|m| m.id == pid.0 as i32) else { return Ok(()); };
+                if member.ask_pea_time > 0 && now_ms.saturating_sub(member.ask_pea_time) < ASK_PEA_COOLDOWN_MS {
+                    let wait_sec = (ASK_PEA_COOLDOWN_MS - now_ms.saturating_sub(member.ask_pea_time)).max(1).cast_unsigned().div_ceil(1_000);
+                    drop(guard);
+                    return session.send(s2c_packets::thong_bao(&format!("Vui lòng đợi {wait_sec} giây nữa mới có thể xin đậu!"))?).await;
+                }
+                member.ask_pea_time = now_ms;
+                let role = member.role;
+                if self.shared.clans_repo.update_clan(clan).await.is_err() {
+                    drop(guard);
+                    return session.send(s2c_packets::thong_bao("Không thể gửi yêu cầu xin đậu lúc này!")?).await;
+                }
+                let msg_id = next_clan_msg_id();
+                let req = ClanPeaRequest {
+                    clan_id: cid,
+                    requester_id: pid,
+                    requester_name: name,
+                    requester_role: role,
+                    received: 0,
+                    max_donate: 5,
+                    created_sec: (now_ms / 1_000) as i32,
+                };
+                clan_pea_requests().insert(msg_id, req.clone());
+                drop(guard);
+                let pkt = build_clan_pea_msg_pkt(msg_id, &req, 1)?;
+                for rec in &self.shared.clients.authenticated {
+                    if rec.value().snapshot.clan_id == cid {
+                        let _ = rec.value().handle.try_send(pkt.clone());
+                    }
+                }
+            }
+            ClanMessageAction::AskForJoin(target_cid) => {
+                if cid.0 >= 0 {
+                    return session.send(s2c_packets::thong_bao("Bạn đã ở trong bang hội!")?).await;
+                }
+                let target = ClanId(*target_cid);
+                let clans = self.shared.clans_repo.load_all().await.unwrap_or_default();
+                let Some(clan) = clans.iter().find(|c| c.id == target) else {
+                    return session.send(s2c_packets::thong_bao("Bang hội không tồn tại!")?).await;
+                };
+                if clan.members.len() >= usize::from(clan.max_member.max(10).cast_unsigned()) {
+                    return session.send(s2c_packets::thong_bao("Bang hội đã đủ số lượng thành viên!")?).await;
+                }
+                clan_join_requests().retain(|_, r| !(r.applicant_id == pid && r.clan_id == target));
+                let msg_id = next_clan_msg_id();
+                let created_sec = (unix_now_ms() / 1_000) as i32;
+                clan_join_requests().insert(msg_id, ClanJoinRequest {
+                    clan_id: target,
+                    applicant_id: pid,
+                    applicant_name: name.clone(),
+                });
+                let mut w = PacketWriter::with_capacity(20 + name.len());
+                w.write_i8(2);
+                w.write_i32(msg_id);
+                w.write_i32(pid.0 as i32);
+                w.write_utf(&name)?;
+                w.write_i8(2);
+                w.write_i32(created_sec);
+                let join_pkt = w.finish(cmd_message::CLAN_MESSAGE);
+                let notice_pkt = s2c_packets::thong_bao(&format!("{name} xin gia nhập bang hội!"))?;
+                let officer_ids: Vec<i32> = clan.members.iter().filter(|m| m.role <= 1).map(|m| m.id).collect();
+                for rec in &self.shared.clients.authenticated {
+                    if rec.value().snapshot.clan_id == target && officer_ids.contains(&(rec.value().snapshot.id.0 as i32)) {
+                        let _ = rec.value().handle.try_send(join_pkt.clone());
+                        let _ = rec.value().handle.try_send(notice_pkt.clone());
+                    }
+                }
+                session.send(s2c_packets::thong_bao("Đã gửi yêu cầu xin vào bang hội!")?).await?;
+            }
             _ => {}
         }
         Ok(())
+    }
+
+    pub(super) async fn handle_clan_donate(&self, session: &SessionHandle, sid: u64, msg_id: Option<i32>) -> Result<(), ProtocolError> {
+        let Some((donor_pid, donor_name, donor_cid)) = self.shared.clients.authenticated.get(&sid).map(|e| (e.snapshot.id, e.snapshot.name.clone(), e.snapshot.clan_id)) else {
+            return Ok(());
+        };
+        if donor_cid.0 < 0 {
+            return session.send(s2c_packets::thong_bao("Bạn chưa gia nhập bang hội!")?).await;
+        }
+        let guard = clan_op_lock().lock().await;
+        let resolved_id = match msg_id {
+            Some(id) => Some(id),
+            None => clan_pea_requests().iter()
+                .filter(|r| r.clan_id == donor_cid && r.requester_id != donor_pid && r.received < r.max_donate)
+                .map(|r| *r.key())
+                .max(),
+        };
+        let Some(target_msg_id) = resolved_id else {
+            drop(guard);
+            return session.send(s2c_packets::thong_bao("Không tìm thấy yêu cầu xin đậu hợp lệ!")?).await;
+        };
+        let Some(req_snap) = clan_pea_requests().get(&target_msg_id).map(|r| r.value().clone()) else {
+            drop(guard);
+            return session.send(s2c_packets::thong_bao("Yêu cầu xin đậu không tồn tại hoặc đã kết thúc!")?).await;
+        };
+        if req_snap.clan_id != donor_cid {
+            drop(guard);
+            return session.send(s2c_packets::thong_bao("Yêu cầu xin đậu không thuộc bang hội của bạn!")?).await;
+        }
+        if req_snap.requester_id == donor_pid {
+            drop(guard);
+            return session.send(s2c_packets::thong_bao("Không thể tự cho đậu bản thân!")?).await;
+        }
+        if req_snap.received >= req_snap.max_donate {
+            drop(guard);
+            return session.send(s2c_packets::thong_bao("Yêu cầu xin đậu này đã nhận đủ!")?).await;
+        }
+        let deduct_res = self.shared.clients.authenticated.get_mut(&sid).map(|mut entry| {
+            if super::router_shop::is_in_trade(entry.snapshot.id) {
+                return Err("Không thể thao tác khi đang giao dịch!");
+            }
+            let mut inv = snapshot_to_economy_inv(&entry.snapshot);
+            let Some(slot) = inv.bag.iter().position(|s| {
+                s.as_ref().is_some_and(|it| PEA_IDS.contains(&it.template_id.0) || (596..=604).contains(&it.template_id.0))
+            }) else {
+                return Err("Bạn không có đậu thần trong hành trang!");
+            };
+            let Ok(pea_item) = inv.sub_from_bag_slot(slot, 1) else {
+                return Err("Không thể lấy đậu thần từ hành trang!");
+            };
+            sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
+            Ok((pea_item, s2c_packets::inventory_bag(&entry.snapshot.items_bag)))
+        });
+        let (pea_item, donor_bag_pkt) = match deduct_res {
+            Some(Ok(v)) => v,
+            Some(Err(msg)) => {
+                drop(guard);
+                return session.send(s2c_packets::thong_bao(msg)?).await;
+            }
+            None => return Ok(()),
+        };
+        let db_ok = if let Ok(mut clans) = self.shared.clans_repo.load_all().await
+            && let Some(clan) = clans.iter_mut().find(|c| c.id == donor_cid)
+        {
+            if let Some(d) = clan.members.iter_mut().find(|m| m.id == donor_pid.0 as i32) { d.donate = d.donate.saturating_add(1); }
+            if let Some(r) = clan.members.iter_mut().find(|m| m.id == req_snap.requester_id.0 as i32) { r.receive_donate = r.receive_donate.saturating_add(1); }
+            self.shared.clans_repo.update_clan(clan).await.is_ok()
+        } else {
+            false
+        };
+        if !db_ok {
+            if let Some(mut entry) = self.shared.clients.authenticated.get_mut(&sid) {
+                let mut inv = snapshot_to_economy_inv(&entry.snapshot);
+                let _ = inv.add_to_bag(pea_item, true);
+                sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
+            }
+            drop(guard);
+            return session.send(s2c_packets::thong_bao("Không thể cho đậu lúc này!")?).await;
+        }
+        let updated_req = if let Some(mut r) = clan_pea_requests().get_mut(&target_msg_id) {
+            r.received = r.received.saturating_add(1);
+            r.value().clone()
+        } else {
+            let mut r = req_snap;
+            r.received = r.received.saturating_add(1);
+            r
+        };
+        if updated_req.received >= updated_req.max_donate {
+            clan_pea_requests().remove(&target_msg_id);
+        }
+        let recv_sid = self.shared.clients.players.get(&updated_req.requester_id).map(|s| *s);
+        let recv_notify = recv_sid.and_then(|rsid| {
+            self.shared.clients.authenticated.get_mut(&rsid).map(|mut re| {
+                let mut r_inv = snapshot_to_economy_inv(&re.snapshot);
+                let added = r_inv.add_to_bag(pea_item, true).is_ok();
+                if added {
+                    sync_economy_inv_to_snapshot(&r_inv, &mut re.snapshot);
+                }
+                (re.handle.clone(), added.then(|| s2c_packets::inventory_bag(&re.snapshot.items_bag)))
+            })
+        });
+        drop(guard);
+        let msg_pkt = build_clan_pea_msg_pkt(target_msg_id, &updated_req, 0)?;
+        for rec in &self.shared.clients.authenticated {
+            if rec.value().snapshot.clan_id == donor_cid {
+                let _ = rec.value().handle.try_send(msg_pkt.clone());
+            }
+        }
+        if let Some((r_handle, opt_r_bag)) = recv_notify {
+            if let Some(r_bag) = opt_r_bag {
+                let _ = r_handle.try_send(r_bag);
+            }
+            if let Ok(tb) = s2c_packets::thong_bao(&format!("Bạn vừa nhận được 1 đậu thần từ {donor_name}!")) {
+                let _ = r_handle.try_send(tb);
+            }
+        }
+        session.send(donor_bag_pkt).await?;
+        session.send(s2c_packets::thong_bao(&format!("Bạn đã cho {} 1 đậu thần!", updated_req.requester_name))?).await
+    }
+
+    pub(super) async fn handle_clan_join_decision(&self, session: &SessionHandle, sid: u64, msg_id: i32, decision: i8) -> Result<(), ProtocolError> {
+        let Some((caller_pid, caller_cid)) = self.shared.clients.authenticated.get(&sid).map(|e| (e.snapshot.id, e.snapshot.clan_id)) else {
+            return Ok(());
+        };
+        if caller_cid.0 < 0 {
+            return Ok(());
+        }
+        let clans = self.shared.clans_repo.load_all().await.unwrap_or_default();
+        if !clans.iter().find(|c| c.id == caller_cid).is_some_and(|c| c.members.iter().any(|m| m.id == caller_pid.0 as i32 && m.role <= 1)) {
+            return session.send(s2c_packets::thong_bao("Chỉ bang chủ hoặc phó bang mới có quyền duyệt thành viên!")?).await;
+        }
+        let Some((_, req)) = clan_join_requests().remove_if(&msg_id, |_, r| r.clan_id == caller_cid) else {
+            return session.send(s2c_packets::thong_bao("Yêu cầu xin vào bang không tồn tại hoặc đã được xử lý!")?).await;
+        };
+        if decision == 0 {
+            let applicant = self.shared.clients.players.get(&req.applicant_id)
+                .map(|s| *s)
+                .and_then(|asid| self.shared.clients.authenticated.get(&asid).map(|e| (asid, e.handle.clone())));
+            if let Some((asid, a_handle)) = applicant {
+                self.join_clan_by_id(&a_handle, asid, caller_cid.0).await?;
+                if let Ok(tb) = s2c_packets::thong_bao("Yêu cầu gia nhập bang hội của bạn đã được chấp nhận!") {
+                    let _ = a_handle.try_send(tb);
+                }
+                session.send(s2c_packets::thong_bao(&format!("Đã duyệt {} vào bang hội!", req.applicant_name))?).await
+            } else {
+                session.send(s2c_packets::thong_bao("Người chơi đã ngoại tuyến, không thể duyệt vào bang lúc này!")?).await
+            }
+        } else {
+            if let Some(a_handle) = self.handle_for_pid(req.applicant_id)
+                && let Ok(tb) = s2c_packets::thong_bao("Yêu cầu gia nhập bang hội của bạn đã bị từ chối!")
+            {
+                let _ = a_handle.try_send(tb);
+            }
+            session.send(s2c_packets::thong_bao(&format!("Đã từ chối yêu cầu vào bang của {}!", req.applicant_name))?).await
+        }
     }
 
     pub(super) async fn handle_clan_invite(&self, session: &SessionHandle, sid: u64, act: ClanInviteAction) -> Result<(), ProtocolError> {
@@ -269,14 +642,21 @@ impl ServerSessionHandler {
                 if caller_role != 0 { drop(guard); return session.send(s2c_packets::thong_bao("Chỉ bang chủ mới có quyền thay đổi chức vụ!")?).await; }
                 if target == pid { return Ok(()); }
                 let new_role = role.clamp(0, 2);
-                if new_role == 0 && let Some(old) = clan.members.iter_mut().find(|m| m.id == pid.0 as i32) { old.role = 1; }
+                if new_role == 0 {
+                    if target_role != 1 {
+                        drop(guard);
+                        return session.send(s2c_packets::thong_bao("Chỉ có thể nhường chức Bang chủ cho Phó bang!")?).await;
+                    }
+                    if let Some(old) = clan.members.iter_mut().find(|m| m.id == pid.0 as i32) { old.role = 2; }
+                }
                 if let Some(m) = clan.members.iter_mut().find(|m| m.id == target.0 as i32) { m.role = new_role; }
             }
             if self.shared.clans_repo.update_clan(clan).await.is_err() { drop(guard); return session.send(s2c_packets::thong_bao("Không thể cập nhật bang hội lúc này!")?).await; }
             if role < 0 && let Ok(kick_pkt) = build_clan_info_pkt(None, target) {
                 for mut entry in self.shared.clients.authenticated.iter_mut() { if entry.snapshot.id == target { entry.snapshot.clan_id = ClanId(-1); let _ = entry.handle.try_send(kick_pkt.clone()); } }
             }
-            drop(guard); session.send(build_clan_info_pkt(Some(clan), pid)?).await?;
+            drop(guard);
+            self.broadcast_clan_info(clan);
         }
         Ok(())
     }
@@ -298,7 +678,8 @@ impl ServerSessionHandler {
                 Ok(pid) => {
                     if self.shared.clans_repo.update_clan(clan).await.is_err() { drop(guard); return session.send(s2c_packets::thong_bao("Không thể tham gia bang hội lúc này!")?).await; }
                     if let Some(mut me) = self.shared.clients.authenticated.get_mut(&sid) { me.snapshot.clan_id = clan.id; }
-                    clear_clan_invites(pid); drop(guard); session.send(build_clan_info_pkt(Some(clan), pid)?).await?;
+                    clear_clan_invites(pid); drop(guard);
+                    self.broadcast_clan_info(clan);
                 }
                 Err(msg) => { drop(guard); session.send(s2c_packets::thong_bao(msg)?).await?; }
             }
@@ -317,28 +698,33 @@ impl ServerSessionHandler {
     pub(super) async fn execute_leave_clan(&self, session: &SessionHandle, sid: u64) -> Result<(), ProtocolError> {
         let guard = clan_op_lock().lock().await;
         let Some((pid, cid)) = self.shared.clients.authenticated.get(&sid).map(|e| (e.snapshot.id, e.snapshot.clan_id)) else { return Ok(()); };
+        let mut updated_clan = None;
         if cid.0 >= 0 {
             let Ok(mut clans) = self.shared.clans_repo.load_all().await else { drop(guard); return session.send(s2c_packets::thong_bao("Không thể rời bang hội lúc này!")?).await; };
             if let Some(clan) = clans.iter_mut().find(|c| c.id == cid) {
                 clan.members.retain(|m| m.id != pid.0 as i32);
                 let db_res = if clan.members.is_empty() { self.shared.clans_repo.delete_clan(cid).await } else {
                     if !clan.members.iter().any(|m| m.role == 0) && let Some(next) = clan.members.iter_mut().min_by_key(|m| m.role) { next.role = 0; }
-                    self.shared.clans_repo.update_clan(clan).await
+                    let r = self.shared.clans_repo.update_clan(clan).await;
+                    if r.is_ok() { updated_clan = Some(clan.clone()); }
+                    r
                 };
                 if db_res.is_err() { drop(guard); return session.send(s2c_packets::thong_bao("Không thể rời bang hội lúc này!")?).await; }
             }
         }
         if let Some(mut e) = self.shared.clients.authenticated.get_mut(&sid) { e.snapshot.clan_id = ClanId(-1); }
-        drop(guard); session.send(build_clan_info_pkt(None, pid)?).await
+        drop(guard);
+        if let Some(ref clan) = updated_clan { self.broadcast_clan_info(clan); }
+        session.send(build_clan_info_pkt(None, pid)?).await
     }
 
     pub(super) async fn handle_radar(&self, session: &SessionHandle, sid: u64, action: RadarAction) -> Result<(), ProtocolError> {
         match action {
             RadarAction::OpenList => {
                 let owned = self.shared.clients.authenticated.get(&sid).map_or_default(|e| e.snapshot.radar_cards.clone());
-                let cnt = self.shared.templates.radars.len().min(120);
+                let cnt = self.shared.templates.radars.len().min(i16::MAX as usize);
                 let mut w = PacketWriter::with_capacity(8 + cnt * 48); w.write_i8(0); w.write_i16(cnt as i16);
-                for r in self.shared.templates.radars.iter().take(120) {
+                for r in self.shared.templates.radars.iter().take(cnt) {
                     let rec = owned.iter().find(|c| c.id.0 == r.id);
                     for v in [r.id, r.icon_id] { w.write_i16(v); }
                     for v in [r.rank, rec.map_or(0, |c| c.amount.0), r.max, r.card_type] { w.write_i8(v); }
@@ -351,7 +737,7 @@ impl ServerSessionHandler {
             }
             RadarAction::ToggleCard(tid) => {
                 let res = self.shared.clients.authenticated.get_mut(&sid).map(|mut e| {
-                    if !e.snapshot.radar_cards.iter().any(|c| c.id.0 == tid.0 && c.level.0 > 0) { return None; }
+                    if !e.snapshot.radar_cards.iter().any(|c| c.id.0 == tid.0 && c.level.0 >= 0) { return None; }
                     let mut new_use = 0_i8;
                     for c in &mut e.snapshot.radar_cards { if c.id.0 == tid.0 { c.used.0 = i8::from(c.used.0 == 0); new_use = c.used.0; } else { c.used.0 = 0; } }
                     super::recalculate_session_stats(sid, &mut e.snapshot, self.shared.config.parity_mode);
@@ -368,6 +754,20 @@ impl ServerSessionHandler {
         }
         Ok(())
     }
+}
+
+fn build_clan_pea_msg_pkt(msg_id: i32, req: &ClanPeaRequest, is_new: i8) -> Result<Packet, ProtocolError> {
+    let mut w = PacketWriter::with_capacity(24 + req.requester_name.len());
+    w.write_i8(1);
+    w.write_i32(msg_id);
+    w.write_i32(req.requester_id.0 as i32);
+    w.write_utf(&req.requester_name)?;
+    w.write_i8(req.requester_role);
+    w.write_i32(req.created_sec);
+    w.write_i8(req.received as i8);
+    w.write_i8(req.max_donate as i8);
+    w.write_i8(is_new);
+    Ok(w.finish(cmd_message::CLAN_MESSAGE))
 }
 
 fn new_clan_member(snap: &PlayerSnapshot, parts: (i16, i16, i16), role: i8) -> ClanMemberRecord {

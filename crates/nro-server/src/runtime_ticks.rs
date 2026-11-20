@@ -84,7 +84,7 @@ pub(super) fn spawn_background_ticks(
                     };
                     let effects = shared.bosses.lock().tick_all(&ctx, &mut rng, unix_now_ms() as u64);
                     if !effects.is_empty() {
-                        dispatch_boss_effects(&shared, effects);
+                        dispatch_boss_effects(&shared, effects).await;
                     }
                 }
                 _ = lb_iv.tick() => {
@@ -210,7 +210,7 @@ fn tick_passive_regen(shared: &SharedServerState) {
     }
 }
 
-fn dispatch_boss_effects(shared: &Arc<SharedServerState>, effects: Vec<EngineEffect>) {
+async fn dispatch_boss_effects(shared: &Arc<SharedServerState>, effects: Vec<EngineEffect>) {
     for effect in effects {
         match effect {
             EngineEffect::SpawnDynamicBoss { boss_type, map_id, zone_id, location, scaled_stats } => {
@@ -313,13 +313,55 @@ fn dispatch_boss_effects(shared: &Arc<SharedServerState>, effects: Vec<EngineEff
                     && let Some(mut entry) = shared.clients.authenticated.get_mut(&sid)
                 {
                     entry.snapshot.wallet.gold = entry.snapshot.wallet.gold.saturating_sub(stolen).max(0);
+                    if entry.handle.sent_key() {
+                        let w = &entry.snapshot.wallet;
+                        let pkt = s2c_packets::send_money(
+                            w.gold.max(0).cast_unsigned(),
+                            u64::from(w.gem.max(0).cast_unsigned()),
+                            u64::from(w.ruby.max(0).cast_unsigned()),
+                        );
+                        let _ = entry.handle.try_send(pkt);
+                    }
                 }
             }
             EngineEffect::WipeZoneMobs { map_id, zone_id } => {
                 info!(map_id = map_id.0, zone_id = zone_id.0, "boss wiped zone mobs");
             }
             EngineEffect::Chat { speaker, text } => {
-                debug!(speaker = speaker.0, %text, "boss chat");
+                let speaker_zone = shared
+                    .bosses
+                    .lock()
+                    .instances()
+                    .get(&speaker.0)
+                    .map(|b| (b.map_id, b.zone_id))
+                    .or_else(|| {
+                        let sid = shared.clients.players.get(&speaker).map(|s| *s.value())?;
+                        shared.clients.authenticated.get(&sid).map(|e| (e.snapshot.location.map_id, e.snapshot.location.zone_id))
+                    });
+                if let Some((map_id, zone_id)) = speaker_zone
+                    && let Ok(pkt) = s2c_packets::chat_map(speaker, &text)
+                {
+                    for rec in &shared.clients.authenticated {
+                        let loc = rec.value().snapshot.location;
+                        if loc.map_id == map_id && loc.zone_id == zone_id && rec.value().handle.sent_key() {
+                            let _ = rec.value().handle.try_send(pkt.clone());
+                        }
+                    }
+                } else {
+                    debug!(speaker = speaker.0, %text, "boss chat");
+                }
+            }
+            EngineEffect::TeleportPlayer { target, map_id, zone_id, location } => {
+                let target_info = shared.clients.players.get(&target).map(|s| *s.value()).and_then(|sid| {
+                    shared.clients.authenticated.get(&sid).map(|e| (sid, e.handle.clone()))
+                });
+                if let Some((sid, handle)) = target_info
+                    && let Err(err) = ServerSessionHandler::new(Arc::clone(shared))
+                        .teleport_player(&handle, sid, map_id, zone_id, (location.x, location.y))
+                        .await
+                {
+                    warn!(player_id = target.0, map_id = map_id.0, zone_id = zone_id.0, error = %err, "boss teleport player failed");
+                }
             }
             other => {
                 debug!(?other, "boss engine effect emitted");

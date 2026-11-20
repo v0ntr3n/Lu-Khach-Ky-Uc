@@ -31,10 +31,17 @@ impl ZoneActor {
                 for i in 0..self.arena.len() {
                     if self.arena.clan_ids[i] == Some(clan_id)
                         && (self.arena.locations[i].x - item.loc.x).abs() <= 200
+                        && self.arena.stats[i].hp > 0
                     {
+                        let prev_hp = self.arena.stats[i].hp;
                         let h = self.arena.stats[i].hp_max / 20;
-                        self.arena.stats[i].hp =
-                            (self.arena.stats[i].hp.saturating_add(h)).min(self.arena.stats[i].hp_max);
+                        let new_hp = prev_hp.saturating_add(h).min(self.arena.stats[i].hp_max);
+                        if new_hp > prev_hp {
+                            self.arena.stats[i].hp = new_hp;
+                            if let Some(tx) = &self.arena.outbound_txs[i] {
+                                let _ = tx.try_send(s2c_packets::me_load_hp(new_hp));
+                            }
+                        }
                     }
                 }
             }
