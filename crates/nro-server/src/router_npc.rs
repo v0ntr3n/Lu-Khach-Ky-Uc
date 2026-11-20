@@ -108,7 +108,7 @@ impl ServerSessionHandler {
         };
 
         let is_clan_leader = if clan_id.0 >= 0 {
-            self.shared.clans_repo.load_all().await.ok().is_some_and(|clans| {
+            self.shared.clans_repo.load_all().await.is_ok_and(|clans| {
                 clans.iter().any(|c| c.id == clan_id && c.members.iter().any(|m| m.id == pid.0 as i32 && m.role == 0))
             })
         } else {

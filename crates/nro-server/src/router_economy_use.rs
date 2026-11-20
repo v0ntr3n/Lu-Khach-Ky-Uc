@@ -59,7 +59,7 @@ impl ServerSessionHandler {
                 0 => return self.handle_get_item_move(session, sid, 5, index).await,
                 2 => return self.handle_get_item_move(session, sid, 0, index).await,
                 1 => {
-                    let is_equip = usize::try_from(index).ok().is_some_and(|idx| {
+                    let is_equip = usize::try_from(index).is_ok_and(|idx| {
                         let catalog = DbItemCatalog(&self.shared.templates);
                         self.shared.clients.authenticated.get(&sid).is_some_and(|entry| {
                             entry.snapshot.items_bag.get(idx).and_then(Option::as_ref).is_some_and(|it| {

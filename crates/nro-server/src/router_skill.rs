@@ -224,14 +224,13 @@ impl ServerSessionHandler {
                         let range_px = i64::from(utility_skill_params(pt_u8).3);
                         let mob_ids: Vec<u8> = self.shared.templates.maps.iter()
                             .find(|m| m.id == loc.map_id)
-                            .map(|m| {
+                            .map_or_default(|m| {
                                 m.mobs.iter().enumerate().take(127).filter_map(|(idx, &(_, _, _, mx, my))| {
                                     let dx = i64::from(mx) - i64::from(loc.x);
                                     let dy = i64::from(my) - i64::from(loc.y);
                                     (dx * dx + dy * dy <= range_px * range_px).then_some(idx as u8)
                                 }).collect()
-                            })
-                            .unwrap_or_default();
+                            });
                         if let Some(ek) = entry.entity_key && !mob_ids.is_empty() {
                             let paint_u8 = u8::try_from(skill_paint_id.clamp(0, 255)).unwrap_or(0);
                             tu_sat_aoe = Some((ek, paint_u8, mob_ids, u64::try_from(caster_hp).unwrap_or(1)));

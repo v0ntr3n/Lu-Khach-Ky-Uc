@@ -170,7 +170,7 @@ impl ServerSessionHandler {
     }
 
     pub(super) async fn handle_transport_complete(&self, session: &SessionHandle, sid: u64) -> Result<(), ProtocolError> {
-        let Some(dst) = self.shared.clients.authenticated.get(&sid).and_then(|e| (e.snapshot.stats.hp > 0 && !super::router_shop::is_in_trade(e.snapshot.id) && matches!(e.snapshot.location.map_id, MapId(27) | MapId(102))).then_some(if e.snapshot.location.map_id == MapId(102) { MapId(27) } else { MapId(102) })) else { return Ok(()); };
+        let Some(dst) = self.shared.clients.authenticated.get(&sid).and_then(|e| (e.snapshot.stats.hp > 0 && !super::router_shop::is_in_trade(e.snapshot.id) && matches!(e.snapshot.location.map_id, MapId(27 | 102))).then_some(if e.snapshot.location.map_id == MapId(102) { MapId(27) } else { MapId(102) })) else { return Ok(()); };
         self.switch_player_zone(session, sid, Some(dst), ZoneId(0), Some((250, 336))).await
     }
 

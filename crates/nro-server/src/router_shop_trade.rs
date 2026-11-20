@@ -145,7 +145,7 @@ impl ServerSessionHandler {
                 if is_in_trade(p1) || is_in_trade(p2) { return send_thong_bao(session, "Không thể thao tác khi đang giao dịch!"); }
                 let err_msg = {
                     let guard = trade_lifecycle_lock().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-                    let msg = if !pending_trade_invites().remove(&(tpid, my_pid)).is_some_and(|(_, exp)| exp >= now_ms) { None }
+                    let msg = if pending_trade_invites().remove(&(tpid, my_pid)).is_none_or(|(_, exp)| exp < now_ms) { None }
                     else if reserve_trade_pair(p1, p2) {
                         let fetch = |pid: PlayerId| self.shared.clients.players.get(&pid).and_then(|s| self.shared.clients.authenticated.get(s.value()).map(|e| (snapshot_to_economy_inv(&e.snapshot), e.handle.clone(), (e.snapshot.location.map_id, e.snapshot.location.zone_id), e.activated)));
                         let open_res = if let (Some((inv1, h1, z1, act1)), Some((inv2, h2, z2, act2))) = (fetch(p1), fetch(p2)) && z1 == z2 {
