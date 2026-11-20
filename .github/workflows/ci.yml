@@ -152,8 +152,8 @@ jobs:
             --title "CI Failed: Workspace Tests (${SHORT_SHA:0:7})" \
             --body-file /tmp/issue-body.md
 
-  pgo_release_binary:
-    name: PGO Release Build
+  pgo_release_linux:
+    name: PGO Release Build (Linux)
     needs: [workspace_tests]
     if: >-
       github.ref == 'refs/heads/main' ||
@@ -173,31 +173,152 @@ jobs:
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Build PGO-optimized binaries
+      - name: Build PGO-optimized Linux binaries
         shell: bash
         run: |
           set -euo pipefail
-          HOST_TRIPLE="$(rustc -vV | sed -n 's/^host: //p')"
-          SYSROOT="$(rustc --print sysroot)"
-          LLVM_PROFDATA="${SYSROOT}/lib/rustlib/${HOST_TRIPLE}/bin/llvm-profdata"
-          PGO_DIR="${GITHUB_WORKSPACE}/pgo-profiles"
-          mkdir -p "${PGO_DIR}"
+          {
+            HOST_TRIPLE="$(rustc -vV | sed -n 's/^host: //p')"
+            SYSROOT="$(rustc --print sysroot)"
+            LLVM_PROFDATA="${SYSROOT}/lib/rustlib/${HOST_TRIPLE}/bin/llvm-profdata"
+            PGO_DIR="${GITHUB_WORKSPACE}/pgo-profiles-linux"
+            mkdir -p "${PGO_DIR}"
 
-          RUSTFLAGS="-Cprofile-generate=${PGO_DIR}" cargo build --release -p nro-server -p nro-db --target "${HOST_TRIPLE}"
-          "./target/${HOST_TRIPLE}/release/nro-server" --benchmark-replay --replay-scale 2500
-          "${LLVM_PROFDATA}" merge -o "${PGO_DIR}/merged.profdata" "${PGO_DIR}"
+            RUSTFLAGS="-Cprofile-generate=${PGO_DIR}" cargo build --release -p nro-server -p nro-db --target "${HOST_TRIPLE}"
+            "./target/${HOST_TRIPLE}/release/nro-server" --benchmark-replay --replay-scale 2500
+            "${LLVM_PROFDATA}" merge -o "${PGO_DIR}/merged.profdata" "${PGO_DIR}"
 
-          RUSTFLAGS="-Cprofile-use=${PGO_DIR}/merged.profdata -Cllvm-args=-pgo-warn-missing-function" cargo build --release -p nro-server -p nro-db --target "${HOST_TRIPLE}"
-          "./target/${HOST_TRIPLE}/release/nro-server" --benchmark-replay --replay-scale 1000
+            RUSTFLAGS="-Cprofile-use=${PGO_DIR}/merged.profdata -Cllvm-args=-pgo-warn-missing-function" cargo build --release -p nro-server -p nro-db --target "${HOST_TRIPLE}"
+            "./target/${HOST_TRIPLE}/release/nro-server" --benchmark-replay --replay-scale 1000
 
-          cp "./target/${HOST_TRIPLE}/release/nro-server" ./nro-server
-          cp "./target/${HOST_TRIPLE}/release/nro-import-sql" ./nro-import-sql
+            cp "./target/${HOST_TRIPLE}/release/nro-server" ./nro-server
+            cp "./target/${HOST_TRIPLE}/release/nro-import-sql" ./nro-import-sql
+          } 2>&1 | tee /tmp/ci-pgo-linux.log
 
-      - name: Upload PGO release binaries
+      - name: Upload Linux PGO release binaries
         uses: actions/upload-artifact@v4
         with:
-          name: nro-server-${{ github.sha }}
+          name: nro-server-linux-${{ github.sha }}
           retention-days: 14
           path: |
             nro-server
             nro-import-sql
+
+      - name: Report failure log to GitHub Issue
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHORT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          LOG_TAIL="$(tail -c 45000 /tmp/ci-pgo-linux.log 2>/dev/null || echo 'No log captured.')"
+          {
+            echo "### CI Failed: \`PGO Release Build (Linux)\`"
+            echo ""
+            echo "- **Commit:** \`${SHORT_SHA}\`"
+            echo "- **Run:** ${RUN_URL}"
+            echo ""
+            echo '```text'
+            echo "${LOG_TAIL}"
+            echo '```'
+          } > /tmp/issue-body.md
+          gh issue create \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "CI Failed: PGO Linux (${SHORT_SHA:0:7})" \
+            --body-file /tmp/issue-body.md
+
+  pgo_release_windows:
+    name: PGO Release Build (Windows)
+    needs: [workspace_tests]
+    if: >-
+      github.ref == 'refs/heads/main' ||
+      github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.100.0 + llvm-tools-preview
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.100.0"
+          components: llvm-tools-preview
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build PGO-optimized Windows binaries
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $logFile = Join-Path $env:RUNNER_TEMP "ci-pgo-windows.log"
+          try {
+            $hostTriple = ((rustc -vV) | Select-String '^host: ').ToString().Split(' ')[1].Trim()
+            $sysroot = (rustc --print sysroot).Trim()
+            $llvmProfdata = Join-Path $sysroot "lib\rustlib\$hostTriple\bin\llvm-profdata.exe"
+            $pgoDir = Join-Path $env:GITHUB_WORKSPACE "pgo-profiles-win"
+            New-Item -ItemType Directory -Force -Path $pgoDir | Out-Null
+
+            $env:RUSTFLAGS = "-Cprofile-generate=$pgoDir"
+            cargo build --release -p nro-server -p nro-db --target $hostTriple 2>&1 | Tee-Object -FilePath $logFile -Append
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+            & ".\target\$hostTriple\release\nro-server.exe" --benchmark-replay --replay-scale 2500 2>&1 | Tee-Object -FilePath $logFile -Append
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+            & $llvmProfdata merge -o "$pgoDir\merged.profdata" $pgoDir 2>&1 | Tee-Object -FilePath $logFile -Append
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+            $env:RUSTFLAGS = "-Cprofile-use=$pgoDir\merged.profdata -Cllvm-args=-pgo-warn-missing-function"
+            cargo build --release -p nro-server -p nro-db --target $hostTriple 2>&1 | Tee-Object -FilePath $logFile -Append
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+            & ".\target\$hostTriple\release\nro-server.exe" --benchmark-replay --replay-scale 1000 2>&1 | Tee-Object -FilePath $logFile -Append
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+            Copy-Item ".\target\$hostTriple\release\nro-server.exe" ".\nro-server.exe" -Force
+            Copy-Item ".\target\$hostTriple\release\nro-import-sql.exe" ".\nro-import-sql.exe" -Force
+          } catch {
+            $_ | Out-String | Tee-Object -FilePath $logFile -Append
+            throw
+          }
+
+      - name: Upload Windows PGO release binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: nro-server-windows-${{ github.sha }}
+          retention-days: 14
+          path: |
+            nro-server.exe
+            nro-import-sql.exe
+
+      - name: Report failure log to GitHub Issue
+        if: failure()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHORT_SHA: ${{ github.sha }}
+        run: |
+          $logFile = Join-Path $env:RUNNER_TEMP "ci-pgo-windows.log"
+          $logText = if (Test-Path $logFile) { Get-Content -Raw $logFile } else { "No log captured." }
+          if ($logText.Length -gt 45000) { $logText = $logText.Substring($logText.Length - 45000) }
+          $short = $env:SHORT_SHA.Substring(0, 7)
+          $bodyPath = Join-Path $env:RUNNER_TEMP "issue-body.md"
+          @"
+          ### CI Failed: ``PGO Release Build (Windows)``
+
+          - **Commit:** ``$($env:SHORT_SHA)``
+          - **Run:** $($env:RUN_URL)
+
+          ``````text
+          $logText
+          ``````
+          "@ | Set-Content -Path $bodyPath -Encoding utf8
+          gh issue create `
+            --repo $env:GITHUB_REPOSITORY `
+            --title "CI Failed: PGO Windows ($short)" `
+            --body-file $bodyPath
