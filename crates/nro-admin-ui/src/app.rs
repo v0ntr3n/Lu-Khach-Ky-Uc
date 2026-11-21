@@ -1,6 +1,7 @@
 //! Main GPUI Kit dashboard & user control view for `nro-server-gui`.
 
 use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use chrono::Local;
@@ -13,9 +14,17 @@ use nro_server::admin_control::{AdminControl, AdminUserRow, ServerSummary};
 
 const MAX_AUDIT_LOGS: usize = 40;
 
+pub(crate) enum BootState {
+    Booting,
+    Ready(AdminControl),
+    Failed(String),
+}
+
 pub struct AdminApp {
-    pub(crate) control: AdminControl,
-    summary: ServerSummary,
+    boot_state: Arc<Mutex<BootState>>,
+    pub(crate) control: Option<AdminControl>,
+    boot_error: Option<String>,
+    summary: Option<ServerSummary>,
     users: Vec<AdminUserRow>,
     selected_account: Option<i32>,
     online_only: bool,
@@ -32,7 +41,7 @@ pub struct AdminApp {
 }
 
 impl AdminApp {
-    pub fn new(control: AdminControl, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub(crate) fn new(boot_state: Arc<Mutex<BootState>>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let search_input = cx.new(|cx| InputState::new(window, cx).placeholder("Tìm theo ID / username / tên nhân vật..."));
         let broadcast_input = cx.new(|cx| InputState::new(window, cx).placeholder("Nhập thông báo gửi toàn server..."));
         let gold_input = cx.new(|cx| InputState::new(window, cx).placeholder("Vàng (+/-)"));
@@ -48,21 +57,17 @@ impl AdminApp {
             }
         });
 
-        let summary = control.summary();
-        let users = control.list_users("", false);
-        let selected_account = users.first().map(|u| u.account_id);
         let mut audit_logs = VecDeque::with_capacity(MAX_AUDIT_LOGS);
         audit_logs.push_front(format!(
-            "[{}] Server đã khởi động tại {}",
-            Local::now().format("%H:%M:%S"),
-            summary.bind_addr
+            "[{}] Đang khởi động server Lữ Khách Ký Ức...",
+            Local::now().format("%H:%M:%S")
         ));
 
         cx.spawn(async move |this, cx| {
             loop {
-                cx.background_executor().timer(Duration::from_secs(2)).await;
+                cx.background_executor().timer(Duration::from_millis(500)).await;
                 let keep = this.update(cx, |app, cx| {
-                    app.refresh_data(cx);
+                    app.poll_boot_and_refresh(cx);
                     cx.notify();
                 });
                 if keep.is_err() {
@@ -72,13 +77,15 @@ impl AdminApp {
         })
         .detach();
 
-        Self {
-            control,
-            summary,
-            users,
-            selected_account,
+        let mut app = Self {
+            boot_state,
+            control: None,
+            boot_error: None,
+            summary: None,
+            users: Vec::new(),
+            selected_account: None,
             online_only: false,
-            status_banner: "Sẵn sàng điều khiển người chơi.".into(),
+            status_banner: "Đang khởi động server...".into(),
             audit_logs,
             search_input,
             broadcast_input,
@@ -88,13 +95,39 @@ impl AdminApp {
             item_id_input,
             item_qty_input,
             _subscriptions: vec![sub],
+        };
+        app.poll_boot_and_refresh(cx);
+        app
+    }
+
+    fn poll_boot_and_refresh(&mut self, cx: &App) {
+        if self.control.is_none()
+            && self.boot_error.is_none()
+            && let Ok(guard) = self.boot_state.lock()
+        {
+            match &*guard {
+                BootState::Booting => {}
+                BootState::Ready(ctrl) => {
+                    let s = ctrl.summary();
+                    self.control = Some(ctrl.clone());
+                    self.push_feedback(format!("Server đã sẵn sàng tại {}", s.bind_addr));
+                }
+                BootState::Failed(err) => {
+                    self.boot_error = Some(err.clone());
+                    self.push_feedback(format!("Lỗi khởi động server: {err}"));
+                }
+            }
         }
+        self.refresh_data(cx);
     }
 
     fn refresh_data(&mut self, cx: &App) {
+        let Some(control) = &self.control else {
+            return;
+        };
         let query = self.search_input.read(cx).value().to_string();
-        self.summary = self.control.summary();
-        self.users = self.control.list_users(&query, self.online_only);
+        self.summary = Some(control.summary());
+        self.users = control.list_users(&query, self.online_only);
         if let Some(sel) = self.selected_account
             && !self.users.iter().any(|u| u.account_id == sel)
         {
@@ -128,9 +161,27 @@ impl AdminApp {
 
     fn render_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
-        let maint = self.summary.maintaining;
-        let uptime_m = self.summary.uptime_secs / 60;
-        let uptime_s = self.summary.uptime_secs % 60;
+        let (maint, status_line) = match &self.summary {
+            Some(s) => (
+                s.maintaining,
+                format!(
+                    "Online: {} | Sessions: {} | Uptime: {}m{}s | {}",
+                    s.online_players,
+                    s.total_sessions,
+                    s.uptime_secs / 60,
+                    s.uptime_secs % 60,
+                    if s.maintaining { "BẢO TRÌ" } else { "ONLINE" }
+                ),
+            ),
+            None => (
+                false,
+                if self.boot_error.is_some() {
+                    "LỖI KHỞI ĐỘNG".to_owned()
+                } else {
+                    "ĐANG KHỞI ĐỘNG...".to_owned()
+                },
+            ),
+        };
 
         div()
             .flex()
@@ -148,14 +199,7 @@ impl AdminApp {
                     .items_center()
                     .gap_3()
                     .child(Label::new("Lữ Khách Ký Ức — Server Control Panel"))
-                    .child(Label::new(format!(
-                        "Online: {} | Sessions: {} | Uptime: {}m{}s | {}",
-                        self.summary.online_players,
-                        self.summary.total_sessions,
-                        uptime_m,
-                        uptime_s,
-                        if maint { "BẢO TRÌ" } else { "ONLINE" }
-                    ))),
+                    .child(Label::new(status_line)),
             )
             .child(
                 div()
@@ -167,7 +211,7 @@ impl AdminApp {
                             .label("Làm mới")
                             .icon(IconName::RefreshCw)
                             .on_click(cx.listener(|this, _, _, cx| {
-                                this.refresh_data(cx);
+                                this.poll_boot_and_refresh(cx);
                                 cx.notify();
                             })),
                     )
@@ -175,10 +219,12 @@ impl AdminApp {
                         Button::new("btn-maint")
                             .label(if maint { "Tắt bảo trì" } else { "Bật bảo trì" })
                             .on_click(cx.listener(move |this, _, _, cx| {
-                                let msg = this.control.set_maintenance(!maint);
-                                this.push_feedback(msg);
-                                this.refresh_data(cx);
-                                cx.notify();
+                                if let Some(ctrl) = &this.control {
+                                    let msg = ctrl.set_maintenance(!maint);
+                                    this.push_feedback(msg);
+                                    this.refresh_data(cx);
+                                    cx.notify();
+                                }
                             })),
                     )
                     .child(
@@ -186,7 +232,9 @@ impl AdminApp {
                             .danger()
                             .label("Dừng Server")
                             .on_click(cx.listener(|this, _, _, cx| {
-                                this.control.trigger_shutdown();
+                                if let Some(ctrl) = &this.control {
+                                    ctrl.trigger_shutdown();
+                                }
                                 this.push_feedback("Đang lưu dữ liệu và tắt server...".to_owned());
                                 cx.quit();
                             })),
@@ -212,8 +260,10 @@ impl AdminApp {
                     .label("Gửi thông báo")
                     .on_click(cx.listener(|this, _, _, cx| {
                         let msg = this.broadcast_input.read(cx).value().to_string();
-                        let res = this.control.broadcast(&msg);
-                        this.apply_result(res, cx);
+                        if let Some(ctrl) = &this.control {
+                            let res = ctrl.broadcast(&msg);
+                            this.apply_result(res, cx);
+                        }
                     })),
             )
     }
@@ -312,6 +362,28 @@ impl AdminApp {
 impl Render for AdminApp {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let body = if let Some(err) = &self.boot_error {
+            div()
+                .flex()
+                .flex_col()
+                .flex_1()
+                .p_6()
+                .gap_3()
+                .child(Label::new("Không thể khởi động server nhúng:"))
+                .child(Label::new(err.clone()))
+                .child(Label::new(
+                    "Gợi ý: Đặt nro-server-gui.exe vào thư mục gốc Lu-Khach-Ky-Uc (cùng chỗ với server.toml và data/) và đảm bảo không có nro-server.exe khác đang chiếm cổng 14445.",
+                ))
+        } else {
+            div()
+                .flex()
+                .flex_row()
+                .flex_1()
+                .overflow_hidden()
+                .child(self.render_user_list(cx))
+                .child(self.render_inspector(cx))
+        };
+
         div()
             .flex()
             .flex_col()
@@ -320,15 +392,7 @@ impl Render for AdminApp {
             .text_color(theme.foreground)
             .child(self.render_header(cx))
             .child(self.render_broadcast_bar(cx))
-            .child(
-                div()
-                    .flex()
-                    .flex_row()
-                    .flex_1()
-                    .overflow_hidden()
-                    .child(self.render_user_list(cx))
-                    .child(self.render_inspector(cx)),
-            )
+            .child(body)
             .child(self.render_footer(cx))
     }
 }

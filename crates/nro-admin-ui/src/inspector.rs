@@ -44,8 +44,10 @@ impl AdminApp {
                     .gap_2()
                     .child(Button::new("btn-kick").label("Kick").on_click(cx.listener(
                         move |this, _, _, cx| {
-                            let res = this.control.kick_user(aid);
-                            this.apply_result(res, cx);
+                            if let Some(ctrl) = &this.control {
+                                let res = ctrl.kick_user(aid);
+                                this.apply_result(res, cx);
+                            }
                         },
                     )))
                     .child(
@@ -53,16 +55,20 @@ impl AdminApp {
                             .danger()
                             .label(if is_banned { "Unban" } else { "Ban" })
                             .on_click(cx.listener(move |this, _, _, cx| {
-                                let res = this.control.set_ban(aid, !is_banned);
-                                this.apply_result(res, cx);
+                                if let Some(ctrl) = &this.control {
+                                    let res = ctrl.set_ban(aid, !is_banned);
+                                    this.apply_result(res, cx);
+                                }
                             })),
                     )
                     .child(
                         Button::new("btn-active")
                             .label(if is_active { "Hủy TV" } else { "Kích hoạt TV" })
                             .on_click(cx.listener(move |this, _, _, cx| {
-                                let res = this.control.set_active(aid, !is_active);
-                                this.apply_result(res, cx);
+                                if let Some(ctrl) = &this.control {
+                                    let res = ctrl.set_active(aid, !is_active);
+                                    this.apply_result(res, cx);
+                                }
                             })),
                     ),
             )
@@ -76,8 +82,10 @@ impl AdminApp {
                     .on_click(cx.listener(move |this, _, _, cx| {
                         let gold = this.gold_input.read(cx).value().trim().parse::<i64>().unwrap_or(0);
                         let gem = this.gem_input.read(cx).value().trim().parse::<i32>().unwrap_or(0);
-                        let res = this.control.grant_currency(aid, gold, gem, 0);
-                        this.apply_result(res, cx);
+                        if let Some(ctrl) = &this.control {
+                            let res = ctrl.grant_currency(aid, gold, gem, 0);
+                            this.apply_result(res, cx);
+                        }
                     })),
             )
             .child(
@@ -89,8 +97,10 @@ impl AdminApp {
                     .child(Button::new("btn-add-vnd").label("Cập nhật VND").on_click(
                         cx.listener(move |this, _, _, cx| {
                             let delta = this.vnd_input.read(cx).value().trim().parse::<i64>().unwrap_or(0);
-                            let res = this.control.add_vnd(aid, delta);
-                            this.apply_result(res, cx);
+                            if let Some(ctrl) = &this.control {
+                                let res = ctrl.add_vnd(aid, delta);
+                                this.apply_result(res, cx);
+                            }
                         }),
                     )),
             )
@@ -110,8 +120,10 @@ impl AdminApp {
                     .on_click(cx.listener(move |this, _, _, cx| {
                         let tid = this.item_id_input.read(cx).value().trim().parse::<i16>().unwrap_or(-1);
                         let qty = this.item_qty_input.read(cx).value().trim().parse::<u32>().unwrap_or(1);
-                        let res = this.control.give_item(aid, tid, qty);
-                        this.apply_result(res, cx);
+                        if let Some(ctrl) = &this.control {
+                            let res = ctrl.give_item(aid, tid, qty);
+                            this.apply_result(res, cx);
+                        }
                     })),
             )
     }
