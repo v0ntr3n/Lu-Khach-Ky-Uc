@@ -155,18 +155,32 @@ pub fn pkt_update_skill(tpl: &GameTemplates) -> Packet {
 }
 
 /// `-28` subcommand `8` & `12` subcommand `0`: `ItemData.updateItem`
-/// (`0` options, `100` head frames, and either `-28` sub `8` type `1` when `<= 750` items
-/// or 24-bit extended opcode `12` sub `0` type `1` for larger item tables).
+/// (`0` dense-padded options `0..=max_opt_id`, `100` head frames, and dense-padded items
+/// `0..=max_item_id` via `-28` sub `8` type `1` when `<= 750` or 24-bit opcode `12` sub `0`).
 #[must_use]
 pub fn pkts_update_item(tpl: &GameTemplates) -> Vec<Packet> {
     let mut out = Vec::with_capacity(3);
 
+    let opt_len = tpl
+        .item_options
+        .iter()
+        .filter_map(|(id, _)| usize::try_from(*id).ok())
+        .max()
+        .map_or(0, |max_id| (max_id + 1).min(i16::MAX as usize));
+    let mut opt_names = vec![""; opt_len];
+    for (id, name) in &tpl.item_options {
+        if let Ok(idx) = usize::try_from(*id)
+            && let Some(slot) = opt_names.get_mut(idx)
+        {
+            *slot = name.as_str();
+        }
+    }
     let mut opt_w = PacketWriter::with_capacity(2_048);
     opt_w.write_i8(8);
     opt_w.write_i8(VS_ITEM);
     opt_w.write_i8(0);
-    opt_w.write_i16(tpl.item_options.len().min(i16::MAX as usize) as i16);
-    for (_, name) in tpl.item_options.iter().take(i16::MAX as usize) {
+    opt_w.write_i16(opt_names.len() as i16);
+    for name in opt_names {
         put_utf(&mut opt_w, name);
         opt_w.write_i8(0);
     }
@@ -188,22 +202,37 @@ pub fn pkts_update_item(tpl: &GameTemplates) -> Vec<Packet> {
     }
     out.push(arr_w.finish(-28));
 
-    if tpl.items.len() <= ITEM_CHUNK_CAP {
+    let item_len = tpl
+        .items
+        .iter()
+        .filter_map(|it| usize::try_from(it.id).ok())
+        .max()
+        .map_or(0, |max_id| (max_id + 1).min(i16::MAX as usize));
+    let mut dense_items: Vec<Option<&ItemTemplateRecord>> = vec![None; item_len];
+    for it in &tpl.items {
+        if let Ok(idx) = usize::try_from(it.id)
+            && let Some(slot) = dense_items.get_mut(idx)
+        {
+            *slot = Some(it);
+        }
+    }
+
+    if dense_items.len() <= ITEM_CHUNK_CAP {
         let mut p1 = PacketWriter::with_capacity(32_768);
         p1.write_i8(8);
         p1.write_i8(VS_ITEM);
         p1.write_i8(1);
-        p1.write_i16(tpl.items.len() as i16);
-        write_item_slice(&mut p1, &tpl.items);
+        p1.write_i16(dense_items.len() as i16);
+        write_dense_items(&mut p1, &dense_items);
         out.push(p1.finish(-28));
     } else {
-        let count = tpl.items.len().min(i16::MAX as usize);
+        let count = dense_items.len();
         let mut p_big = PacketWriter::with_capacity(64 + count * 64);
         p_big.write_i8(0);
         p_big.write_i8(VS_ITEM);
         p_big.write_i8(1);
         p_big.write_i16(count as i16);
-        write_item_slice(&mut p_big, &tpl.items[..count]);
+        write_dense_items(&mut p_big, &dense_items);
         out.push(p_big.finish(12));
     }
 
@@ -279,16 +308,87 @@ fn write_skill_level(pw: &mut PacketWriter, lv: &SkillLevelRecord) {
     put_utf(pw, &lv.info);
 }
 
-fn write_item_slice(pw: &mut PacketWriter, items: &[ItemTemplateRecord]) {
-    for it in items {
-        pw.write_i8(it.item_type as i8);
-        pw.write_i8(it.gender as i8);
-        put_utf(pw, &it.name);
-        put_utf(pw, it.description.as_deref().unwrap_or(""));
-        pw.write_i8(it.level as i8);
-        pw.write_i32(it.power_require);
-        pw.write_i16(it.icon_id as i16);
-        pw.write_i16(it.part as i16);
-        pw.write_bool(it.is_up_to_up);
+fn write_dense_items(pw: &mut PacketWriter, items: &[Option<&ItemTemplateRecord>]) {
+    for slot in items {
+        if let Some(it) = slot {
+            pw.write_i8(it.item_type as i8);
+            pw.write_i8(it.gender as i8);
+            put_utf(pw, &it.name);
+            put_utf(pw, it.description.as_deref().unwrap_or(""));
+            pw.write_i8(it.level as i8);
+            pw.write_i32(it.power_require);
+            pw.write_i16(it.icon_id as i16);
+            pw.write_i16(it.part as i16);
+            pw.write_bool(it.is_up_to_up);
+        } else {
+            pw.write_i8(0);
+            pw.write_i8(0);
+            put_utf(pw, "");
+            put_utf(pw, "");
+            pw.write_i8(0);
+            pw.write_i32(0);
+            pw.write_i16(0);
+            pw.write_i16(0);
+            pw.write_bool(false);
+        }
+    }
+}
+
+#[cfg(test)]
+mod dense_item_tests {
+    use super::*;
+
+    #[test]
+    fn pkts_update_item_dense_pads_sparse_options_and_items() {
+        let mut tpl = GameTemplates::default();
+        tpl.item_options = vec![(0, "Tấn công+#".to_owned()), (3, "HP+#".to_owned())];
+        tpl.items = vec![
+            ItemTemplateRecord {
+                id: 0, item_type: 0, gender: 0, name: "Áo 0".to_owned(), description: None,
+                level: 1, icon_id: 10, part: 1, is_up_to_up: false, power_require: 0,
+                gold: 0, gem: 0, head: -1, body: -1, leg: -1,
+            },
+            ItemTemplateRecord {
+                id: 4, item_type: 1, gender: 2, name: "Quần 4".to_owned(), description: Some("Desc".to_owned()),
+                level: 2, icon_id: 20, part: 2, is_up_to_up: true, power_require: 100,
+                gold: 0, gem: 0, head: -1, body: -1, leg: -1,
+            },
+        ];
+        let pkts = pkts_update_item(&tpl);
+        let mut opt_r = pkts[0].reader();
+        assert_eq!(
+            (opt_r.read_i8().expect("sub"), opt_r.read_i8().expect("ver"), opt_r.read_i8().expect("type")),
+            (8, VS_ITEM, 0)
+        );
+        assert_eq!(opt_r.read_i16().expect("opt count"), 4);
+        let opts: Vec<String> = (0..4)
+            .map(|_| {
+                let s = opt_r.read_utf().expect("opt name");
+                let _ = opt_r.read_i8().expect("opt type");
+                s
+            })
+            .collect();
+        assert_eq!(opts, vec!["Tấn công+#", "", "", "HP+#"]);
+
+        let mut it_r = pkts[2].reader();
+        assert_eq!(
+            (it_r.read_i8().expect("sub"), it_r.read_i8().expect("ver"), it_r.read_i8().expect("type")),
+            (8, VS_ITEM, 1)
+        );
+        assert_eq!(it_r.read_i16().expect("item count"), 5);
+        let mut names = Vec::new();
+        for _ in 0..5 {
+            let _ = (it_r.read_i8().expect("item type"), it_r.read_i8().expect("gender"));
+            names.push(it_r.read_utf().expect("item name"));
+            let _ = it_r.read_utf().expect("desc");
+            let _ = (
+                it_r.read_i8().expect("level"),
+                it_r.read_i32().expect("power"),
+                it_r.read_i16().expect("icon"),
+                it_r.read_i16().expect("part"),
+                it_r.read_bool().expect("up_to_up"),
+            );
+        }
+        assert_eq!(names, vec!["Áo 0", "", "", "", "Quần 4"]);
     }
 }

@@ -221,10 +221,10 @@ pub fn parse_pet(raw: &str) -> DbResult<Option<PetSnapshot>> {
         type_pet: info.0, gender: gender_from_sql(info.1)?, name: info.2, fusion_type: info.3,
         fusion_time_left_ms: info.4, status: info.5,
         stats: CoreStats {
-            limit_power: p.i32_or(0, 0) as u8, power: p.i64_or(1, 0), tiem_nang: p.i64_or(2, 0),
-            stamina: p.i32_or(3, 0) as u16, max_stamina: p.i32_or(4, 0) as u16, hpg: p.i64_or(5, 100),
+            limit_power: p.i32_or(0, 0).clamp(0, 9) as u8, power: p.i64_or(1, 0), tiem_nang: p.i64_or(2, 0),
+            stamina: p.i32_or(3, 0).clamp(0, 65_535) as u16, max_stamina: p.i32_or(4, 0).clamp(0, 65_535) as u16, hpg: p.i64_or(5, 100),
             mpg: p.i64_or(6, 100), dameg: p.i64_or(7, 10), defg: p.i32_or(8, 0),
-            critg: p.i32_or(9, 0) as u8, critdragon: 0, hp: p.i64_or(10, 100), mp: p.i64_or(11, 100),
+            critg: p.i32_or(9, 0).clamp(0, 255) as u8, critdragon: 0, hp: p.i64_or(10, 100), mp: p.i64_or(11, 100),
             ..CoreStats::default()
         },
         items_body, skills,

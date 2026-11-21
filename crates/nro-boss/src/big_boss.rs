@@ -98,7 +98,7 @@ impl BigBossState {
             return 0;
         }
         let dmg = match self.kind {
-            BigBossKind::Hirudegarn => (self.hp / 100).max(1),
+            BigBossKind::Hirudegarn => raw_damage.min((self.hp / 100).max(1)).min(self.hp),
             BigBossKind::GauTuongCuop => ((raw_damage / 20).max(1)).min(self.hp),
             _ => raw_damage.min(self.hp),
         };
@@ -190,7 +190,7 @@ impl BigBossState {
                 let offset = if i % 2 == 0 { -5 * ((i / 2) % 11) } else { 5 * (((i / 2) % 10) + 1) };
                 effects.push(EngineEffect::DropItem(GroundDrop {
                     item: ItemInstance::new(TemplateId(190), 32_000),
-                    location: Location::new(self.location.x + offset, self.location.y),
+                    location: Location { x: self.location.x.saturating_add(offset), ..self.location },
                     owner: None,
                 }));
             }
@@ -212,14 +212,14 @@ impl BigBossState {
                 self.hp = self.max_hp;
             } else {
                 self.last_action = 9;
-                self.location = Location::new(-1_000, -1_000);
+                self.location = Location { x: -1_000, y: -1_000, ..self.location };
             }
         } else if self.phase_lv == 3 {
             let respawn_ms = if parity == ParityMode::Legacy { 15_000 } else { 600_000 };
             if elapsed > respawn_ms {
                 self.phase_lv = 0;
                 self.last_action = 0;
-                self.location = Location::new(rng.next_int(100, 900) as i16, 360);
+                self.location = Location { x: rng.next_int(100, 900) as i16, y: 360, ..self.location };
                 self.hp = self.max_hp;
             }
         }
@@ -259,7 +259,7 @@ impl BigBossState {
                     self.last_action = act;
                 } else {
                     self.last_action = 10;
-                    self.location = Location::new(pick.location.x + rng.next_int(-10, 10) as i16, pick.location.y);
+                    self.location = Location { x: pick.location.x.saturating_add(rng.next_int(-10, 10) as i16), y: pick.location.y, ..self.location };
                 }
             }
             BigBossKind::VuaBachTuoc => {
@@ -293,7 +293,7 @@ impl BigBossState {
                     self.last_action = act;
                 } else {
                     self.last_action = 10;
-                    self.location = Location::new(pick.location.x + rng.next_int(-10, 10) as i16, pick.location.y);
+                    self.location = Location { x: pick.location.x.saturating_add(rng.next_int(-10, 10) as i16), y: pick.location.y, ..self.location };
                 }
             }
             BigBossKind::MayDoSucManh => {}

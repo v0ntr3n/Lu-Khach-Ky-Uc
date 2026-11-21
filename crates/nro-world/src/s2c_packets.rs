@@ -42,9 +42,21 @@ pub fn clamp_u64_to_wire_i64(val: u64) -> i64 {
     i64::try_from(val).unwrap_or(i64::MAX)
 }
 
+const MAX_SAFE_UTF_BYTES: usize = 16_000;
+
 #[inline]
 fn pid_i32(id: PlayerId) -> i32 {
-    i64::from(id.0) as i32
+    i32::try_from(id.0).unwrap_or(if id.0 < 0 { i32::MIN } else { i32::MAX })
+}
+
+fn write_utf_lossy(w: &mut PacketWriter, s: &str) {
+    let mut end = s.len().min(MAX_SAFE_UTF_BYTES);
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    if w.write_utf(&s[..end]).is_err() {
+        let _ = w.write_utf("");
+    }
 }
 
 fn build_pkt(cmd: i8, cap: usize, f: impl FnOnce(&mut PacketWriter)) -> Packet {

@@ -247,7 +247,7 @@ fn push_minis_arenas_dungeons_events(out: &mut Vec<BossDefinition>, mut bt: u16)
     out.push(def_one(bt, -365, "Ăn trộm", [201, 202, 203], 1, 100, 600, &[0, 7, 14], ManagerGroup::WorldBoss, BossFlags::ZONE_ZERO_ONLY, DamageRule::FixedHit { fixed: 1, counter_blind: true }, BossArchetype::ThiefAnTrom { stolen_gold: 0 }, BossLootProfile::MiniBoss { variant: 1 }));
     out.push(def_one(bt + 1, -799, "Mặt Trời", [600, 601, 602], 1, 100, 600, &[5, 13, 20], ManagerGroup::WorldBoss, BossFlags::empty(), DamageRule::FixedHit { fixed: 1, counter_blind: false }, BossArchetype::MiniHazard { variant: 0 }, BossLootProfile::MiniBoss { variant: 0 }));
     out.push(def_one(bt + 2, -79, "Virut", [603, 604, 605], 1, 100, 600, &[5, 13, 20], ManagerGroup::WorldBoss, BossFlags::empty(), DamageRule::FixedHit { fixed: 1, counter_blind: false }, BossArchetype::MiniHazard { variant: 1 }, BossLootProfile::MiniBoss { variant: 1 }));
-    out.push(def_one(bt + 3, -78, "Ở Dơ", [400, 401, 402], 1, 500_000, 600_000, &[5, 13, 20], ManagerGroup::WorldBoss, BossFlags::empty(), DamageRule::FixedHit { fixed: 50_000, counter_blind: false }, BossArchetype::MiniHazard { variant: 2 }, BossLootProfile::MiniBoss { variant: 1 }));
+    out.push(def_one(bt + 3, -78, "Ở Dơ", [400, 401, 402], 1, 500_000, 600, &[5, 13, 20], ManagerGroup::WorldBoss, BossFlags::empty(), DamageRule::FixedHit { fixed: 50_000, counter_blind: false }, BossArchetype::MiniHazard { variant: 2 }, BossLootProfile::MiniBoss { variant: 1 }));
     out.push(def_one(bt + 4, -77, "Sói Hẹc Quyn", [394, 395, 396], 500, 10_000, 600, &[5, 13, 20], ManagerGroup::WorldBoss, BossFlags::empty(), DamageRule::Invulnerable, BossArchetype::Standard, BossLootProfile::MiniBoss { variant: 1 }));
     out.push(def_one(bt + 5, -386998, "Rồng Nhí", [1662, 1663, 1664], 1, 50_000_000, 60, &[1, 2, 3], ManagerGroup::WorldBoss, BossFlags::empty(), DamageRule::Standard, BossArchetype::Standard, BossLootProfile::MiniBoss { variant: 2 }));
     bt += 6;
@@ -259,7 +259,7 @@ fn push_minis_arenas_dungeons_events(out: &mut Vec<BossDefinition>, mut bt: u16)
         (-85, "Jacky Chun", 25_000_000), (-86, "Thiên Xin Hăng", 75_000_000), (-88, "Thiên Xin Hăng Clone", 20_000_000),
         (-87, "Liu Liu", 150_000_000), (-92, "PôCôLô", 100_000_000),
     ] {
-        out.push(def_one(bt, lid, name, [356, 357, 358], 20_000, hp, 5, &[168], ManagerGroup::OtherInstanced, BossFlags::IMMORTAL_MP | BossFlags::DISPOSE_ON_LEAVE, DamageRule::Standard, BossArchetype::DhvtArena { is_chan_xu: lid == -82, spawns_clones: lid == -86 }, BossLootProfile::None));
+        out.push(def_one(bt, lid, name, [356, 357, 358], 20_000, hp, 5, &[168], ManagerGroup::OtherInstanced, BossFlags::IMMORTAL_MP | BossFlags::DISPOSE_ON_LEAVE, DamageRule::Standard, BossArchetype::DhvtArena { is_chan_xu: lid == -82, spawns_clones: lid == -86, clone_lifespan_ms: (lid == -88).then_some(10_000) }, BossLootProfile::None));
         bt += 1;
     }
     for (idx, (lid, name)) in [(-93, "Đracula"), (-94, "Người Vô Hình"), (-95, "Bông Băng"), (-96, "Vua Quỷ Sa Tăng"), (-97, "Thỏ Đầu Bạc")].into_iter().enumerate() {

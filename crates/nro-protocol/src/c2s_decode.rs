@@ -24,7 +24,9 @@ impl ClientPacket {
             -111 => {
                 if let Ok(n) = r.read_i16() {
                     for _ in 0..n.max(0) {
-                        let _ = r.read_utf();
+                        if r.read_utf().is_err() {
+                            break;
+                        }
                     }
                 }
                 Self::GetImageSource2
@@ -66,7 +68,7 @@ impl ClientPacket {
             -67 => Self::RequestIcon(r.read_i32()?),
             -66 => Self::GetEffData(TemplateId(r.read_i16()?)),
             -63 => Self::GetBagEffect(r.read_i16()?),
-            -62 => Self::ClanImageChoose(r.read_i8()?),
+            -62 => Self::ClanImageChoose(r.read_u8()?),
             -60 => decode_attack_players(r)?,
             -59 => Self::PvpChallenge(r.read_i8()?, r.read_i8()?, PlayerId::from(r.read_i32()?)),
             -57 => Self::ClanInvite(match r.read_i8()? {
@@ -177,20 +179,19 @@ impl ReadUtfHelper for PacketReader<'_> {
     }
 }
 
+const MAX_ATTACK_TARGETS: usize = 32;
+
 fn decode_attack_mobs(r: &mut PacketReader<'_>) -> Result<ClientPacket, ProtocolError> {
     let mut mobs = Vec::new();
     let mut mob_mes = Vec::new();
-    while r.remaining() > 1 {
+    while r.remaining() > 1 && mobs.len() + mob_mes.len() < MAX_ATTACK_TARGETS {
         let m = r.read_i8()?;
         if m == -1 {
+            if r.remaining() < 5 {
+                break;
+            }
             mob_mes.push(PlayerId::from(r.read_i32()?));
         } else {
-            mobs.push(m);
-        }
-    }
-    if mobs.is_empty() && mob_mes.is_empty() && r.remaining() == 1 {
-        let m = r.read_i8()?;
-        if m != -1 {
             mobs.push(m);
         }
     }
@@ -199,7 +200,7 @@ fn decode_attack_mobs(r: &mut PacketReader<'_>) -> Result<ClientPacket, Protocol
 
 fn decode_attack_players(r: &mut PacketReader<'_>) -> Result<ClientPacket, ProtocolError> {
     let mut players = Vec::new();
-    while r.remaining() >= 4 {
+    while r.remaining() >= 4 && players.len() < MAX_ATTACK_TARGETS {
         players.push(PlayerId::from(r.read_i32()?));
     }
     Ok(ClientPacket::AttackPlayers(players))
@@ -207,12 +208,15 @@ fn decode_attack_players(r: &mut PacketReader<'_>) -> Result<ClientPacket, Proto
 
 fn decode_attack_multi(r: &mut PacketReader<'_>) -> Result<ClientPacket, ProtocolError> {
     let mob_count = usize::try_from(r.read_i8()?).unwrap_or(0);
-    let mut mobs = Vec::with_capacity(mob_count.min(32));
+    let mut mobs = Vec::with_capacity(mob_count.min(MAX_ATTACK_TARGETS));
     for _ in 0..mob_count {
-        mobs.push(r.read_i8()?);
+        let m = r.read_i8()?;
+        if mobs.len() < MAX_ATTACK_TARGETS {
+            mobs.push(m);
+        }
     }
     let mut players = Vec::new();
-    while r.remaining() >= 4 {
+    while r.remaining() >= 4 && players.len() < MAX_ATTACK_TARGETS {
         players.push(PlayerId::from(r.read_i32()?));
     }
     Ok(ClientPacket::AttackMulti(mobs, players))
@@ -275,4 +279,49 @@ fn decode_not_login(r: &mut PacketReader<'_>) -> Result<ClientPacket, ProtocolEr
         }
         s => ClientPacket::NotLoginUnknown(s),
     })
+}
+
+#[cfg(test)]
+mod clan_image_tests {
+    use super::*;
+    use crate::frame::PacketWriter;
+
+    #[test]
+    fn decodes_unsigned_clan_image_flag_id_above_127() {
+        let mut pw = PacketWriter::new();
+        pw.write_u8(200);
+        let pkt = pw.finish(-62);
+        assert_eq!(
+            ClientPacket::decode(pkt.cmd, &mut pkt.reader(), 231).expect("-62"),
+            ClientPacket::ClanImageChoose(200)
+        );
+    }
+
+    #[test]
+    fn attack_decoders_keep_final_mob_and_cap_targets() {
+        let mut pw = PacketWriter::new();
+        pw.write_i8(1);
+        pw.write_i8(2);
+        pw.write_i8(3);
+        pw.write_i8(1);
+        let pkt = pw.finish(54);
+        assert_eq!(
+            ClientPacket::decode(pkt.cmd, &mut pkt.reader(), 231).expect("54"),
+            ClientPacket::AttackMobs(vec![1, 2, 3], vec![])
+        );
+
+        let mut pw_cap = PacketWriter::new();
+        for i in 0..50_i8 {
+            pw_cap.write_i8(i);
+        }
+        pw_cap.write_i8(1);
+        let pkt_cap = pw_cap.finish(54);
+        if let ClientPacket::AttackMobs(mobs, _) =
+            ClientPacket::decode(pkt_cap.cmd, &mut pkt_cap.reader(), 231).expect("54 cap")
+        {
+            assert_eq!(mobs.len(), MAX_ATTACK_TARGETS);
+        } else {
+            panic!("expected AttackMobs");
+        }
+    }
 }

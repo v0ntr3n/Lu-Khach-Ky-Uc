@@ -104,10 +104,19 @@ impl LeaderboardCache {
     }
 }
 
+const ACCOUNT_CREATION_WINDOW: Duration = Duration::from_secs(60);
+const MAX_ACCOUNT_CREATIONS_PER_WINDOW: usize = 5;
+const ASSET_BURST_WINDOW: Duration = Duration::from_secs(10);
+const MAX_ASSET_BURST_PER_WINDOW: usize = 30;
+const MAX_ASSET_BURST_TRACKED_IPS: usize = 4_096;
+const MAX_TRACKED_IPS: usize = 16_384;
+
 /// Per-IP connection counter and login cooldown guard replacing `ServerManager.CLIENTS`.
 #[derive(Debug)]
 pub struct IpRateLimiter {
     buckets: DashMap<IpAddr, (usize, Option<Instant>)>,
+    account_creations: DashMap<IpAddr, Vec<Instant>>,
+    asset_bursts: DashMap<IpAddr, (Instant, u16)>,
     max_per_ip: usize,
     login_cooldown: Duration,
 }
@@ -118,6 +127,8 @@ impl IpRateLimiter {
     pub fn new(max_per_ip: usize, login_cooldown_ms: u64) -> Arc<Self> {
         Arc::new(Self {
             buckets: DashMap::new(),
+            account_creations: DashMap::new(),
+            asset_bursts: DashMap::new(),
             max_per_ip,
             login_cooldown: Duration::from_millis(login_cooldown_ms),
         })
@@ -125,6 +136,12 @@ impl IpRateLimiter {
 
     /// Increments the active connection count for `ip`, returning `false` if capped.
     pub fn try_acquire(&self, ip: IpAddr) -> bool {
+        if self.buckets.len() >= MAX_TRACKED_IPS && !self.buckets.contains_key(&ip) {
+            self.prune_idle();
+            if self.buckets.len() >= MAX_TRACKED_IPS {
+                return false;
+            }
+        }
         let mut entry = self.buckets.entry(ip).or_insert((0, None));
         if entry.0 >= self.max_per_ip {
             return false;
@@ -154,6 +171,12 @@ impl IpRateLimiter {
         if ip.is_loopback() {
             return Ok(());
         }
+        if self.buckets.len() >= MAX_TRACKED_IPS && !self.buckets.contains_key(&ip) {
+            self.prune_idle();
+            if self.buckets.len() >= MAX_TRACKED_IPS {
+                return Err(Duration::from_secs(1));
+            }
+        }
         let now = Instant::now();
         let mut entry = self.buckets.entry(ip).or_insert((0, None));
         if let Some(prev) = entry.1 {
@@ -166,12 +189,58 @@ impl IpRateLimiter {
         Ok(())
     }
 
-    /// Clears the login burst cooldown for `ip` so a protocol-required follow-up `LOGIN`
-    /// immediately after `LOGIN2` (guest) or `REGISTER` succeeds without self-throttling.
+    /// Enforces per-IP account/guest creation quota (5 per 60s; never cleared by `clear_login_cooldown`).
+    pub fn check_account_creation_limit(&self, ip: IpAddr) -> Result<(), Duration> {
+        if ip.is_loopback() {
+            return Ok(());
+        }
+        if self.account_creations.len() >= MAX_TRACKED_IPS && !self.account_creations.contains_key(&ip) {
+            self.prune_idle();
+            if self.account_creations.len() >= MAX_TRACKED_IPS {
+                return Err(Duration::from_secs(1));
+            }
+        }
+        let now = Instant::now();
+        let mut entry = self.account_creations.entry(ip).or_default();
+        entry.retain(|&ts| now.saturating_duration_since(ts) < ACCOUNT_CREATION_WINDOW);
+        if entry.len() >= MAX_ACCOUNT_CREATIONS_PER_WINDOW {
+            let wait = ACCOUNT_CREATION_WINDOW.saturating_sub(now.saturating_duration_since(entry[0]));
+            return Err(wait.max(Duration::from_secs(1)));
+        }
+        entry.push(now);
+        Ok(())
+    }
+
+    /// Clears the login burst cooldown for `ip` (superseded by per-session bypass on `SessionHandle`).
+    #[allow(dead_code)]
     pub fn clear_login_cooldown(&self, ip: IpAddr) {
         if let Some(mut entry) = self.buckets.get_mut(&ip) {
             entry.1 = None;
         }
+    }
+
+    /// Enforces a bounded per-IP bulk/asset request burst limit (max 30 requests / 10s, loopback exempt).
+    pub fn check_asset_burst(&self, ip: IpAddr) -> bool {
+        if ip.is_loopback() {
+            return true;
+        }
+        let now = Instant::now();
+        if self.asset_bursts.len() >= MAX_ASSET_BURST_TRACKED_IPS && !self.asset_bursts.contains_key(&ip) {
+            self.asset_bursts.retain(|_, (start, _)| now.saturating_duration_since(*start) < ASSET_BURST_WINDOW);
+            if self.asset_bursts.len() >= MAX_ASSET_BURST_TRACKED_IPS {
+                return false;
+            }
+        }
+        let mut entry = self.asset_bursts.entry(ip).or_insert((now, 0));
+        if now.saturating_duration_since(entry.0) >= ASSET_BURST_WINDOW {
+            *entry = (now, 1);
+            return true;
+        }
+        if usize::from(entry.1) >= MAX_ASSET_BURST_PER_WINDOW {
+            return false;
+        }
+        entry.1 = entry.1.saturating_add(1);
+        true
     }
 
     /// Prunes idle per-IP buckets whose connection count is zero and login cooldown has elapsed.
@@ -181,6 +250,11 @@ impl IpRateLimiter {
             *count > 0
                 || last.is_some_and(|prev| now.saturating_duration_since(prev) < self.login_cooldown)
         });
+        self.account_creations.retain(|_, timestamps| {
+            timestamps.retain(|&ts| now.saturating_duration_since(ts) < ACCOUNT_CREATION_WINDOW);
+            !timestamps.is_empty()
+        });
+        self.asset_bursts.retain(|_, (start, _)| now.saturating_duration_since(*start) < ASSET_BURST_WINDOW);
     }
 }
 

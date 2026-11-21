@@ -229,6 +229,9 @@ pub fn parse_lenient_json_vec<T: DeserializeOwned>(column: &'static str, raw: &s
     if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("null") {
         return Ok(Vec::new());
     }
+    if let Ok(parsed) = serde_json::from_str::<Vec<T>>(trimmed) {
+        return Ok(parsed);
+    }
     let normalized = trimmed.replace(",]", "]").replace(", ]", "]");
     serde_json::from_str::<Vec<T>>(&normalized).map_err(|source| DbError::JsonColumn { column, source })
 }
@@ -255,7 +258,15 @@ impl PositionalArray {
     #[must_use]
     pub fn i64_or(&self, idx: usize, default: i64) -> i64 {
         match self.0.get(idx) {
-            Some(serde_json::Value::Number(n)) => n.as_i64().unwrap_or(default),
+            Some(serde_json::Value::Number(n)) => n
+                .as_i64()
+                .or_else(|| n.as_u64().map(|u| u.min(i64::MAX as u64) as i64))
+                .or_else(|| {
+                    n.as_f64()
+                        .filter(|f| f.is_finite())
+                        .map(|f| f.clamp(i64::MIN as f64, i64::MAX as f64) as i64)
+                })
+                .unwrap_or(default),
             Some(serde_json::Value::String(s)) => s.trim().parse().unwrap_or(default),
             _ => default,
         }
@@ -263,7 +274,7 @@ impl PositionalArray {
 
     #[must_use]
     pub fn i32_or(&self, idx: usize, default: i32) -> i32 {
-        self.i64_or(idx, i64::from(default)) as i32
+        self.i64_or(idx, i64::from(default)).clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
     }
 
     #[must_use]

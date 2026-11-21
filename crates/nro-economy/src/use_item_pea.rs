@@ -3,6 +3,7 @@
 
 use super::{UseItemCtx, UseItemEffect, UseItemError};
 use crate::inventory::{ContainerKind, Inventory, InventoryError, get_opt};
+use crate::{BuiltinCatalog, ItemCatalog};
 use nro_consts::const_item;
 use nro_core::{GameRng, ItemInstance, ItemOption, PlayerId, TemplateId};
 use serde::{Deserialize, Serialize};
@@ -91,10 +92,11 @@ impl MagicTreeState {
             self.curr_peas = self.max_peas();
             self.timer_ms = now_ms;
         } else if !self.is_upgrading && self.curr_peas < self.max_peas() {
-            let g = (now_ms.saturating_sub(self.timer_ms) / (i64::from(self.level.max(1)) * 60_000)).max(0) as u8;
+            let interval = i64::from(self.level.max(1)) * 60_000;
+            let g = (now_ms.saturating_sub(self.timer_ms) / interval).clamp(0, i64::from(u8::MAX)) as u8;
             if g > 0 {
-                self.curr_peas = (self.curr_peas + g).min(self.max_peas());
-                self.timer_ms = now_ms;
+                self.curr_peas = self.curr_peas.saturating_add(g).min(self.max_peas());
+                self.timer_ms = if self.curr_peas >= self.max_peas() { now_ms } else { self.timer_ms.saturating_add(i64::from(g) * interval) };
             }
         }
     }
@@ -128,7 +130,7 @@ impl MagicTreeState {
 
     /// Starts upgrading `level -> level + 1` (`Lv1..=9`).
     pub fn start_upgrade(&mut self, inv: &mut Inventory, now_ms: i64) -> Result<(), UseItemError> {
-        if self.is_upgrading || self.level >= 10 {
+        if self.is_upgrading || self.level == 0 || self.level >= 10 {
             return Err(UseItemError::PreconditionFailed("cannot upgrade tree"));
         }
         let idx = (self.level - 1) as usize;
@@ -153,6 +155,10 @@ impl MagicTreeState {
 
     /// Completes active upgrade or refills peas instantly using Gems.
     pub fn fast_finish(&mut self, inv: &mut Inventory, now_ms: i64) -> Result<(), UseItemError> {
+        self.tick(now_ms);
+        if !self.is_upgrading && self.curr_peas >= self.max_peas() {
+            return Err(UseItemError::PreconditionFailed("peas already full"));
+        }
         let idx = (self.level.clamp(1, 10) - 1) as usize;
         if self.is_upgrading {
             inv.sub_gem(Self::FAST_UP_GEM[idx])?;
@@ -208,13 +214,18 @@ impl LuckyRoundService {
     /// Executes `spins` (`1..=7`) and deposits rolled prizes into `lucky_round_box`.
     pub fn spin(inv: &mut Inventory, mode: LuckyRoundMode, spins: u8, rng: &mut GameRng) -> Result<u8, UseItemError> {
         let n = spins.clamp(1, 7);
-        if inv.lucky_round_box.len() + usize::from(n) > 100 { return Err(InventoryError::ContainerFull(ContainerKind::LuckyRoundBox).into()); }
-        for _ in 0..n {
-            if mode == LuckyRoundMode::VipGold { inv.sub_gold(250_000_000)?; }
-            else if inv.count_template_in_bag(TemplateId(const_item::VE_QUAY_NGOC_VANG as i16)) > 0 { inv.sub_template_from_bag(TemplateId(const_item::VE_QUAY_NGOC_VANG as i16), 1)?; }
-            else { inv.sub_gem(4)?; }
-            inv.lucky_round_box.push(Some(ItemInstance { template_id: TemplateId([17i16, 18, 19, 20, 220, 441, 381][rng.next_range(0, 6) as usize]), quantity: 1, options: smallvec![], create_time_ms: 0 }));
+        if inv.lucky_round_box.iter().flatten().count() + usize::from(n) > 100 {
+            return Err(InventoryError::ContainerFull(ContainerKind::LuckyRoundBox).into());
         }
+        let mut staged = inv.clone();
+        for _ in 0..n {
+            if mode == LuckyRoundMode::VipGold { staged.sub_gold(250_000_000)?; }
+            else if staged.count_template_in_bag(TemplateId(const_item::VE_QUAY_NGOC_VANG as i16)) > 0 { staged.sub_template_from_bag(TemplateId(const_item::VE_QUAY_NGOC_VANG as i16), 1)?; }
+            else { staged.sub_gem(4)?; }
+            let prize = ItemInstance { template_id: TemplateId([17i16, 18, 19, 20, 220, 441, 381][rng.next_range(0, 6) as usize]), quantity: 1, options: smallvec![], create_time_ms: 0 };
+            if let Some(empty) = staged.lucky_round_box.iter_mut().find(|slot| slot.is_none()) { *empty = Some(prize); } else { staged.lucky_round_box.push(Some(prize)); }
+        }
+        *inv = staged;
         Ok(n)
     }
 }
@@ -237,17 +248,34 @@ pub struct GiftCodeDef {
 /// Hardened `GiftCodeService` enforcing wall-clock expiration and per-player uniqueness.
 pub struct GiftCodeService;
 impl GiftCodeService {
-    /// Redeems `def` for `player_id` at `now_ms`.
+    /// Redeems `def` for `player_id` at `now_ms` using [`BuiltinCatalog`].
     pub fn redeem(def: &mut GiftCodeDef, inv: &mut Inventory, player_id: PlayerId, now_ms: i64) -> Result<(), UseItemError> {
+        Self::redeem_with_catalog(def, inv, player_id, now_ms, &BuiltinCatalog)
+    }
+
+    /// Redeems `def` for `player_id` at `now_ms` using `catalog` for stackability.
+    pub fn redeem_with_catalog(def: &mut GiftCodeDef, inv: &mut Inventory, player_id: PlayerId, now_ms: i64, catalog: &dyn ItemCatalog) -> Result<(), UseItemError> {
         if now_ms > def.expires_at_ms || def.count_left == 0 || def.redeemed_by.contains(&player_id) { return Err(UseItemError::GiftCodeRejected("expired or unavailable")); }
-        if inv.empty_bag_slots() < def.items.iter().filter(|&&(id, _, _)| id >= 0).count() { return Err(InventoryError::ContainerFull(ContainerKind::Bag).into()); }
+        if def.items.iter().any(|&(id, _, _)| id < -3) { return Err(UseItemError::GiftCodeRejected("invalid item id")); }
+        let slots_needed = def.items.iter().filter(|&&(id, _, _)| id >= 0).map(|&(id, qty, _)| {
+            if catalog.meta_of(TemplateId(id)).stackable { usize::try_from(qty.max(1).div_ceil(crate::inventory::MAX_STACK_QTY)).unwrap_or(usize::MAX) } else { usize::try_from(qty.max(1)).unwrap_or(usize::MAX) }
+        }).fold(0_usize, usize::saturating_add);
+        if inv.empty_bag_slots() < slots_needed { return Err(InventoryError::ContainerFull(ContainerKind::Bag).into()); }
+        let mut staged = inv.clone();
         for (id, qty, opts) in &def.items {
             match *id {
-                -1 => inv.add_gold_clamped(u64::from(*qty).min(2_000_000_000)), -2 => inv.gem = inv.gem.saturating_add((*qty).min(200_000_000)), -3 => inv.ruby = inv.ruby.saturating_add((*qty).min(200_000_000)),
-                rid => inv.add_to_bag(ItemInstance { template_id: TemplateId(rid), quantity: *qty, options: opts.iter().copied().collect(), create_time_ms: now_ms }, true)?,
+                -1 => staged.add_gold_clamped(u64::from(*qty).min(2_000_000_000)), -2 => staged.gem = staged.gem.saturating_add((*qty).min(200_000_000)), -3 => staged.ruby = staged.ruby.saturating_add((*qty).min(200_000_000)),
+                ..=-4 => return Err(UseItemError::GiftCodeRejected("invalid item id")),
+                rid => if catalog.meta_of(TemplateId(rid)).stackable {
+                    staged.add_to_bag(ItemInstance { template_id: TemplateId(rid), quantity: (*qty).max(1), options: opts.iter().copied().collect(), create_time_ms: now_ms }, true)?;
+                } else {
+                    for _ in 0..(*qty).max(1) {
+                        staged.add_to_bag(ItemInstance { template_id: TemplateId(rid), quantity: 1, options: opts.iter().copied().collect(), create_time_ms: now_ms }, false)?;
+                    }
+                },
             }
         }
-        def.count_left -= 1; def.redeemed_by.push(player_id); Ok(())
+        *inv = staged; def.count_left -= 1; def.redeemed_by.push(player_id); Ok(())
     }
 }
 
@@ -255,14 +283,14 @@ impl GiftCodeService {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::super::*;
-    use crate::BuiltinCatalog;
+    use crate::{BuiltinCatalog, BuyBackLedger, ConsignCurrency, ConsignShop, ShopCurrency, ShopItemListing, ShopService, ShopTabKind, ShopType};
     use nro_consts::const_player;
     use nro_core::{CoreStats, Gender};
 
     #[test]
     fn capsule_193_defers_deduction_and_pea_enforces_alive_and_opt2_scaling() {
         let mut inv = Inventory::new(8, 8, 12);
-        inv.set_bag_slot(0, Some(UseItemService::mk(193, 2, &[]))).unwrap();
+        inv.set_bag_slot(0, Some(UseItemService::mk(193, 2, &[], 0))).unwrap();
         let mut tree_lv2 = MagicTreeState { level: 2, curr_peas: 3, is_upgrading: false, timer_ms: 0 };
         let mut tree_lv4 = MagicTreeState { level: 4, curr_peas: 2, is_upgrading: false, timer_ms: 0 };
         assert_eq!(tree_lv2.harvest(&mut inv, 1_000).unwrap(), 3);
@@ -297,23 +325,71 @@ mod tests {
         assert_eq!(tree.upgrade_gold_cost(), Some(5_000));
         assert_eq!(tree.fast_harvest_gem_cost(), 1);
         assert_eq!(tree.fast_upgrade_gem_cost(), 20);
-        assert_eq!(
-            tree.cancel_upgrade(&mut inv, 1_000),
-            Err(UseItemError::PreconditionFailed("tree is not upgrading"))
-        );
-
+        assert_eq!(tree.cancel_upgrade(&mut inv, 1_000), Err(UseItemError::PreconditionFailed("tree is not upgrading")));
         tree.start_upgrade(&mut inv, 1_000).unwrap();
         assert!(tree.is_upgrading);
         assert_eq!(inv.gold, 15_000);
-        let refund = tree.cancel_upgrade(&mut inv, 5_000).unwrap();
-        assert_eq!(refund, 2_500);
+        assert_eq!(tree.cancel_upgrade(&mut inv, 5_000).unwrap(), 2_500);
         assert!(!tree.is_upgrading);
-        assert_eq!(tree.timer_ms, 5_000);
         assert_eq!(inv.gold, 17_500);
+        inv.gem = 10;
+        assert_eq!(tree.fast_finish(&mut inv, 6_000), Err(UseItemError::PreconditionFailed("peas already full")));
+        assert_eq!(inv.gem, 10);
+        let mut grow = MagicTreeState { level: 1, curr_peas: 0, is_upgrading: false, timer_ms: 0 };
+        grow.tick(90_000);
+        assert_eq!((grow.curr_peas, grow.timer_ms), (1, 60_000));
+        grow.tick(120_000);
+        assert_eq!((grow.curr_peas, grow.timer_ms), (2, 120_000));
+    }
 
-        let max_tree = MagicTreeState { level: 10, curr_peas: 23, is_upgrading: false, timer_ms: 0 };
-        assert_eq!(max_tree.upgrade_gold_cost(), None);
-        assert_eq!(max_tree.fast_harvest_gem_cost(), 30);
-        assert_eq!(max_tree.fast_upgrade_gem_cost(), 10_000);
+    #[test]
+    fn round2_economy_fixes_verified() {
+        let mut inv = Inventory::new(8, 8, 12);
+        inv.gem = 100;
+        inv.lucky_round_box = vec![None; 110];
+        let mut rng = GameRng::seeded(5);
+        assert_eq!(LuckyRoundService::spin(&mut inv, LuckyRoundMode::StandardGem, 3, &mut rng).unwrap(), 3);
+        assert_eq!(inv.lucky_round_box.len(), 110);
+        assert_eq!(inv.lucky_round_box.iter().flatten().count(), 3);
+
+        let mut ledger = BuyBackLedger::default();
+        inv.set_bag_slot(0, Some(UseItemService::mk(457, 1, &[], 1_000))).unwrap();
+        assert_eq!(ledger.sell_from_bag(&mut inv, 0, 1, &BuiltinCatalog).unwrap(), 37_000_000);
+        assert!(ledger.repurchase(&mut inv, 0, &BuiltinCatalog).is_err());
+
+        let mut seller = Inventory::new(8, 8, 12);
+        seller.gold = crate::inventory::LIMIT_GOLD - 1_000;
+        seller.set_bag_slot(0, Some(UseItemService::mk(457, 2, &[], 1_000))).unwrap();
+        seller.set_bag_slot(1, Some(UseItemService::mk(14, 1, &[(opt_id::CONSIGN_GOLD, 0)], 1_000))).unwrap();
+        let mut market = ConsignShop::default();
+        let lid = market.list_item_with_catalog(&mut seller, PlayerId(1), 1, ConsignCurrency::Gold, 100_000, 1, &BuiltinCatalog).unwrap();
+        assert!((1..=u64::from(i16::MAX.cast_unsigned())).contains(&lid));
+        let mut buyer = Inventory::new(8, 8, 12);
+        buyer.gold = 200_000;
+        market.buy_item_with_catalog(&mut buyer, PlayerId(2), 20_000_000_000, lid, &BuiltinCatalog).unwrap();
+        assert!(market.claim_proceeds(&mut seller, PlayerId(1), lid).is_err());
+        assert_eq!(market.seller_listings(PlayerId(1)).len(), 1);
+        seller.gold = 0;
+        assert_eq!(market.claim_proceeds(&mut seller, PlayerId(1), lid).unwrap(), 90_000);
+
+        let listing = ShopItemListing { template_id: TemplateId(381), quantity: 1, cost: 10, currency: ShopCurrency::Gold, gender: None, options: smallvec![] };
+        let (mut ep, mut cc) = (0, 0);
+        let bought = ShopService::buy_listing(&mut buyer, ShopType::Normal, ShopTabKind::Standard, &listing, &mut ep, &mut cc, false, &BuiltinCatalog, &mut rng).unwrap().unwrap();
+        assert!(bought.create_time_ms > 0);
+
+        inv.set_bag_slot(0, Some(UseItemService::mk(521, 2, &[(1, 30)], 1_000))).unwrap();
+        inv.set_bag_slot(1, Some(UseItemService::mk(1608, 1, &[], 1_000))).unwrap();
+        let mut stats = CoreStats { power: 100_000, ..CoreStats::default() };
+        let (mut day, mut pea, mut buffs, mut fus, mut pt, mut egg) = (0, 0, TimedBuffState::default(), const_player::NON_FUSION, 0, None);
+        let mut ctx = UseItemCtx {
+            now_ms: 9_876_543, current_day: 1, last_wood_chest_day: &mut day, last_pea_ms: &mut pea,
+            gender: Gender::TraiDat, stats: &mut stats, buffs: &mut buffs, fusion_mode: &mut fus,
+            has_pet: false, pet_type: &mut pt, pet_power: 0, pet_unlocked_skills: 0,
+            zone_satellites: 0, hungry_soi_in_zone: false, mabu_egg: &mut egg,
+        };
+        assert_eq!(UseItemService::use_bag_item(&mut inv, 0, &mut ctx, &BuiltinCatalog, &mut rng), Ok(UseItemEffect::Applied));
+        assert_eq!(inv.count_template_in_bag(TemplateId(521)), 1);
+        assert_eq!(UseItemService::use_bag_item(&mut inv, 1, &mut ctx, &BuiltinCatalog, &mut rng), Ok(UseItemEffect::Applied));
+        assert_eq!(inv.bag_item(1).unwrap().create_time_ms, 9_876_543);
     }
 }

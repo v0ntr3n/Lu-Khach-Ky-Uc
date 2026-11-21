@@ -5,8 +5,8 @@ use nro_core::{CoreStats, ItemInstance, ItemOption, Location, ParityMode, Player
 use nro_protocol::{Packet, PacketError, PacketWriter};
 
 use super::{
-    GroundItemWire, build_pkt, build_pkt_res, clamp_u64_to_wire_i32, clamp_u64_to_wire_i64,
-    pid_i32, put_ground,
+    GroundItemWire, MAX_SAFE_UTF_BYTES, build_pkt, build_pkt_res, clamp_u64_to_wire_i32,
+    clamp_u64_to_wire_i64, pid_i32, put_ground, write_utf_lossy,
 };
 
 /// Builds opcode `-42` (`ME_LOAD_POINT` / `Service.point`) matching v2.5.0 `Controller.cs:1710-1732`.
@@ -20,17 +20,17 @@ pub fn me_load_point(stats: &CoreStats) -> Packet {
         w.write_i64(stats.mp_max.max(0));
         w.write_i64(stats.hp.max(0));
         w.write_i64(stats.mp.max(0));
-        w.write_i8(stats.speed as i8);
+        w.write_i8(stats.speed.min(i8::MAX as u8) as i8);
         w.write_i8(20);
         w.write_i8(20);
         w.write_i8(1);
         w.write_i64(stats.dame.max(0));
         w.write_i64(i64::from(stats.def.max(0)));
-        w.write_i8(stats.crit as i8);
+        w.write_i8(stats.crit.min(i8::MAX as u8) as i8);
         w.write_i64(stats.tiem_nang.max(0));
         w.write_i16(100);
         w.write_i32(stats.defg.max(0));
-        w.write_i8(stats.critg as i8);
+        w.write_i8(stats.critg.min(i8::MAX as u8) as i8);
         w.write_i8(0);
         w.write_i16(0);
     })
@@ -231,10 +231,10 @@ pub fn change_on_skill(shortcuts: &[i8]) -> Packet {
 /// Builds opcode `1` (`REGISTER`) account registration response.
 #[must_use]
 pub fn register_result(ok: bool, msg: &str) -> Packet {
-    build_pkt(cmd_message::REGISTER, 3 + msg.len(), |w| {
+    build_pkt(cmd_message::REGISTER, 3 + msg.len().min(MAX_SAFE_UTF_BYTES), |w| {
         w.write_bool(ok);
         if !ok {
-            let _ = w.write_utf(msg);
+            write_utf_lossy(w, msg);
         }
     })
 }
@@ -308,10 +308,11 @@ pub fn npc_live(mob_id: u8, sys: i8, level_boss: i8, hp: i64) -> Packet {
 /// Builds opcode `-81` (`COMBINNE`, sub `0`) open item combine UI packet.
 #[must_use]
 pub fn combine_open(info: &str, top_info: &str) -> Packet {
-    build_pkt(cmd_message::COMBINNE, 5 + info.len() + top_info.len(), |w| {
+    let cap = 5 + info.len().min(MAX_SAFE_UTF_BYTES) + top_info.len().min(MAX_SAFE_UTF_BYTES);
+    build_pkt(cmd_message::COMBINNE, cap, |w| {
         w.write_i8(0);
-        let _ = w.write_utf(info);
-        let _ = w.write_utf(top_info);
+        write_utf_lossy(w, info);
+        write_utf_lossy(w, top_info);
     })
 }
 

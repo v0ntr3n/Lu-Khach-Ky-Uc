@@ -9,14 +9,23 @@ if exist "%USERPROFILE%\.cargo\bin\cargo.exe" (
 )
 
 set "REBUILD=0"
+set "HAS_CONFIG=0"
+set "HAS_ASSETS_DIR=0"
 set "FORWARD_ARGS="
 :parse_args
 if "%~1"=="" goto args_done
-if /I "%~1"=="--rebuild" (
+set "ARG=%~1"
+if /I "%ARG%"=="--rebuild" (
     set "REBUILD=1"
-) else (
-    set "FORWARD_ARGS=%FORWARD_ARGS% "%~1""
+    shift
+    goto parse_args
 )
+if "%ARG%"=="-c" set "HAS_CONFIG=1"
+if /I "%ARG%"=="--config" set "HAS_CONFIG=1"
+if /I "%ARG:~0,9%"=="--config=" set "HAS_CONFIG=1"
+if /I "%ARG%"=="--assets-dir" set "HAS_ASSETS_DIR=1"
+if /I "%ARG:~0,13%"=="--assets-dir=" set "HAS_ASSETS_DIR=1"
+set "FORWARD_ARGS=%FORWARD_ARGS% "%~1""
 shift
 goto parse_args
 :args_done
@@ -27,6 +36,7 @@ if defined NRO_CONFIG (
     set "CONFIG_FILE=server.toml"
 )
 
+set "ASSETS_DIR="
 if defined NRO_ASSETS_DIR (
     set "ASSETS_DIR=%NRO_ASSETS_DIR%"
 ) else if exist "SRC\data\update_data\" (
@@ -35,12 +45,24 @@ if defined NRO_ASSETS_DIR (
     set "ASSETS_DIR=SRC\data"
 ) else if exist "Copy of Teamobi2026\SRC\data\update_data\" (
     set "ASSETS_DIR=Copy of Teamobi2026\SRC\data"
+) else if exist "Copy of Teamobi2026\SRC\data\icon\" (
+    set "ASSETS_DIR=Copy of Teamobi2026\SRC\data"
 ) else if exist "Teamobi2026\SRC\data\update_data\" (
+    set "ASSETS_DIR=Teamobi2026\SRC\data"
+) else if exist "Teamobi2026\SRC\data\icon\" (
     set "ASSETS_DIR=Teamobi2026\SRC\data"
 ) else if exist "data\update_data\" (
     set "ASSETS_DIR=data"
-) else (
-    set "ASSETS_DIR=SRC\data"
+) else if exist "data\icon\" (
+    set "ASSETS_DIR=data"
+)
+
+set "DEFAULT_ARGS="
+if "%HAS_CONFIG%"=="0" (
+    set "DEFAULT_ARGS=--config "%CONFIG_FILE%""
+)
+if "%HAS_ASSETS_DIR%"=="0" if defined ASSETS_DIR (
+    set "DEFAULT_ARGS=%DEFAULT_ARGS% --assets-dir "%ASSETS_DIR%""
 )
 
 if "%REBUILD%"=="1" goto build_from_source
@@ -91,13 +113,18 @@ exit /b 1
 set "SERVER_BIN=.\target\release\nro-server.exe"
 
 :bin_ready
-if not exist "%ASSETS_DIR%\update_data\" if not exist "%ASSETS_DIR%\icon\" (
-    echo [WARN] Binary client assets not found at "%ASSETS_DIR%".
-    echo        Copy Teamobi2026 "SRC\data" into "%CD%\SRC\data" before connecting with Mod Local.
+if "%HAS_ASSETS_DIR%"=="0" (
+    if not defined ASSETS_DIR (
+        echo [WARN] Binary client assets not auto-detected ^(relying on server.toml / ServerConfig::default^).
+        echo        Copy Teamobi2026 "SRC\data" into "%CD%\SRC\data" before connecting with Mod Local.
+    ) else if not exist "%ASSETS_DIR%\update_data\" if not exist "%ASSETS_DIR%\icon\" (
+        echo [WARN] Binary client assets not found at "%ASSETS_DIR%".
+        echo        Copy Teamobi2026 "SRC\data" into "%CD%\SRC\data" before connecting with Mod Local.
+    )
 )
 
 echo === Starting Teamobi2026 nro-server [Press Ctrl-C or type baotri to save and stop] ===
-"%SERVER_BIN%" --config "%CONFIG_FILE%" --assets-dir "%ASSETS_DIR%" %FORWARD_ARGS%
+"%SERVER_BIN%" %DEFAULT_ARGS% %FORWARD_ARGS%
 set "EXIT_CODE=%ERRORLEVEL%"
 if not "%EXIT_CODE%"=="0" (
     echo [ERROR] nro-server exited with code %EXIT_CODE%.

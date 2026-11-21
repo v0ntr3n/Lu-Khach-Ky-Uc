@@ -138,12 +138,12 @@ impl SkillSlot {
     #[inline] pub const fn is_off_cooldown(&self, now_ms: u64) -> bool { now_ms.saturating_sub(self.last_used_ms) >= (self.cool_down_ms.saturating_sub(50) as u64) }
     /// Computes MP required to cast this skill given `mp` and `mp_max`.
     pub const fn mana_cost(&self, mp: i32, mp_max: i32) -> Option<i32> {
-        let cost = match self.mana_type {
-            ManaUseType::Flat => self.mana_use as i32,
-            ManaUseType::PercentMax => ((mp_max as i64) * (self.mana_use as i64) / 100) as i32,
+        let cost: i64 = match self.mana_type {
+            ManaUseType::Flat => self.mana_use as i64,
+            ManaUseType::PercentMax => (mp_max as i64).saturating_mul(self.mana_use as i64) / 100,
             ManaUseType::DrainAll => return if mp > 0 { Some(mp) } else { None },
         };
-        if mp >= cost { Some(cost) } else { None }
+        if cost > mp as i64 || cost > i32::MAX as i64 { None } else { Some(if cost < 0 { 0 } else { cost as i32 }) }
     }
 }
 
@@ -217,12 +217,11 @@ impl EffectSkillState {
         if self.monkey_level > 0 && now_ms >= self.monkey_until_ms { self.monkey_level = 0; }
         if self.huyt_sao_pct != 0 && now_ms >= self.huyt_sao_until_ms { self.huyt_sao_pct = 0; }
         if let Some(m) = &self.mob_me && !m.infinite && now_ms >= m.expires_at_ms { self.mob_me = None; }
-
         let Some((_, c_hp_max, pt, kind_binh, _, until, last_dot)) = self.mafuba_jar else { return 0; };
         if now_ms >= until { self.mafuba_jar = None; return 0; }
         if now_ms.saturating_sub(last_dot) >= 500 {
-            let mut sub = (i64::from(c_hp_max) * i64::from(pt) * if kind_binh == 0 { 1 } else { 2 } / 100) as i32;
-            if sub >= current_hp { sub = (current_hp - 100).abs(); }
+            let mut sub = i32::try_from((i64::from(c_hp_max) * i64::from(pt) * if kind_binh == 0 { 1 } else { 2 } / 100).max(0)).unwrap_or(i32::MAX);
+            if sub >= current_hp { sub = (current_hp - 1).max(0); }
             if let Some(jar) = &mut self.mafuba_jar { jar.6 = now_ms; }
             return sub.max(0);
         }
@@ -304,8 +303,8 @@ impl SpecialSkillState {
     pub fn start(&mut self, slot: &mut SkillSlot, dir: i8, target_dx: i16, target_y: i16, use_ncd: bool, is_human: bool, now_ms: u64) {
         if is_human && slot.curr_level < 1000 { slot.curr_level += 1; }
         let max_dx = i32::from(slot.point) + 400;
-        let rx = if slot.kind == SkillKind::MaPhongBa { 75 } else if max_dx < i32::from(target_dx.abs()) || target_dx.abs() < 100 { max_dx as i16 } else { target_dx.abs() };
-        *self = Self { active_skill: Some(slot.kind), step: 0, dir: if dir < 0 { -1 } else { 1 }, type_item: if use_ncd { 2 } else { 0 }, reach: (rx, target_y.abs()), phase_start_ms: now_ms };
+        let rx = if slot.kind == SkillKind::MaPhongBa { 75 } else if max_dx < i32::from(target_dx.saturating_abs()) || target_dx.saturating_abs() < 100 { max_dx as i16 } else { target_dx.saturating_abs() };
+        *self = Self { active_skill: Some(slot.kind), step: 0, dir: if dir < 0 { -1 } else { 1 }, type_item: if use_ncd { 2 } else { 0 }, reach: (rx, target_y.saturating_abs()), phase_start_ms: now_ms };
     }
 
     /// Advances the `250ms` special skill timer (`SkillService.updateSkillSpecial`), fixing Java's `=` bug.
@@ -336,14 +335,14 @@ impl SpecialSkillState {
 /// Validates Kaioken HP cost, deducts MP/HP, and records post-cast intrinsic CDR & `dame_after`.
 pub fn commit_skill_cast(npoint: &mut NPoint, slot: &mut SkillSlot, sets: &SetClothes, intrinsic: (u8, i32), now_ms: u64, parity: ParityMode) -> Result<u32, PlayerError> {
     let _ = consts::PER100;
-    if slot.kind == SkillKind::Kaioken {
+    let kaioken_hp = if slot.kind == SkillKind::Kaioken {
         let gate_pct = if matches!(parity, ParityMode::Fixed) { sets.kaioken_hp_cost_pct() } else { 10 };
         let (gate_hp, actual_hp) = ((i64::from(npoint.hp_max) * gate_pct / 100) as i32, (i64::from(npoint.hp_max) * sets.kaioken_hp_cost_pct() / 100) as i32);
         if npoint.hp <= gate_hp || npoint.hp <= actual_hp { return Err(PlayerError::InsufficientHpForKaioken); }
-        npoint.sub_hp(i64::from(actual_hp));
-    }
+        Some(actual_hp)
+    } else { None };
     let mp_cost = slot.mana_cost(npoint.mp, npoint.mp_max).ok_or(PlayerError::InsufficientMana)?;
-    npoint.add_mp(-i64::from(mp_cost));
+    if let Some(hp) = kaioken_hp { npoint.sub_hp(i64::from(hp)); } npoint.add_mp(-i64::from(mp_cost));
     if matches!((slot.kind, intrinsic.0), (SkillKind::DichChuyenTucThoi, 6) | (SkillKind::ThoiMien, 7) | (SkillKind::Socola, 14) | (SkillKind::Troi, 22)) {
         npoint.dame_after = intrinsic.1;
     }

@@ -36,14 +36,14 @@ impl ServerSessionHandler {
                 let qty = quantity.max(1) as u32;
                 if let Some(msg) = self.shared.clients.authenticated.get_mut(&sid).map(|mut e| {
                     let (mut inv, now) = (snapshot_to_economy_inv(&e.snapshot), unix_now_ms());
-                    let ok = if tpl_it.is_up_to_up {
-                        inv.add_to_bag(ItemInstance::with_options(item_id, qty, opts.clone(), now), true).is_ok()
+                    let added = if tpl_it.is_up_to_up {
+                        if inv.add_to_bag(ItemInstance::with_options(item_id, qty, opts.clone(), now), true).is_ok() { qty as usize } else { 0 }
                     } else {
-                        (0..qty.min(20)).any(|_| inv.add_to_bag(ItemInstance::with_options(item_id, 1, opts.clone(), now), false).is_ok())
+                        (0..qty.min(20)).filter(|_| inv.add_to_bag(ItemInstance::with_options(item_id, 1, opts.clone(), now), false).is_ok()).count()
                     };
                     sync_economy_inv_to_snapshot(&inv, &mut e.snapshot);
                     let _ = session.try_send(s2c_packets::inventory_bag(&e.snapshot.items_bag));
-                    if ok { format!("Đã nhận {} x{qty}", tpl_it.name) } else { "Hành trang đã đầy!".to_owned() }
+                    if added > 0 { format!("Đã nhận {} x{added}", tpl_it.name) } else { "Hành trang đã đầy!".to_owned() }
                 }) {
                     send_thong_bao(session, &msg)?;
                 }

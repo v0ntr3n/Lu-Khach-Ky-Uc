@@ -6,9 +6,10 @@ use dashmap::{DashMap, mapref::entry::Entry};
 use nro_consts::cmd_message;
 use nro_core::{ItemInstance, ItemOption, PlayerId, TemplateId};
 use nro_db::world_repos::GiftCodeRepo;
-use nro_economy::{GiftCodeDef, GiftCodeService, TradeError, TradeParticipant, TradeSession};
+use nro_economy::{GiftCodeDef, GiftCodeService, TRADE_COOLDOWN_MS, TradeError, TradeParticipant, TradeSession};
 use nro_protocol::{Packet, ProtocolError, SessionHandle, TradeAction};
 use nro_world::s2c_packets::{self, InputFieldWire};
+use tracing::warn;
 
 use super::{DbItemCatalog, ServerSessionHandler, pending_input, send_thong_bao, snapshot_to_economy_inv, sync_economy_inv_to_snapshot, trade_gold_offers, trade_partners, wallet_money_pkt};
 use crate::runtime::unix_now_ms;
@@ -17,6 +18,10 @@ fn pending_trade_invites() -> &'static DashMap<(PlayerId, PlayerId), i64> { stat
 fn last_trade_ms() -> &'static DashMap<PlayerId, i64> { static M: OnceLock<DashMap<PlayerId, i64>> = OnceLock::new(); M.get_or_init(DashMap::new) }
 pub(super) fn trade_lifecycle_lock() -> &'static std::sync::Mutex<()> { static L: OnceLock<std::sync::Mutex<()>> = OnceLock::new(); L.get_or_init(|| std::sync::Mutex::new(())) }
 pub(super) fn is_in_trade(pid: PlayerId) -> bool { trade_partners().contains_key(&pid) }
+#[allow(dead_code)]
+pub(super) fn prune_expired_trade_cooldowns(now_ms: i64) {
+    last_trade_ms().retain(|_, &mut ts| now_ms.saturating_sub(ts) < TRADE_COOLDOWN_MS);
+}
 
 impl ServerSessionHandler {
     pub(super) async fn handle_open_input(&self, session: &SessionHandle, sid: u64, kind: &'static str) -> Result<(), ProtocolError> {
@@ -72,21 +77,21 @@ impl ServerSessionHandler {
         let res = self.shared.clients.authenticated.get_mut(&target_sid).map(|mut e| {
             if is_in_trade(e.snapshot.id) { return Err("Người chơi đang giao dịch!"); }
             let (mut inv, now) = (snapshot_to_economy_inv(&e.snapshot), unix_now_ms());
-            let ok = if tpl_it.is_up_to_up {
-                inv.add_to_bag(ItemInstance::with_options(item_id, qty, Vec::new(), now), true).is_ok()
+            let granted = if tpl_it.is_up_to_up {
+                if inv.add_to_bag(ItemInstance::with_options(item_id, qty, Vec::new(), now), true).is_ok() { qty } else { 0 }
             } else {
-                (0..qty.min(20)).any(|_| inv.add_to_bag(ItemInstance::with_options(item_id, 1, Vec::new(), now), false).is_ok())
+                (0..qty.min(20)).filter(|_| inv.add_to_bag(ItemInstance::with_options(item_id, 1, Vec::new(), now), false).is_ok()).count() as u32
             };
-            if !ok { return Err("Hành trang đã đầy!"); }
+            if granted == 0 { return Err("Hành trang đã đầy!"); }
             sync_economy_inv_to_snapshot(&inv, &mut e.snapshot);
             let _ = e.handle.try_send(s2c_packets::inventory_bag(&e.snapshot.items_bag));
-            if target_sid != admin_sid && let Ok(tb) = s2c_packets::thong_bao(&format!("Bạn nhận được {} x{qty} từ Admin!", tpl_it.name)) {
+            if target_sid != admin_sid && let Ok(tb) = s2c_packets::thong_bao(&format!("Bạn nhận được {} x{granted} từ Admin!", tpl_it.name)) {
                 let _ = e.handle.try_send(tb);
             }
-            Ok(e.snapshot.name.clone())
+            Ok((e.snapshot.name.clone(), granted))
         });
         match res {
-            Some(Ok(tname)) => send_thong_bao(admin_session, &format!("Đã trao {} x{qty} cho {tname}!", tpl_it.name)),
+            Some(Ok((tname, granted))) => send_thong_bao(admin_session, &format!("Đã trao {} x{granted} cho {tname}!", tpl_it.name)),
             Some(Err(msg)) => send_thong_bao(admin_session, msg),
             None => send_thong_bao(admin_session, "Không tìm thấy người chơi trực tuyến!"),
         }
@@ -99,74 +104,108 @@ impl ServerSessionHandler {
         let (rec_id, now_ms) = (rec.id, unix_now_ms());
         let count_left = if rec.count_left < 0 { u32::MAX } else { rec.count_left.cast_unsigned() };
         let mut def = GiftCodeDef { code: rec.code, count_left, expires_at_ms: rec.expired.timestamp_millis(), items: rec.items.iter().map(|gi| (gi.id as i16, gi.quantity.max(1).cast_unsigned(), gi.options.iter().map(|o| ItemOption { id: o.id.max(0) as u16, param: o.param }).collect())).collect(), redeemed_by: Vec::new() };
-        let need_slots = def.items.iter().filter(|&&(id, _, _)| id >= 0).count();
-        let pre = self.shared.clients.authenticated.get(&sid).map(|entry| {
-            let pid = entry.snapshot.id;
-            if is_in_trade(pid) { return Err("Không thể thao tác khi đang giao dịch!"); }
-            if entry.snapshot.redeemed_giftcodes.contains(&code) { return Err("Bạn đã sử dụng mã Giftcode này rồi!"); }
-            if now_ms > def.expires_at_ms || def.count_left == 0 { return Err("Mã quà tặng đã hết hạn hoặc hết lượt sử dụng!"); }
-            if entry.snapshot.items_bag.iter().filter(|s| s.is_none()).count() < need_slots { return Err("Hành trang không đủ ô trống!"); }
-            Ok(())
-        });
-        match pre { Some(Ok(())) => {} Some(Err(msg)) => return send_thong_bao(session, msg), None => return Ok(()) }
-        if !repo.redeem_decrement(rec_id).await.unwrap_or(false) { return send_thong_bao(session, "Mã quà tặng đã hết lượt sử dụng!"); }
-        match self.shared.clients.authenticated.get_mut(&sid).map(|mut entry| {
+        let catalog = DbItemCatalog(&self.shared.templates);
+        let pre = self.shared.clients.authenticated.get_mut(&sid).map(|mut entry| {
             let pid = entry.snapshot.id;
             if is_in_trade(pid) { return Err("Không thể thao tác khi đang giao dịch!".to_owned()); }
             if entry.snapshot.redeemed_giftcodes.contains(&code) { return Err("Bạn đã sử dụng mã Giftcode này rồi!".to_owned()); }
+            if now_ms > def.expires_at_ms || def.count_left == 0 { return Err("Mã quà tặng đã hết hạn hoặc hết lượt sử dụng!".to_owned()); }
+            let (mut dry_inv, mut dry_def) = (snapshot_to_economy_inv(&entry.snapshot), def.clone());
+            GiftCodeService::redeem_with_catalog(&mut dry_def, &mut dry_inv, pid, now_ms, &catalog).map_err(|e| format!("{e}"))?;
+            entry.snapshot.redeemed_giftcodes.push(code.clone());
+            Ok(())
+        });
+        match pre { Some(Ok(())) => {} Some(Err(msg)) => return send_thong_bao(session, &msg), None => return Ok(()) }
+        if !repo.redeem_decrement(rec_id).await.unwrap_or(false) {
+            if let Some(mut e) = self.shared.clients.authenticated.get_mut(&sid) { e.snapshot.redeemed_giftcodes.retain(|c| c != &code); }
+            return send_thong_bao(session, "Mã quà tặng đã hết lượt sử dụng!");
+        }
+        let post = self.shared.clients.authenticated.get_mut(&sid).map(|mut entry| {
+            let pid = entry.snapshot.id;
+            if is_in_trade(pid) { entry.snapshot.redeemed_giftcodes.retain(|c| c != &code); return Err("Không thể thao tác khi đang giao dịch!".to_owned()); }
             let mut inv = snapshot_to_economy_inv(&entry.snapshot);
-            GiftCodeService::redeem(&mut def, &mut inv, pid, now_ms).map_err(|e| format!("{e}"))?;
+            if let Err(e) = GiftCodeService::redeem_with_catalog(&mut def, &mut inv, pid, now_ms, &catalog) {
+                entry.snapshot.redeemed_giftcodes.retain(|c| c != &code);
+                return Err(format!("{e}"));
+            }
             sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
-            entry.snapshot.redeemed_giftcodes.push(code);
             Ok((s2c_packets::inventory_bag(&entry.snapshot.items_bag), wallet_money_pkt(&entry.snapshot.wallet)))
-        }) {
+        });
+        match post {
             Some(Ok((bag_pkt, money_pkt))) => { session.send(bag_pkt).await?; session.send(money_pkt).await?; send_thong_bao(session, "Nhận quà Giftcode thành công!")?; }
-            Some(Err(msg)) => send_thong_bao(session, &msg)?, None => {}
+            Some(Err(msg)) => {
+                if let Err(err) = repo.redeem_increment(rec_id).await { warn!(sid, giftcode_id = rec_id, code = %code, error = %err, "giftcode rollback increment failed"); }
+                warn!(sid, giftcode_id = rec_id, code = %code, reason = %msg, "giftcode post-decrement redemption failed");
+                send_thong_bao(session, &msg)?;
+            }
+            None => {
+                if let Err(err) = repo.redeem_increment(rec_id).await { warn!(sid, giftcode_id = rec_id, code = %code, error = %err, "giftcode rollback increment failed"); }
+                warn!(sid, giftcode_id = rec_id, code = %code, "giftcode post-decrement session disconnected");
+            }
         }
         Ok(())
     }
 
     pub(super) async fn handle_trade(&self, session: &SessionHandle, sid: u64, action: TradeAction) -> Result<(), ProtocolError> {
-        let Some((my_pid, my_zone)) = self.shared.clients.authenticated.get(&sid).map(|e| (e.snapshot.id, (e.snapshot.location.map_id, e.snapshot.location.zone_id))) else { return Ok(()); };
+        let Some((my_pid, my_zone, my_alive)) = self.shared.clients.authenticated.get(&sid).map(|e| (e.snapshot.id, (e.snapshot.location.map_id, e.snapshot.location.zone_id), e.snapshot.stats.hp > 0)) else { return Ok(()); };
         let now_ms = unix_now_ms();
         match action {
             TradeAction::InviteOrAccept(0, Some(tpid)) if tpid != my_pid => {
+                if !my_alive { return send_thong_bao(session, "Không thể giao dịch khi đã chết!"); }
                 if is_in_trade(my_pid) || is_in_trade(tpid) { return send_thong_bao(session, "Không thể thao tác khi đang giao dịch!"); }
-                let target = self.shared.clients.players.get(&tpid).and_then(|s| self.shared.clients.authenticated.get(s.value()).map(|e| ((e.snapshot.location.map_id, e.snapshot.location.zone_id), e.handle.clone())));
-                if let Some((tz, th)) = target && tz == my_zone {
-                    pending_trade_invites().insert((my_pid, tpid), now_ms + 30_000);
+                if { let pvp = super::router_combat_pvp::lock_pvp(); pvp.contains_key(&my_pid) || pvp.contains_key(&tpid) } { return send_thong_bao(session, "Không thể giao dịch khi đang trong trận PvP!"); }
+                let target = self.shared.clients.players.get(&tpid).and_then(|s| self.shared.clients.authenticated.get(s.value()).map(|e| ((e.snapshot.location.map_id, e.snapshot.location.zone_id), e.handle.clone(), e.snapshot.stats.hp > 0)));
+                if let Some((tz, th, target_alive)) = target && tz == my_zone {
+                    if !target_alive { return send_thong_bao(session, "Không thể giao dịch khi người chơi đã chết!"); }
+                    let invites = pending_trade_invites();
+                    if invites.len() >= 1_024 {
+                        invites.retain(|_, exp| *exp > now_ms);
+                        if invites.len() >= 2_048 {
+                            return send_thong_bao(session, "Hệ thống đang bận, vui lòng thử lại sau!");
+                        }
+                    }
+                    invites.insert((my_pid, tpid), now_ms + 30_000);
                     let _ = th.try_send(s2c_packets::trade_invite_notify(0, my_pid));
                 } else {
                     return send_thong_bao(session, "Người chơi không trực tuyến hoặc không ở cùng khu vực!");
                 }
             }
             TradeAction::InviteOrAccept(1, Some(tpid)) if tpid != my_pid => {
+                if !my_alive { return send_thong_bao(session, "Không thể giao dịch khi đã chết!"); }
                 let (p1, p2, _) = trade_pair_key(my_pid, tpid);
                 if is_in_trade(p1) || is_in_trade(p2) { return send_thong_bao(session, "Không thể thao tác khi đang giao dịch!"); }
+                if { let pvp = super::router_combat_pvp::lock_pvp(); pvp.contains_key(&p1) || pvp.contains_key(&p2) } { return send_thong_bao(session, "Không thể giao dịch khi đang trong trận PvP!"); }
                 let err_msg = {
                     let guard = trade_lifecycle_lock().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                     let msg = if pending_trade_invites().remove(&(tpid, my_pid)).is_none_or(|(_, exp)| exp < now_ms) { None }
                     else if reserve_trade_pair(p1, p2) {
-                        let fetch = |pid: PlayerId| self.shared.clients.players.get(&pid).and_then(|s| self.shared.clients.authenticated.get(s.value()).map(|e| (snapshot_to_economy_inv(&e.snapshot), e.handle.clone(), (e.snapshot.location.map_id, e.snapshot.location.zone_id), e.activated)));
-                        let open_res = if let (Some((inv1, h1, z1, act1)), Some((inv2, h2, z2, act2))) = (fetch(p1), fetch(p2)) && z1 == z2 {
-                            let lt1 = last_trade_ms().get(&p1).map_or(0, |v| *v.value());
-                            let lt2 = last_trade_ms().get(&p2).map_or(0, |v| *v.value());
-                            let (tp1, tp2) = (
-                                TradeParticipant { player_id: p1, activated: act1, security_locked: false, last_trade_ms: lt1 },
-                                TradeParticipant { player_id: p2, activated: act2, security_locked: false, last_trade_ms: lt2 },
-                            );
-                            match TradeSession::open(tp1, inv1, tp2, inv2, now_ms) {
-                                Ok(ts) => {
-                                    self.shared.active_trades.insert((p1, p2), ts); trade_gold_offers().insert((p1, p2), (0, 0));
-                                    let _ = h1.try_send(s2c_packets::trade_invite_notify(1, p2)); let _ = h2.try_send(s2c_packets::trade_invite_notify(1, p1));
-                                    Ok(())
+                        let in_pvp = { let pvp = super::router_combat_pvp::lock_pvp(); pvp.contains_key(&p1) || pvp.contains_key(&p2) };
+                        let fetch = |pid: PlayerId| self.shared.clients.players.get(&pid).and_then(|s| self.shared.clients.authenticated.get(s.value()).map(|e| (snapshot_to_economy_inv(&e.snapshot), e.handle.clone(), (e.snapshot.location.map_id, e.snapshot.location.zone_id), e.activated, e.snapshot.mbv_pin.1, e.snapshot.stats.hp > 0)));
+                        let open_res = if in_pvp {
+                            Err("Không thể giao dịch khi đang trong trận PvP!".to_owned())
+                        } else if let (Some((inv1, h1, z1, act1, lock1, alive1)), Some((inv2, h2, z2, act2, lock2, alive2))) = (fetch(p1), fetch(p2)) && z1 == z2 {
+                            if alive1 && alive2 {
+                                let lt1 = last_trade_ms().get(&p1).map_or(0, |v| *v.value());
+                                let lt2 = last_trade_ms().get(&p2).map_or(0, |v| *v.value());
+                                let (tp1, tp2) = (
+                                    TradeParticipant { player_id: p1, activated: act1, security_locked: lock1, last_trade_ms: lt1 },
+                                    TradeParticipant { player_id: p2, activated: act2, security_locked: lock2, last_trade_ms: lt2 },
+                                );
+                                match TradeSession::open(tp1, inv1, tp2, inv2, now_ms) {
+                                    Ok(ts) => {
+                                        self.shared.active_trades.insert((p1, p2), ts); trade_gold_offers().insert((p1, p2), (0, 0));
+                                        let _ = h1.try_send(s2c_packets::trade_invite_notify(1, p2)); let _ = h2.try_send(s2c_packets::trade_invite_notify(1, p1));
+                                        Ok(())
+                                    }
+                                    Err(err) => Err(match err {
+                                        TradeError::AccountNotActivated => "Tài khoản chưa kích hoạt thành viên, không thể giao dịch!".to_owned(),
+                                        TradeError::SecurityLockActive => "Tài khoản đang bật bảo vệ, không thể giao dịch!".to_owned(),
+                                        TradeError::CooldownActive(rem) => format!("Vui lòng chờ {} giây nữa mới có thể giao dịch tiếp!", ((rem + 999) / 1_000).max(1)),
+                                        other => format!("Không thể giao dịch: {other}"),
+                                    }),
                                 }
-                                Err(err) => Err(match err {
-                                    TradeError::AccountNotActivated => "Tài khoản chưa kích hoạt thành viên, không thể giao dịch!".to_owned(),
-                                    TradeError::SecurityLockActive => "Tài khoản đang bật bảo vệ, không thể giao dịch!".to_owned(),
-                                    TradeError::CooldownActive(rem) => format!("Vui lòng chờ {} giây nữa mới có thể giao dịch tiếp!", ((rem + 999) / 1_000).max(1)),
-                                    other => format!("Không thể giao dịch: {other}"),
-                                }),
+                            } else {
+                                Err("Không thể giao dịch khi có người chơi đã chết!".to_owned())
                             }
                         } else {
                             Err("Người chơi không trực tuyến hoặc không ở cùng khu vực!".to_owned())
@@ -183,17 +222,21 @@ impl ServerSessionHandler {
                 let (mut rejected, mut timed_out, mut gold_err) = (false, false, None);
                 if let Some(mut ts) = self.shared.active_trades.get_mut(&(k1, k2)) {
                     if bag_idx == -1 {
-                        let g = u64::from(qty.max(0).cast_unsigned());
-                        match ts.set_gold_offer(is_p1, g, now_ms) {
-                            Ok(()) => if let Some(mut go) = trade_gold_offers().get_mut(&(k1, k2)) { if is_p1 { go.0 = g; } else { go.1 = g; } }
-                            Err(TradeError::SessionTimedOut) => timed_out = true,
-                            Err(TradeError::InvalidGoldOffer { offered, balance }) => {
-                                gold_err = Some(format!("Số vàng giao dịch không hợp lệ ({offered}, hiện có {balance})!"));
+                        if let Ok(g_u32) = u32::try_from(qty) {
+                            let g = u64::from(g_u32);
+                            match ts.set_gold_offer(is_p1, g, now_ms) {
+                                Ok(()) => if let Some(mut go) = trade_gold_offers().get_mut(&(k1, k2)) { if is_p1 { go.0 = g; } else { go.1 = g; } }
+                                Err(TradeError::SessionTimedOut) => timed_out = true,
+                                Err(TradeError::InvalidGoldOffer { offered, balance }) => {
+                                    gold_err = Some(format!("Số vàng giao dịch không hợp lệ ({offered}, hiện có {balance})!"));
+                                }
+                                Err(_) => {}
                             }
-                            Err(_) => {}
+                        } else {
+                            gold_err = Some("Số vàng giao dịch không hợp lệ!".to_owned());
                         }
-                    } else if let Ok(s) = usize::try_from(bag_idx) {
-                        match ts.add_item_offer(is_p1, s, qty.max(0).cast_unsigned(), &DbItemCatalog(&self.shared.templates), now_ms) { Ok(()) => {} Err(TradeError::SessionTimedOut) => timed_out = true, Err(_) => rejected = true }
+                    } else if let (Ok(s), Ok(q)) = (usize::try_from(bag_idx), u32::try_from(qty)) {
+                        match ts.add_item_offer(is_p1, s, q, &DbItemCatalog(&self.shared.templates), now_ms) { Ok(()) => {} Err(TradeError::SessionTimedOut) => timed_out = true, Err(_) => rejected = true }
                     } else { rejected = true; }
                 }
                 if timed_out { self.cleanup_trade_on_disconnect(my_pid); }
@@ -219,9 +262,9 @@ impl ServerSessionHandler {
                 }
             },
             TradeAction::StateChange(7) => {
-                let (notify_msg, broadcast_msg) = {
+                let (notify_msg, broadcast_msg, persist_snaps) = {
                     let guard = trade_lifecycle_lock().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-                    let (mut notify, mut bcast) = (None, None);
+                    let (mut notify, mut bcast, mut snaps) = (None, None, None);
                     if let Some(partner) = trade_partners().get(&my_pid).map(|v| *v.value()) {
                         let (k1, k2, is_p1) = trade_pair_key(my_pid, partner);
                         let acc = self.shared.active_trades.get_mut(&(k1, k2)).map(|mut ts| ts.accept(is_p1, &DbItemCatalog(&self.shared.templates), now_ms));
@@ -231,11 +274,13 @@ impl ServerSessionHandler {
                                 trade_gold_offers().remove(&(k1, k2));
                                 let is_online = |p: PlayerId| self.shared.clients.players.get(&p).is_some_and(|s| self.shared.clients.authenticated.contains_key(s.value()));
                                 if is_online(k1) && is_online(k2) {
-                                    self.apply_trade_inv(k1, &out1); self.apply_trade_inv(k2, &out2);
+                                    let snap1 = self.apply_trade_inv(k1, &out1);
+                                    let snap2 = self.apply_trade_inv(k2, &out2);
+                                    snaps = Some((snap1, snap2));
                                     last_trade_ms().insert(k1, now_ms); last_trade_ms().insert(k2, now_ms);
                                     bcast = Some((self.handle_for_pid(k1), self.handle_for_pid(k2), "Giao dịch thành công!".to_owned()));
                                 } else {
-                                    let (b1, b2) = ts.cancel(); self.apply_trade_inv(k1, &b1); self.apply_trade_inv(k2, &b2);
+                                    let (b1, b2) = ts.cancel(); let _ = self.apply_trade_inv(k1, &b1); let _ = self.apply_trade_inv(k2, &b2);
                                     bcast = Some((self.handle_for_pid(k1), self.handle_for_pid(k2), "Giao dịch bị hủy do người chơi mất kết nối!".to_owned()));
                                 }
                                 trade_partners().remove_if(&k1, |_, p| *p == k2); trade_partners().remove_if(&k2, |_, p| *p == k1);
@@ -258,8 +303,15 @@ impl ServerSessionHandler {
                         }
                     }
                     drop(guard);
-                    (notify, bcast)
+                    (notify, bcast, snaps)
                 };
+                if let Some((snap1, snap2)) = persist_snaps {
+                    for snap in [snap1, snap2].into_iter().flatten() {
+                        if let Err(err) = self.shared.players_repo.save_player(&snap, None, self.shared.config.parity_mode, now_ms).await {
+                            warn!(player_id = snap.id.0, error = %err, "failed persisting player after trade commit");
+                        }
+                    }
+                }
                 if let Some(msg) = notify_msg { send_thong_bao(session, &msg)?; }
                 if let Some((h1, h2, msg)) = broadcast_msg && let Ok(tb) = s2c_packets::thong_bao(&msg) {
                     if let Some(h) = h1 { let _ = h.try_send(tb.clone()); }
@@ -288,12 +340,13 @@ impl ServerSessionHandler {
         self.cleanup_trade_on_disconnect_unlocked(pid); drop(guard);
     }
 
-    fn apply_trade_inv(&self, pid: PlayerId, inv: &nro_economy::Inventory) {
-        let Some(sid) = self.shared.clients.players.get(&pid).map(|s| *s.value()) else { return; };
-        if let Some(mut entry) = self.shared.clients.authenticated.get_mut(&sid) {
+    fn apply_trade_inv(&self, pid: PlayerId, inv: &nro_economy::Inventory) -> Option<nro_db::player_repo::PlayerSnapshot> {
+        let sid = self.shared.clients.players.get(&pid).map(|s| *s.value())?;
+        self.shared.clients.authenticated.get_mut(&sid).map(|mut entry| {
             sync_economy_inv_to_snapshot(inv, &mut entry.snapshot);
             for p in [s2c_packets::trade_close(), s2c_packets::inventory_bag(&entry.snapshot.items_bag), wallet_money_pkt(&entry.snapshot.wallet)] { let _ = entry.handle.try_send(p); }
-        }
+            entry.snapshot.clone()
+        })
     }
 
     pub(super) fn handle_for_pid(&self, pid: PlayerId) -> Option<SessionHandle> { self.shared.clients.players.get(&pid).and_then(|s| self.shared.clients.authenticated.get(s.value()).map(|e| e.handle.clone())) }

@@ -92,17 +92,17 @@ pub fn parse_data_point(raw: &str) -> DbResult<CoreStats> {
         });
     }
     Ok(CoreStats {
-        limit_power: a.i32_or(0, 0) as u8,
+        limit_power: a.i32_or(0, 0).clamp(0, 9) as u8,
         power: a.i64_or(1, 0),
         tiem_nang: a.i64_or(2, 0),
-        stamina: a.i32_or(3, 0) as u16,
-        max_stamina: a.i32_or(4, 0) as u16,
+        stamina: a.i32_or(3, 0).clamp(0, 65_535) as u16,
+        max_stamina: a.i32_or(4, 0).clamp(0, 65_535) as u16,
         hpg: a.i64_or(5, 100),
         mpg: a.i64_or(6, 100),
         dameg: a.i64_or(7, 10),
         defg: a.i32_or(8, 0),
-        critg: a.i32_or(9, 0) as u8,
-        critdragon: a.i32_or(10, 0) as i8,
+        critg: a.i32_or(9, 0).clamp(0, 255) as u8,
+        critdragon: a.i32_or(10, 0).clamp(-128, 127) as i8,
         hp: a.i64_or(12, 100),
         mp: a.i64_or(13, 100),
         ..CoreStats::default()
@@ -183,7 +183,7 @@ pub fn write_items_container(
         .map(|slot| match slot {
             Some(it) if it.template_id.0 >= 0 => {
                 let opts = it.options.iter().map(|o| JsonStr((i32::from(o.id), o.param))).collect();
-                JsonStr(RawItemSlot(it.template_id, it.quantity as i32, JsonStr(opts), it.create_time_ms))
+                JsonStr(RawItemSlot(it.template_id, it.quantity.min(i32::MAX as u32) as i32, JsonStr(opts), it.create_time_ms))
             }
             _ => JsonStr(RawItemSlot(TemplateId(-1), 0, JsonStr(Vec::new()), empty_ts)),
         })

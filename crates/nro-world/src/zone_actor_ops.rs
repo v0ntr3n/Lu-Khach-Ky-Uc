@@ -6,15 +6,13 @@ use tracing::warn;
 
 use crate::{
     WorldError,
-    s2c_packets::{self, PlayerSpawnWire},
+    s2c_packets::{self, GroundItemWire, PlayerSpawnWire},
 };
 
 use super::{
-    EntityKind, GroundDropKind, GroundItem, PlayerIngress, ZONE_TICK_MS, ZoneActor, ZoneCommand,
-    zone_mobs::is_offline_map,
+    EntityKind, GroundDropKind, GroundItem, MAX_GROUND_ITEMS, PlayerIngress, ZONE_TICK_MS,
+    ZoneActor, ZoneCommand, ZoneEvent, zone_mobs::is_offline_map,
 };
-
-const MAX_GROUND_ITEMS: usize = 512;
 
 impl ZoneActor {
     pub(super) fn on_tick(&mut self) {
@@ -30,16 +28,26 @@ impl ZoneActor {
                 };
                 for i in 0..self.arena.len() {
                     if self.arena.clan_ids[i] == Some(clan_id)
-                        && (self.arena.locations[i].x - item.loc.x).abs() <= 200
+                        && (i32::from(self.arena.locations[i].x) - i32::from(item.loc.x)).abs()
+                            <= 200
                         && self.arena.stats[i].hp > 0
                     {
                         let prev_hp = self.arena.stats[i].hp;
                         let h = self.arena.stats[i].hp_max / 20;
                         let new_hp = prev_hp.saturating_add(h).min(self.arena.stats[i].hp_max);
                         if new_hp > prev_hp {
-                            self.arena.stats[i].hp = new_hp;
-                            if let Some(tx) = &self.arena.outbound_txs[i] {
-                                let _ = tx.try_send(s2c_packets::me_load_hp(new_hp));
+                            if let Some(tx) = &self.event_tx {
+                                if let Some(player_id) = self.arena.player_ids[i] {
+                                    let _ = tx.try_send(ZoneEvent::PlayerHpDelta {
+                                        player_id,
+                                        delta: new_hp - prev_hp,
+                                    });
+                                }
+                            } else {
+                                self.arena.stats[i].hp = new_hp;
+                                if let Some(tx) = &self.arena.outbound_txs[i] {
+                                    let _ = tx.try_send(s2c_packets::me_load_hp(new_hp));
+                                }
                             }
                         }
                     }
@@ -62,16 +70,27 @@ impl ZoneActor {
                 {
                     let dmg =
                         trap.base_damage.saturating_mul(90 + (self.rng.next_u64() % 21)) / 100;
-                    self.arena.stats[i].hp = self.arena.stats[i]
-                        .hp
-                        .saturating_sub(i64::try_from(dmg).unwrap_or(i64::MAX))
-                        .max(0);
-                    if let Some(tx) = &self.arena.outbound_txs[i] {
-                        let _ = tx.try_send(s2c_packets::me_load_point(&self.arena.stats[i]));
+                    let dmg_i64 = i64::try_from(dmg).unwrap_or(i64::MAX);
+                    if let Some(tx) = &self.event_tx {
+                        if let Some(player_id) = self.arena.player_ids[i]
+                            && dmg_i64 > 0
+                        {
+                            let _ = tx.try_send(ZoneEvent::PlayerHpDelta {
+                                player_id,
+                                delta: dmg_i64.saturating_neg(),
+                            });
+                        }
+                    } else {
+                        self.arena.stats[i].hp =
+                            self.arena.stats[i].hp.saturating_sub(dmg_i64).max(0);
+                        if let Some(tx) = &self.arena.outbound_txs[i] {
+                            let _ = tx.try_send(s2c_packets::me_load_point(&self.arena.stats[i]));
+                        }
                     }
                 }
             }
         }
+        let offline = is_offline_map(self.cfg.id.0);
         let p0_x = self
             .arena
             .kinds
@@ -79,29 +98,65 @@ impl ZoneActor {
             .position(|&k| k == EntityKind::Player)
             .map(|i| self.arena.locations[i].x);
         let mut dead = Vec::new();
+        let mut hopped = Vec::new();
+        let max_x = self.cfg.map_width.max(4_095);
         for (k, it) in &mut self.ground_items {
             let age = self.now_ms.saturating_sub(it.times_ms.0);
-            if matches!(it.kind, GroundDropKind::Standard | GroundDropKind::EarthDragonBall)
+            if !offline
+                && matches!(it.kind, GroundDropKind::Standard | GroundDropKind::EarthDragonBall)
                 && age >= 45_000
             {
                 it.owner = None;
             }
             match it.kind {
-                GroundDropKind::Standard if age >= 60_000 => dead.push((k, it.wire_id)),
-                GroundDropKind::EarthDragonBall if age >= 300_000 => dead.push((k, it.wire_id)),
-                GroundDropKind::Satellite { .. } if age >= 1_800_000 => dead.push((k, it.wire_id)),
+                GroundDropKind::Standard if age >= 60_000 => dead.push((k, it.wire_id, it.owner)),
+                GroundDropKind::EarthDragonBall if age >= 300_000 => {
+                    dead.push((k, it.wire_id, it.owner));
+                }
+                GroundDropKind::Satellite { .. } if age >= 1_800_000 => {
+                    dead.push((k, it.wire_id, it.owner));
+                }
                 GroundDropKind::BlackBall if self.now_ms.saturating_sub(it.times_ms.1) >= 10_000 => {
                     it.times_ms.1 = self.now_ms;
                     if let Some(px) = p0_x {
-                        it.loc.x = it.loc.x.saturating_add((px - it.loc.x).clamp(-50, 50));
+                        let delta = (i32::from(px) - i32::from(it.loc.x)).clamp(-50, 50) as i16;
+                        let new_x = it.loc.x.saturating_add(delta).clamp(0, max_x);
+                        if new_x != it.loc.x {
+                            it.loc.x = new_x;
+                            hopped.push((it.wire_id, it.stack.0, it.loc, it.owner));
+                        }
                     }
                 }
                 _ => {}
             }
         }
-        for (k, wid) in dead {
+        for (k, wid, owner) in dead {
             self.ground_items.remove(k);
-            self.broadcast(&s2c_packets::item_map_remove(wid), None);
+            self.broadcast_ground_item_pkt(&s2c_packets::item_map_remove(wid), owner);
+        }
+        for (wid, tid, loc, owner) in hopped {
+            self.broadcast_ground_item_pkt(&s2c_packets::item_map_remove(wid), owner);
+            let wire = GroundItemWire { item_map_id: wid, template_id: tid, loc, owner_id: owner };
+            let add_pkt = s2c_packets::item_map_add(&wire, self.cfg.parity);
+            self.broadcast_ground_item_pkt(&add_pkt, owner);
+        }
+    }
+
+    pub(super) fn wipe_mobs(&mut self) {
+        let mut died = Vec::new();
+        for mob in &mut self.mobs {
+            if mob.status != 0 && mob.hp > 0 {
+                let dmg = mob.hp;
+                mob.hp = 0;
+                mob.status = 0;
+                mob.died_at_ms = self.now_ms;
+                died.push((mob.slot_id, dmg));
+            }
+        }
+        if !is_offline_map(self.cfg.id.0) {
+            for (slot_id, dmg) in died {
+                self.broadcast(&s2c_packets::mob_die(slot_id, dmg, false, &[]), None);
+            }
         }
     }
 
@@ -171,18 +226,46 @@ impl ZoneActor {
             .find_map(|(k, it)| (it.wire_id == item_map_id).then_some(k))
             .ok_or(WorldError::DungeonRule("ground item not found"))?;
         let it = self.ground_items.get(item_key).ok_or(WorldError::EntityNotFound(item_key))?;
+        if matches!(it.kind, GroundDropKind::Satellite { .. }) {
+            return Err(WorldError::DungeonRule("cannot pick up satellite"));
+        }
         if let Some(owner) = it.owner
             && owner != pid
         {
             return Err(WorldError::DungeonRule("item belongs to another player"));
         }
+        let picker_loc = self.arena.locations[idx];
+        if (i32::from(picker_loc.x) - i32::from(it.loc.x)).abs() > 150
+            || (i32::from(picker_loc.y) - i32::from(it.loc.y)).abs() > 150
+        {
+            return Err(WorldError::DungeonRule("item too far"));
+        }
         self.ground_items.remove(item_key).ok_or(WorldError::EntityNotFound(item_key))
     }
 
-    pub(super) fn restore_ground_item(&mut self, item: GroundItem) {
-        if self.ground_items.len() < MAX_GROUND_ITEMS {
-            self.ground_items.insert(item);
+    pub(super) fn restore_ground_item(&mut self, mut item: GroundItem) {
+        if self.ground_items.len() >= MAX_GROUND_ITEMS {
+            self.broadcast_ground_item_pkt(&s2c_packets::item_map_remove(item.wire_id), item.owner);
+            return;
         }
+        if self.ground_items.values().any(|it| it.wire_id == item.wire_id) {
+            let Some(new_id) = self.alloc_wire_id() else {
+                return;
+            };
+            item.wire_id = new_id;
+            let owner = item.owner;
+            let wire = GroundItemWire {
+                item_map_id: new_id,
+                template_id: item.stack.0,
+                loc: item.loc,
+                owner_id: owner,
+            };
+            let pkt = s2c_packets::item_map_add(&wire, self.cfg.parity);
+            self.ground_items.insert(item);
+            self.broadcast_ground_item_pkt(&pkt, owner);
+            return;
+        }
+        self.ground_items.insert(item);
     }
 
     pub(super) fn two_phase_change_map(
@@ -208,6 +291,7 @@ impl ZoneActor {
             self.broadcast(&s2c_packets::player_remove(p.identity.0), None);
         }
         let (prev_loc, rb_tx) = (p.loc, self.self_tx.clone());
+        let pid = p.identity.0;
         p.loc = dest_loc;
         p.ship_type = ship_type;
         tokio::spawn(async move {
@@ -216,7 +300,9 @@ impl ZoneActor {
             let err = match dest_tx.send(ZoneCommand::EnterPlayer(Box::new(p), ack_tx)).await {
                 Ok(()) => match ack_rx.await {
                     Ok(Ok(new_key)) => {
-                        let _ = reply.send(Ok(new_key));
+                        if reply.send(Ok(new_key)).is_err() {
+                            let _ = dest_tx.send(ZoneCommand::LeavePlayer { player_id: pid }).await;
+                        }
                         return;
                     }
                     Ok(Err(e)) => e,
@@ -240,7 +326,10 @@ impl ZoneActor {
             } else {
                 None
             };
-            let _ = reply.send(Err((err, rollback_key)));
+            let has_rollback = rollback_key.is_some();
+            if reply.send(Err((err, rollback_key))).is_err() && has_rollback {
+                let _ = rb_tx.send(ZoneCommand::LeavePlayer { player_id: pid }).await;
+            }
         });
     }
 }

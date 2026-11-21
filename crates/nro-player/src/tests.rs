@@ -182,7 +182,7 @@ fn pet_fusion_assimilate_tasks_clan_and_bots_execute_cleanly() {
     assert_eq!(clan.donate_pea(PlayerId(11), msg_id), Ok(PlayerId(10)));
 
     let cfg = BotTradeConfig { offer_item_id: TemplateId(457), required_item_id: TemplateId(16), rate_per_unit: 10 };
-    assert_eq!(cfg.evaluate_offer(&[ItemInstance { template_id: TemplateId(16), quantity: 25, options: smallvec![], create_time_ms: 0 }]), Some((TemplateId(457), 3)));
+    assert_eq!(cfg.evaluate_offer(&[ItemInstance { template_id: TemplateId(16), quantity: 25, options: smallvec![], create_time_ms: 0 }]), Some((TemplateId(457), 2)));
     let mut mgr = BotManager::default();
     for (i, arch) in [BotArchetype::MobGrinder, BotArchetype::MarketTrader, BotArchetype::BossHunter, BotArchetype::PvpHunter].into_iter().enumerate() {
         mgr.bots.push(BotAgent::spawn(PlayerId(100 + i as i64), Gender::TraiDat, (0, 1, 2, 0), arch, Some(cfg), 1_000, &mut rng));

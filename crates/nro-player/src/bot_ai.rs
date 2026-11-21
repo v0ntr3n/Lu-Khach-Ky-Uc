@@ -61,7 +61,8 @@ impl BotTradeConfig {
             .iter()
             .find(|it| tpl_raw(it.template_id) == tpl_raw(self.required_item_id) && it.quantity >= self.rate_per_unit)
             .map(|it| it.quantity)?;
-        Some((self.offer_item_id, ((f64::from(offered) / f64::from(self.rate_per_unit)).round() as u32).max(1)))
+        if offered < self.rate_per_unit { return None; }
+        Some((self.offer_item_id, offered / self.rate_per_unit))
     }
 }
 
@@ -292,6 +293,7 @@ impl BotAgent {
             let ult = [SkillKind::QuaCauKenhKhi, SkillKind::Makankosappo, SkillKind::BienKhi][usize::from(gender_index(self.gender))];
             return BotDirective::UseSkill { skill: ult, target_mob: None, target_player: Some(boss_id), move_to: (boss_loc.x, boss_loc.y) };
         }
+        if self.skills.is_empty() { return BotDirective::Idle; }
         let idx = usize::from(!rng_ratio(rng, 50, 100)).min(self.skills.len().saturating_sub(1));
         if self.skills[idx].is_off_cooldown(now_ms) {
             self.skills[idx].last_used_ms = now_ms;
@@ -302,7 +304,7 @@ impl BotAgent {
     }
 
     fn tick_attack_player(&mut self, world: &BotWorldView<'_>, now_ms: u64, rng: &mut GameRng) -> BotDirective {
-        let Some(&(target_id, target_loc)) = world.map_players.iter().filter(|(pid, _)| *pid != self.id).min_by_key(|(_, loc)| i32::from(self.location.x - loc.x).abs()) else { return BotDirective::Idle; };
+        let Some(&(target_id, target_loc)) = world.map_players.iter().filter(|(pid, _)| *pid != self.id).min_by_key(|(_, loc)| (i32::from(self.location.x) - i32::from(loc.x)).abs()) else { return BotDirective::Idle; };
         if self.location.map_id != target_loc.map_id {
             self.location = target_loc;
             return BotDirective::ChangeMap { map_id: target_loc.map_id, x: target_loc.x, y: target_loc.y };

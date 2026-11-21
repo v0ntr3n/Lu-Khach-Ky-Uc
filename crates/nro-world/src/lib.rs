@@ -51,7 +51,7 @@ pub use shenron_events::{
 };
 pub use zone_actor::{
     EntityKind, GroundDropKind, GroundItem, PlayerIngress, TrapVolume, ZoneActor, ZoneCommand,
-    ZoneConfig, ZoneMobSeed, ZoneSoaArena,
+    ZoneConfig, ZoneEvent, ZoneMobSeed, ZoneSoaArena,
 };
 
 /// Domain errors across map routing, zone actors, dungeons, PvP arenas, Shenron, and events.

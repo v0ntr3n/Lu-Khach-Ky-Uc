@@ -1,6 +1,9 @@
 //! Zone UI, map/zone switching, waypoint transitions, and map chat handlers.
 
-use nro_core::{Location, MapId, ZoneId};
+use std::sync::OnceLock;
+
+use dashmap::{DashMap, DashSet, mapref::entry::Entry};
+use nro_core::{Location, MapId, PlayerId, ZoneId};
 use nro_protocol::{
     AdminCommand, ChatDirective, Packet, ProtocolError, SessionHandle, parse_chat_command,
 };
@@ -15,6 +18,21 @@ use super::{ServerSessionHandler, effective_appearance, send_thong_bao};
 use crate::data_game::DataGameAssets;
 use crate::data_game_tpl;
 use crate::runtime::unix_now_ms;
+
+static CHAT_GLOBAL_COOLDOWN: OnceLock<DashMap<PlayerId, i64>> = OnceLock::new();
+fn chat_global_cooldown() -> &'static DashMap<PlayerId, i64> { CHAT_GLOBAL_COOLDOWN.get_or_init(DashMap::new) }
+pub(super) fn clear_chat_global_cooldown(pid: PlayerId) { chat_global_cooldown().remove(&pid); }
+
+static INFLIGHT_MAP_CHANGES: OnceLock<DashSet<u64>> = OnceLock::new();
+fn inflight_map_changes() -> &'static DashSet<u64> { INFLIGHT_MAP_CHANGES.get_or_init(DashSet::new) }
+
+struct MapChangeGuard(u64);
+impl MapChangeGuard {
+    fn acquire(sid: u64) -> Option<Self> { inflight_map_changes().insert(sid).then_some(Self(sid)) }
+}
+impl Drop for MapChangeGuard {
+    fn drop(&mut self) { inflight_map_changes().remove(&self.0); }
+}
 
 impl ServerSessionHandler {
     pub(super) async fn handle_client_ok(&self, session: &SessionHandle, sid: u64) -> Result<(), ProtocolError> {
@@ -131,6 +149,9 @@ impl ServerSessionHandler {
     pub(super) async fn switch_player_zone_with_ship(
         &self, session: &SessionHandle, sid: u64, dest_map: Option<MapId>, dest_zone: ZoneId, dest_coords: Option<(i16, i16)>, arrival_ship: i8,
     ) -> Result<bool, ProtocolError> {
+        let Some(_inflight) = MapChangeGuard::acquire(sid) else {
+            return Ok(false);
+        };
         let Some((pid, ek, cur_loc)) = self.shared.clients.authenticated.get(&sid)
             .and_then(|e| e.entity_key.map(|k| (e.snapshot.id, k, e.snapshot.location)))
         else {
@@ -151,6 +172,9 @@ impl ServerSessionHandler {
         } else {
             dest_zone
         };
+        if (target_map, safe_zone) == (cur_loc.map_id, cur_loc.zone_id) && dest_coords.is_none() {
+            return Ok(true);
+        }
         let (Ok(src_tx), Ok(dest_tx)) = (
             self.shared.world_router.resolve_sender(cur_loc.map_id, cur_loc.zone_id),
             self.shared.world_router.resolve_sender(target_map, safe_zone),
@@ -163,9 +187,6 @@ impl ServerSessionHandler {
             if target_map == cur_loc.map_id { (cur_loc.x, cur_loc.y) } else if matches!(target_map.0, 21..=23) { (300, 336) } else { (180, 336) }
         });
         let new_loc = Location { map_id: target_map, zone_id: safe_zone, x: target_x, y: target_y };
-        self.cleanup_trade_on_disconnect(pid);
-        self.cleanup_combat_on_disconnect(pid, cur_loc, sid);
-        super::router_skill::clear_skill_state(pid);
         session.send(Packet::empty(-22)).await?;
         let (reply_tx, reply_rx) = oneshot::channel();
         let rollback_key = if src_tx.send(ZoneCommand::ChangeMap(ek, (target_map, safe_zone), new_loc, arrival_ship, reply_tx)).await.is_ok() {
@@ -182,6 +203,28 @@ impl ServerSessionHandler {
                         }
                         return Ok(false);
                     }
+                    self.cleanup_trade_on_disconnect(pid);
+                    self.cleanup_combat_on_zone_change(pid, cur_loc, sid);
+                    super::npc_menu_index().remove(&pid);
+                    if target_map != cur_loc.map_id {
+                        super::open_shop_state().remove(&pid);
+                        super::pending_combine().remove(&pid);
+                        super::pending_input().remove(&pid);
+                        super::con_meo_state().remove(&pid);
+                        super::router_world_tree::clear_magic_tree_menu_state(pid);
+                        if (114..=120).contains(&cur_loc.map_id.0) {
+                            super::router_npc::reset_mabu_points(pid);
+                        }
+                        if super::router_npc::clear_map_scoped_buffs(pid, cur_loc.map_id, target_map)
+                            && let Some(pt_pkt) = self.shared.clients.authenticated.get_mut(&sid).map(|mut entry| {
+                                super::recalculate_session_stats(sid, &mut entry.snapshot, self.shared.config.parity_mode);
+                                let _ = dest_tx.try_send(ZoneCommand::UpdatePlayerStats(new_ek, entry.snapshot.stats));
+                                s2c_packets::me_load_point(&entry.snapshot.stats)
+                            })
+                        {
+                            session.send(pt_pkt).await?;
+                        }
+                    }
                     self.advance_task_on_enter_map(session, sid, target_map).await?;
                     if let Some(snap) = self.shared.clients.authenticated.get(&sid).map(|e| e.snapshot.clone()) {
                         session.send(data_game_tpl::pkt_task_get(&self.shared.templates, &snap)).await?;
@@ -196,14 +239,21 @@ impl ServerSessionHandler {
         } else {
             None
         };
-        let updated = self.shared.clients.authenticated.get_mut(&sid).is_some_and(|mut entry| {
-            entry.entity_key = rollback_key;
+        let mut matched_stale = false;
+        let present = self.shared.clients.authenticated.get_mut(&sid).is_some_and(|mut entry| {
+            if entry.entity_key == Some(ek) {
+                entry.entity_key = rollback_key;
+                matched_stale = true;
+            }
             true
         });
-        if !updated {
+        if !present {
             if rollback_key.is_some() && self.shared.clients.players.get(&pid).is_none() {
                 let _ = src_tx.send(ZoneCommand::LeavePlayer { player_id: pid }).await;
             }
+            return Ok(false);
+        }
+        if !matched_stale {
             return Ok(false);
         }
         if rollback_key.is_none() {
@@ -221,6 +271,7 @@ impl ServerSessionHandler {
     }
 
     pub(super) async fn handle_waypoint_change(&self, session: &SessionHandle, sid: u64, is_offline: bool) -> Result<(), ProtocolError> {
+        const WP_MARGIN: i32 = 120;
         let Some(loc) = self.shared.clients.authenticated.get(&sid).map(|e| e.snapshot.location) else {
             return Ok(());
         };
@@ -229,11 +280,17 @@ impl ServerSessionHandler {
             46 if loc.y >= 300 => Some((MapId(47), 612_i16, 144_i16)),
             _ => None,
         };
+        let (px, py) = (i32::from(loc.x), i32::from(loc.y));
         let mut best_wp = None;
         let mut min_score = i64::MAX;
         if let Some(map_tpl) = self.shared.templates.maps.iter().find(|m| m.id == loc.map_id) {
             for wp in &map_tpl.waypoints {
                 if wp.7.0 < 0 || !self.shared.templates.maps.iter().any(|m| m.id == wp.7) {
+                    continue;
+                }
+                let (min_x, max_x) = (i32::from(wp.1.min(wp.3)), i32::from(wp.1.max(wp.3)));
+                let (min_y, max_y) = (i32::from(wp.2.min(wp.4)), i32::from(wp.2.max(wp.4)));
+                if px < min_x - WP_MARGIN || px > max_x + WP_MARGIN || py < min_y - WP_MARGIN || py > max_y + WP_MARGIN {
                     continue;
                 }
                 let dx = i64::from(loc.x) - i64::midpoint(i64::from(wp.1), i64::from(wp.3));
@@ -248,23 +305,24 @@ impl ServerSessionHandler {
                 }
             }
         }
-        let fallback_air = match loc.map_id.0 {
-            45 => Some((MapId(46), 354_i16, 120_i16)),
-            46 => Some((MapId(47), 612_i16, 144_i16)),
-            _ => None,
-        };
-        if let Some((target_map, tx, ty)) = best_wp.or(air_drop).or(fallback_air) {
+        if let Some((target_map, tx, ty)) = best_wp.or(air_drop) {
             return self.switch_player_zone(session, sid, Some(target_map), loc.zone_id, Some((tx, ty))).await;
         }
         session.send(s2c_packets::reset_point(loc)).await?;
         send_thong_bao(session, "Không thể chuyển khu vực tại đây!")
     }
 
+    pub(crate) async fn grant_starter_pet_for_effect(
+        &self, session: &SessionHandle, sid: u64,
+    ) -> Result<(), ProtocolError> {
+        self.grant_starter_pet(session, sid).await
+    }
+
     pub(super) async fn handle_chat_map(&self, session: &SessionHandle, sid: u64, raw_text: &str) -> Result<(), ProtocolError> {
         let Some((pid, is_admin)) = self.shared.clients.authenticated.get(&sid).map(|e| (e.snapshot.id, e.is_admin)) else {
             return Ok(());
         };
-        if raw_text.trim().eq_ignore_ascii_case("pet") {
+        if is_admin && raw_text.trim().eq_ignore_ascii_case("pet") {
             if super::router_shop::is_in_trade(pid) {
                 return send_thong_bao(session, "Không thể thao tác khi đang giao dịch!");
             }
@@ -287,6 +345,35 @@ impl ServerSessionHandler {
                 {
                     let _ = tx.try_send(ZoneCommand::ChatMap(ek, cleaned_text));
                 }
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn handle_chat_global(&self, session: &SessionHandle, sid: u64, raw_text: &str) -> Result<(), ProtocolError> {
+        let text = raw_text.trim();
+        if text.is_empty() {
+            return Ok(());
+        }
+        if text.chars().count() > 200 || text.len() > 512 {
+            return send_thong_bao(session, "Tin nhắn thế giới tối đa 200 ký tự!");
+        }
+        let Some(pid) = self.shared.clients.authenticated.get(&sid).map(|e| e.snapshot.id) else {
+            return Ok(());
+        };
+        let now_ms = unix_now_ms();
+        let on_cooldown = match chat_global_cooldown().entry(pid) {
+            Entry::Occupied(occ) if now_ms.saturating_sub(*occ.get()) < 5_000 => true,
+            Entry::Occupied(mut occ) => { occ.insert(now_ms); false }
+            Entry::Vacant(vac) => { vac.insert(now_ms); false }
+        };
+        if on_cooldown { return send_thong_bao(session, "Vui lòng đợi 5 giây trước khi chat thế giới tiếp!"); }
+        if let Some(pkt) = self.shared.clients.authenticated.get(&sid).and_then(|e| {
+            let (h, b, l, bg, _) = effective_appearance(&self.shared.templates, &e.snapshot);
+            s2c_packets::chat_global(e.snapshot.id, &e.snapshot.name, text, (h, b, bg, l)).ok()
+        }) {
+            for rec in &self.shared.clients.authenticated {
+                let _ = rec.value().handle.try_send(pkt.clone());
             }
         }
         Ok(())

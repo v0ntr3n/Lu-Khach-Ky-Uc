@@ -271,9 +271,18 @@ impl FjallEngine {
         self.inner.next_account_id.fetch_add(1, Ordering::Relaxed)
     }
 
-    #[inline]
-    pub fn alloc_player_id(&self) -> i64 {
-        self.inner.next_player_id.fetch_add(1, Ordering::Relaxed)
+    /// Allocates the next positive 32-bit wire-safe player ID (`1..=i32::MAX`).
+    pub fn alloc_player_id(&self) -> DbResult<i64> {
+        let max_wire_id = i64::from(i32::MAX);
+        self.inner
+            .next_player_id
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |cur| {
+                (1..=max_wire_id).contains(&cur).then_some(cur.saturating_add(1))
+            })
+            .map_err(|cur| DbError::InvalidColumnFormat {
+                column: "player.id",
+                reason: format!("allocated player id {cur} outside wire range 1..={max_wire_id}"),
+            })
     }
 
     #[inline]

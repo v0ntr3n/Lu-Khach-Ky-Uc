@@ -82,46 +82,21 @@ impl AccountRepo {
         client_ip: &str,
         now: DateTime<Utc>,
     ) -> DbResult<AccountRow> {
-        let id = self.pool.alloc_account_id();
-        let username = format!("User{id}");
-        let truncated_ip: String = client_ip.chars().take(50).collect();
-        let row = AccountRow {
-            id,
-            username,
-            password: String::new(),
-            email: String::new(),
-            create_time: Some(now),
-            update_time: Some(now),
-            ban: false,
-            is_admin: false,
-            last_time_login: DateTime::UNIX_EPOCH,
-            last_time_logout: DateTime::UNIX_EPOCH,
-            ip_address: Some(truncated_ip),
-            active: 1,
-            thoi_vang: 0,
-            server_login: 0,
-            bd_player: Some(1.0),
-            is_gift_box: None,
-            gift_time: None,
-            reward: None,
-            vnd: 0,
-            tongnap: 0,
-            token: String::new(),
-            xsrf_token: String::new(),
-            newpass: String::new(),
-            luotquay: 0,
-            vang: 0,
-            event_point: 0,
-            vip: 0,
-            tichdiem: 0,
-            point_post: 0,
-            last_post: 0,
-            gioithieu: None,
-            xacnhan_gioitheu: 0,
-            baiviet: 0,
-            xacminh: 0,
-            admin: 0,
+        let _guard = self.pool.lock_stripe(0);
+        let (id, username) = loop {
+            let id = self.pool.alloc_account_id();
+            let username = format!("User{id}");
+            if !self
+                .pool
+                .ks()
+                .idx_account_user
+                .contains_key(&canonical_lookup_key(&username))?
+            {
+                break (id, username);
+            }
         };
+        let truncated_ip: String = client_ip.chars().take(50).collect();
+        let row = new_account_row(id, username, String::new(), truncated_ip, now);
         self.put_account(&row)?;
         Ok(row)
     }
@@ -159,9 +134,30 @@ impl AccountRepo {
             .filter(|s| !s.is_empty())
             .map(canonical_lookup_key);
 
-        if guest_key.as_ref() != Some(&new_uname_key)
-            && self.pool.ks().idx_account_user.contains_key(&new_uname_key)?
+        let mut verified_guest_pw: Option<String> = None;
+        if let Some(g_key) = &guest_key
+            && let Some(id_bytes) = self.pool.ks().idx_account_user.get(g_key)?
         {
+            let guest_id = AccountId(dec_i32(&id_bytes)?);
+            if let Some(row) = self.get_by_id(guest_id)? {
+                let empty_pw = row.password.is_empty()
+                    || (row.password.starts_with("$argon2")
+                        && verify_or_upgrade_password(row.password.clone(), String::new())
+                            .await
+                            .is_ok());
+                if !row.username.starts_with("User") || row.is_admin || row.ban || !empty_pw {
+                    return Err(DbError::InvalidColumnFormat {
+                        column: "account.username",
+                        reason: "target account is not an upgradable guest account".to_owned(),
+                    });
+                }
+                verified_guest_pw = Some(row.password);
+            }
+        }
+
+        let upgrading_same_key =
+            verified_guest_pw.is_some() && guest_key.as_ref() == Some(&new_uname_key);
+        if !upgrading_same_key && self.pool.ks().idx_account_user.contains_key(&new_uname_key)? {
             return Err(DbError::DuplicateKey {
                 entity: "account.username",
                 key: trimmed_username.to_owned(),
@@ -177,7 +173,19 @@ impl AccountRepo {
             && let Some(id_bytes) = self.pool.ks().idx_account_user.get(g_key)?
         {
             let guest_id = AccountId(dec_i32(&id_bytes)?);
+            let guest_seed = u64::from(guest_id.0.cast_unsigned());
+            let _guest_guard = (guest_seed & 63 != 0).then(|| self.pool.lock_stripe(guest_seed));
             if let Some(mut row) = self.get_by_id(guest_id)? {
+                let empty_pw = row.password.is_empty()
+                    || verified_guest_pw.as_deref() == Some(row.password.as_str())
+                    || (row.password.starts_with("$argon2")
+                        && verify_or_upgrade_password_sync(&row.password, "").is_ok());
+                if !row.username.starts_with("User") || row.is_admin || row.ban || !empty_pw {
+                    return Err(DbError::InvalidColumnFormat {
+                        column: "account.username",
+                        reason: "target account is not an upgradable guest account".to_owned(),
+                    });
+                }
                 if g_key != &new_uname_key
                     && self.pool.ks().idx_account_user.contains_key(&new_uname_key)?
                 {
@@ -212,43 +220,7 @@ impl AccountRepo {
         }
 
         let id = self.pool.alloc_account_id();
-        let row = AccountRow {
-            id,
-            username: trimmed_username.to_owned(),
-            password: hashed_password,
-            email: String::new(),
-            create_time: Some(now),
-            update_time: Some(now),
-            ban: false,
-            is_admin: false,
-            last_time_login: DateTime::UNIX_EPOCH,
-            last_time_logout: DateTime::UNIX_EPOCH,
-            ip_address: Some(truncated_ip),
-            active: 1,
-            thoi_vang: 0,
-            server_login: 0,
-            bd_player: Some(1.0),
-            is_gift_box: None,
-            gift_time: None,
-            reward: None,
-            vnd: 0,
-            tongnap: 0,
-            token: String::new(),
-            xsrf_token: String::new(),
-            newpass: String::new(),
-            luotquay: 0,
-            vang: 0,
-            event_point: 0,
-            vip: 0,
-            tichdiem: 0,
-            point_post: 0,
-            last_post: 0,
-            gioithieu: None,
-            xacnhan_gioitheu: 0,
-            baiviet: 0,
-            xacminh: 0,
-            admin: 0,
-        };
+        let row = new_account_row(id, trimmed_username.to_owned(), hashed_password, truncated_ip, now);
         self.put_account(&row)?;
         Ok(row)
     }
@@ -323,6 +295,22 @@ impl AccountRepo {
         Ok(true)
     }
 
+    pub async fn add_vnd(&self, account_id: AccountId, amount: i64) -> DbResult<()> {
+        if amount <= 0 {
+            return Ok(());
+        }
+        let delta = i32::try_from(amount).unwrap_or(i32::MAX);
+        let _guard = self.pool.lock_stripe(u64::from(account_id.0.cast_unsigned()));
+        if let Some(mut row) = self.get_by_id(account_id)? {
+            row.vnd = row.vnd.saturating_add(delta);
+            self.pool
+                .ks()
+                .accounts
+                .insert(&enc_i32(account_id.0)[..], encode_val("account", &row)?)?;
+        }
+        Ok(())
+    }
+
     pub async fn activate_member(
         &self,
         account_id: AccountId,
@@ -346,5 +334,51 @@ impl AccountRepo {
             .accounts
             .insert(&enc_i32(account_id.0)[..], encode_val("account", &row)?)?;
         Ok(true)
+    }
+}
+
+fn new_account_row(
+    id: i32,
+    username: String,
+    password: String,
+    ip: String,
+    now: DateTime<Utc>,
+) -> AccountRow {
+    AccountRow {
+        id,
+        username,
+        password,
+        email: String::new(),
+        create_time: Some(now),
+        update_time: Some(now),
+        ban: false,
+        is_admin: false,
+        last_time_login: DateTime::UNIX_EPOCH,
+        last_time_logout: DateTime::UNIX_EPOCH,
+        ip_address: Some(ip),
+        active: 1,
+        thoi_vang: 0,
+        server_login: 0,
+        bd_player: Some(1.0),
+        is_gift_box: None,
+        gift_time: None,
+        reward: None,
+        vnd: 0,
+        tongnap: 0,
+        token: String::new(),
+        xsrf_token: String::new(),
+        newpass: String::new(),
+        luotquay: 0,
+        vang: 0,
+        event_point: 0,
+        vip: 0,
+        tichdiem: 0,
+        point_post: 0,
+        last_post: 0,
+        gioithieu: None,
+        xacnhan_gioitheu: 0,
+        baiviet: 0,
+        xacminh: 0,
+        admin: 0,
     }
 }

@@ -1,7 +1,11 @@
 //! Intrinsic menus, `CON_MEO` confirms (`112`), Lucky Round (`-127`), and Achievements (`-76`).
 
+use std::sync::OnceLock;
+
+use dashmap::DashMap;
+use nro_boss::{ClothesStatProfile, RewardEngine};
 use nro_consts::{cmd_message, const_npc};
-use nro_core::{ClanId, GameRng};
+use nro_core::{ClanId, GameRng, ItemInstance, PlayerId, TemplateId};
 use nro_economy::{LuckyRoundMode, LuckyRoundService};
 use nro_player::progression::{INTRINSIC_GOLD_MILLIONS, INTRINSIC_MIN_POWER};
 use nro_protocol::{Packet, PacketWriter, ProtocolError, SessionHandle};
@@ -12,6 +16,28 @@ use super::{
     wallet_money_pkt,
 };
 use crate::runtime::unix_now_ms;
+
+/// Dedicated `CON_MEO` menu mode for SKH Capsule (`1655`) slot selection.
+pub(super) const SKH_CAPSULE_MODE: i32 = 5551;
+
+/// Tier-1 starter gear template IDs `[Trái Đất, Namếc, Xayda]` per slot (`0..=4`: Áo, Quần, Găng, Giày, Rada).
+const SKH_CAPSULE_TEMPLATES: [[i16; 3]; 5] = [
+    [0, 1, 2],
+    [6, 7, 8],
+    [21, 22, 23],
+    [27, 28, 29],
+    [12, 12, 12],
+];
+
+static LUCKY_ROUND_MODE: OnceLock<DashMap<PlayerId, LuckyRoundMode>> = OnceLock::new();
+
+fn lucky_round_mode() -> &'static DashMap<PlayerId, LuckyRoundMode> {
+    LUCKY_ROUND_MODE.get_or_init(DashMap::new)
+}
+
+pub(super) fn clear_lucky_round_mode(pid: PlayerId) {
+    lucky_round_mode().remove(&pid);
+}
 
 impl ServerSessionHandler {
     pub(super) async fn handle_intrinsic_open(&self, session: &SessionHandle, sid: u64, sub: i8) -> Result<(), ProtocolError> {
@@ -38,38 +64,94 @@ impl ServerSessionHandler {
         if cid.0 < 0 {
             return session.send(s2c_packets::thong_bao("Bạn không ở trong bang hội nào!")?).await;
         }
-        let Ok(clans) = self.shared.clans_repo.load_all().await else {
+        let guard = super::router_secondary_clan::clan_op_lock().lock().await;
+        let Ok(clan_opt) = self.shared.clans_repo.get_by_id(cid).await else {
+            drop(guard);
             return session.send(s2c_packets::thong_bao("Không thể giải tán bang hội lúc này!")?).await;
         };
-        let is_leader = clans
-            .iter()
-            .find(|c| c.id == cid)
+        let is_leader = clan_opt
             .is_some_and(|c| c.members.iter().any(|m| m.id == pid.0 as i32 && m.role == 0));
         if !is_leader {
+            drop(guard);
             return session.send(s2c_packets::thong_bao("Chỉ bang chủ mới có thể giải tán bang hội!")?).await;
         }
         if self.shared.clans_repo.delete_clan(cid).await.is_err() {
+            drop(guard);
             return session.send(s2c_packets::thong_bao("Không thể giải tán bang hội lúc này!")?).await;
         }
+        super::router_secondary_clan_ops::clear_clan_pea_requests_for_clan(cid);
+        let mut peer_handles: Vec<SessionHandle> = Vec::new();
         for mut entry in self.shared.clients.authenticated.iter_mut() {
             if entry.snapshot.clan_id == cid {
                 entry.snapshot.clan_id = ClanId(-1);
+                if *entry.key() != sid {
+                    peer_handles.push(entry.handle.clone());
+                }
             }
         }
+        drop(guard);
         let mut w = PacketWriter::with_capacity(4);
         w.write_i32(-1);
-        session.send(w.finish(cmd_message::CLAN_INFO)).await?;
+        let clear_pkt = w.finish(cmd_message::CLAN_INFO);
+        let dissolved_notice = s2c_packets::thong_bao("Bang hội đã bị giải tán!")?;
+        for handle in peer_handles {
+            let _ = handle.try_send(clear_pkt.clone());
+            let _ = handle.try_send(dissolved_notice.clone());
+        }
+        session.send(clear_pkt).await?;
         session.send(s2c_packets::thong_bao("Đã giải tán bang hội!")?).await
+    }
+
+    async fn execute_skh_capsule(&self, session: &SessionHandle, sid: u64, select: u8) -> Result<(), ProtocolError> {
+        let Some(row) = SKH_CAPSULE_TEMPLATES.get(usize::from(select)) else {
+            return Ok(());
+        };
+        let res = self.shared.clients.authenticated.get_mut(&sid).map(|mut entry| {
+            if super::router_shop::is_in_trade(entry.snapshot.id) { return Err("Không thể thao tác khi đang giao dịch!".to_owned()); }
+            let mut inv = snapshot_to_economy_inv(&entry.snapshot);
+            inv.sub_template_from_bag(TemplateId(1655), 1)
+                .map_err(|_| "Cần 1 Capsule Kích Hoạt trong hành trang!".to_owned())?;
+            let gender = entry.snapshot.gender;
+            let g_idx = i8::from(gender).clamp(0, 2) as usize;
+            let tid = TemplateId(row[g_idx]);
+            let mut rng = GameRng::from_seed(unix_now_ms().cast_unsigned() ^ sid);
+            let mut item = ItemInstance::new(tid, 1);
+            item.options = RewardEngine::init_clothes_stats(tid, ClothesStatProfile::SetClothes, &mut rng);
+            item.options.extend(RewardEngine::roll_skh_options(gender, &mut rng));
+            inv.add_to_bag(item, false).map_err(|_| "Hành trang đã đầy!".to_owned())?;
+            sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
+            let name = self
+                .shared
+                .templates
+                .items
+                .iter()
+                .find(|t| t.id == i32::from(tid.0))
+                .map_or("trang bị Set Kích Hoạt", |t| t.name.as_str())
+                .to_owned();
+            Ok((s2c_packets::inventory_bag(&entry.snapshot.items_bag), name))
+        });
+        match res {
+            Some(Ok((bag_pkt, name))) => {
+                session.send(bag_pkt).await?;
+                session.send(s2c_packets::thong_bao(&format!("Đã nhận {name} Set Kích Hoạt!"))?).await?;
+            }
+            Some(Err(msg)) => session.send(s2c_packets::thong_bao(&msg)?).await?,
+            None => {}
+        }
+        Ok(())
     }
 
     pub(super) async fn handle_con_meo_confirm(&self, session: &SessionHandle, sid: u64, select: u8) -> Result<(), ProtocolError> {
         let Some(pid) = self.shared.clients.authenticated.get(&sid).map(|e| e.snapshot.id) else { return Ok(()); };
-        let mode = con_meo_state().remove(&pid).map_or(const_npc::INTRINSIC, |(_, v)| v);
+        let Some((_, mode)) = con_meo_state().remove(&pid) else { return Ok(()); };
         if mode == const_npc::CONFIRM_LEAVE_CLAN {
             return if select == 0 { self.execute_leave_clan(session, sid).await } else { Ok(()) };
         }
         if mode == const_npc::CONFIRM_DISSOLUTION_CLAN {
             return if select == 0 { self.execute_dissolve_clan(session, sid).await } else { Ok(()) };
+        }
+        if matches!(mode, const_npc::CAPSULE_KICH_HOAT | SKH_CAPSULE_MODE) {
+            return self.execute_skh_capsule(session, sid, select).await;
         }
         if !matches!(mode, const_npc::INTRINSIC | const_npc::CONFIRM_OPEN_INTRINSIC | const_npc::CONFIRM_OPEN_INTRINSIC_VIP) {
             return Ok(());
@@ -79,6 +161,7 @@ impl ServerSessionHandler {
             1 | 2 => {
                 let is_vip = select == 2;
                 let res = self.shared.clients.authenticated.get_mut(&sid).map(|mut entry| {
+                    if super::router_shop::is_in_trade(entry.snapshot.id) { return Err("Không thể thao tác khi đang giao dịch!".to_owned()); }
                     if entry.snapshot.stats.power < INTRINSIC_MIN_POWER {
                         return Err(format!("Cần ít nhất {INTRINSIC_MIN_POWER} sức mạnh để mở Nội Tại!"));
                     }
@@ -143,22 +226,35 @@ impl ServerSessionHandler {
     }
 
     pub(super) async fn handle_lucky_round(&self, session: &SessionHandle, sid: u64, ty: Option<i8>, opt_cnt: Option<i8>) -> Result<(), ProtocolError> {
-        let is_vip = ty == Some(2);
+        if self.shared.clients.authenticated.get(&sid).is_some_and(|entry| super::router_shop::is_in_trade(entry.snapshot.id)) {
+            return session.send(s2c_packets::thong_bao("Không thể thao tác khi đang giao dịch!")?).await;
+        }
         let Some(cnt) = opt_cnt else {
+            let is_vip = matches!(ty, Some(0 | 2));
+            let mode = if is_vip { LuckyRoundMode::VipGold } else { LuckyRoundMode::StandardGem };
+            if let Some(pid) = self.shared.clients.authenticated.get(&sid).map(|e| e.snapshot.id) {
+                lucky_round_mode().insert(pid, mode);
+            }
             let mut w = PacketWriter::with_capacity(24);
             w.write_i8(0);
             w.write_i8(7);
             for b in 419_i16..=425 { w.write_i16(b); }
-            w.write_i8(if is_vip { 2 } else { 1 });
+            w.write_i8(i8::from(!is_vip));
             w.write_i32(if is_vip { 250_000_000 } else { 4 });
             w.write_i16(if is_vip { -1 } else { 821 });
             return session.send(w.finish(cmd_message::LUCKY_ROUND)).await;
         };
-        let mode = if is_vip { LuckyRoundMode::VipGold } else { LuckyRoundMode::StandardGem };
         let n = cnt.clamp(1, 7).cast_unsigned();
         let res = self.shared.clients.authenticated.get_mut(&sid).map(|mut entry| {
+            if super::router_shop::is_in_trade(entry.snapshot.id) {
+                return Err("Không thể thao tác khi đang giao dịch!".to_owned());
+            }
+            let mode = lucky_round_mode()
+                .get(&entry.snapshot.id)
+                .map_or(LuckyRoundMode::StandardGem, |m| *m);
             let mut inv = snapshot_to_economy_inv(&entry.snapshot);
             if inv.empty_bag_slots() < usize::from(n) { return Err("Hành trang đã đầy!".to_owned()); }
+            inv.lucky_round_box.retain(Option::is_some);
             let prev_len = inv.lucky_round_box.len();
             let mut rng = GameRng::from_seed(unix_now_ms().cast_unsigned() ^ sid);
             let spun = LuckyRoundService::spin(&mut inv, mode, n, &mut rng)
@@ -189,7 +285,9 @@ impl ServerSessionHandler {
     pub(super) async fn handle_achievement(&self, session: &SessionHandle, sid: u64, claim_idx: Option<i8>) -> Result<(), ProtocolError> {
         if let Some(raw_idx) = claim_idx {
             let Ok(idx) = usize::try_from(raw_idx) else { return Ok(()); };
+            let mut in_trade = false;
             if let Some((ack, money)) = self.shared.clients.authenticated.get_mut(&sid).and_then(|mut entry| {
+                if super::router_shop::is_in_trade(entry.snapshot.id) { in_trade = true; return None; }
                 let &(ach_id, _, _, ruby_rw, req) = self.shared.templates.achievements.get(idx)?;
                 while entry.snapshot.achievements.len() <= idx { entry.snapshot.achievements.push((0, false)); }
                 let met = if matches!(ach_id, 1 | 2 | 17) {
@@ -207,6 +305,8 @@ impl ServerSessionHandler {
             }) {
                 session.send(ack).await?;
                 session.send(money).await?;
+            } else if in_trade {
+                return session.send(s2c_packets::thong_bao("Không thể thao tác khi đang giao dịch!")?).await;
             }
             return Ok(());
         }

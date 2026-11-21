@@ -4,7 +4,7 @@
 //! `DoiSachTuyetKy` unsealed/sealed, `HocTuyetKy`), unwired `LamPhepNhapDa` (`512`) and
 //! `PhanRaDoThanLinh` (`514`), plus `Combine`, `CombineSystem`, and `RandomCollection` curves.
 
-use crate::inventory::{Inventory, InventoryError, add_opt_param, get_opt, has_skh_option, opt_id, set_opt};
+use crate::inventory::{ContainerKind, Inventory, InventoryError, add_opt_param, get_opt, has_skh_option, opt_id, set_opt};
 use crate::ItemCatalog;
 use nro_consts::{const_item, const_task_badges};
 use nro_core::{GameRng, Gender, ItemInstance, ItemOption, ParityMode, TemplateId};
@@ -125,9 +125,7 @@ pub struct CombineContext {
 impl CombineContext {
     /// Default hardened context for tests and standalone combine checks.
     #[must_use]
-    pub const fn default_hardened() -> Self {
-        Self { gender: Gender::TraiDat, power: 100_000_000_000, wearing_full_destroyer: true, skill_point: 0, skill_mastery: 1_000, parity: ParityMode::Fixed }
-    }
+    pub const fn default_hardened() -> Self { Self { gender: Gender::TraiDat, power: 100_000_000_000, wearing_full_destroyer: true, skill_point: 0, skill_mastery: 1_000, parity: ParityMode::Fixed } }
 }
 
 /// Read-only quote produced by [`CombineService::preview`] (never mutates inventory!).
@@ -181,8 +179,7 @@ pub struct CombineService;
 impl CombineService {
     /// Computes a non-mutating [`CombinePreview`] after verifying disjoint bag slot indices.
     pub fn preview(inv: &Inventory, op: CombineOp, slots: &[usize], ctx: &CombineContext, catalog: &dyn ItemCatalog) -> Result<CombinePreview, CombineError> {
-        let it = inv.validate_disjoint_bag_slots(slots)?;
-        if let Some(fr) = FIXED_RECIPES.iter().find(|r| r.0 == op) {
+        let it = inv.validate_disjoint_bag_slots(slots)?;        if let Some(fr) = FIXED_RECIPES.iter().find(|r| r.0 == op) {
             let ok1 = it.iter().any(|x| (fr.1.0..=fr.1.1).contains(&x.template_id.0) && x.quantity >= fr.1.2);
             let ok2 = fr.2.is_none_or(|(id2, q2)| it.iter().any(|x| x.template_id.0 == id2 && x.quantity >= q2));
             if it.len() != (if fr.2.is_some() { 2 } else { 1 }) || !ok1 || !ok2 { return Err(CombineError::InvalidInputs(op, "fixed recipe mismatch")); }
@@ -192,28 +189,25 @@ impl CombineService {
         let has = |id: i16, q: u32| it.iter().any(|x| x.template_id.0 == id && x.quantity >= q);
         let is_stk = |id: i16| matches!(id, 1044 | 1211 | 1212 | 1278..=1280);
         let bad = |msg| CombineError::InvalidInputs(op, msg);
-
         let (gold_cost, gem_cost, ui_rate_bps, server_rate_bps) = match op {
             CombineOp::EpSaoTrangBi => {
                 let eq = *it.iter().find(|x| it.len() == 2 && is_eq(x)).ok_or(bad("need equip + gem"))?;
                 let gm = *it.iter().find(|x| !std::ptr::eq(**x, eq)).ok_or(bad("no gem"))?;
                 let (s, m) = (get_opt(eq, opt_id::SOCKETED_STARS).unwrap_or(0), get_opt(eq, opt_id::MAX_STAR_SOCKETS).unwrap_or(0));
                 if !(catalog.meta_of(gm.template_id).item_type == 30 || (14..=20).contains(&gm.template_id.0)) || (s >= 7 && get_opt(eq, opt_id::REINFORCED_STAR_SLOT).unwrap_or(0) <= s) { return Err(bad("socket ineligible")); }
-                if s >= m || s >= MAX_STAR_ITEM { return Err(CombineError::CapReached(op)); }
-                (0, 10, 10_000, 10_000)
+                if s >= m || s >= MAX_STAR_ITEM { return Err(CombineError::CapReached(op)); } (0, 10, 10_000, 10_000)
             }
             CombineOp::PhaLeHoaTrangBi => {
                 if it.len() != 1 || !is_eq(it[0]) { return Err(bad("need 1 equip")); }
-                let st = get_opt(it[0], 107).unwrap_or(0);
-                if st >= MAX_STAR_ITEM { return Err(CombineError::CapReached(op)); }
+                let st = get_opt(it[0], 107).unwrap_or(0); if st >= MAX_STAR_ITEM { return Err(CombineError::CapReached(op)); }
                 let u = st.max(0) as usize; (PHA_LE_GOLD[u], (u as u32) + 1, PHA_LE_UI_BPS[u], PHA_LE_REAL_BPS[u])
             }
             CombineOp::NangCapVatPham => {
                 let eq = *it.iter().find(|x| (2..=3).contains(&it.len()) && catalog.meta_of(x.template_id).item_type < 5).ok_or(bad("no equip"))?;
-                let lv = get_opt(eq, 72).unwrap_or(0);
-                if lv >= MAX_LEVEL_ITEM { return Err(CombineError::CapReached(op)); }
-                let u = lv.max(0) as usize;
-                if !has([223i16, 222, 224, 221, 220][catalog.meta_of(eq.template_id).item_type as usize], NANG_CAP_STONES[u]) { return Err(bad("missing stones")); }
+                let lv = get_opt(eq, 72).unwrap_or(0); if lv >= MAX_LEVEL_ITEM { return Err(CombineError::CapReached(op)); }
+                let (u, req_stone) = (lv.max(0) as usize, [223i16, 222, 224, 221, 220][catalog.meta_of(eq.template_id).item_type as usize]);
+                let st = *it.iter().find(|x| !std::ptr::eq(**x, eq) && x.template_id.0 == req_stone && x.quantity >= NANG_CAP_STONES[u]).ok_or(bad("missing stones"))?;
+                if it.iter().any(|x| !std::ptr::eq(*x, eq) && !std::ptr::eq(*x, st) && x.template_id.0 != 987) { return Err(bad("extra slot must be 987")); }
                 (NANG_CAP_GOLD[u], 0, NANG_CAP_BPS[u], NANG_CAP_BPS[u])
             }
             CombineOp::NangCapBongTai | CombineOp::NangCapBongTai3 => {
@@ -229,8 +223,9 @@ impl CombineService {
             }
             CombineOp::NhapNgocRong => if it.len() == 1 && (15..=20).contains(&it[0].template_id.0) && it[0].quantity >= 7 { (0, 0, 10_000, 10_000) } else { return Err(bad("need 7× ball")); },
             CombineOp::CheTaoTrangBiThienSu => {
-                if !ctx.wearing_full_destroyer || !(2..=4).contains(&it.len()) || !it.iter().any(|x| matches!(x.template_id.0, 1071..=1073 | 1084..=1086)) || !it.iter().any(|x| (1066..=1070).contains(&x.template_id.0) && x.quantity >= 999) { return Err(bad("angel")); }
-                let b = it.iter().find(|x| (1074..=1078).contains(&x.template_id.0)).map_or(0, |x| ((x.template_id.0 - 1073) as u32) * 100);
+                let (mut form, mut frag, mut enh, mut luck, mut b) = (0usize, 0usize, 0usize, 0usize, 0u32);
+                for x in &it { match x.template_id.0 { 1071..=1073 | 1084..=1086 => form += 1, 1066..=1070 if x.quantity >= 999 => frag += 1, 1074..=1078 => { enh += 1; b = ((x.template_id.0 - 1073) as u32) * 100; } 1079..=1083 => luck += 1, _ => return Err(bad("angel")) } }
+                if !ctx.wearing_full_destroyer || form != 1 || frag != 1 || enh > 1 || luck > 1 { return Err(bad("angel")); }
                 (10_000_000, 0, 9_000 + b, 9_000 + b)
             }
             CombineOp::ChuyenHoaTrangBiVang | CombineOp::ChuyenHoaTrangBiNgoc => {
@@ -259,9 +254,8 @@ impl CombineService {
             CombineOp::NangCapSachTuyetKy => if it.len() == 2 && has(1285, 10) && it.iter().any(|x| matches!(x.template_id.0, 1044 | 1211 | 1212)) { (0, 0, 1_000, 1_000) } else { return Err(bad("book upgrade")); },
             CombineOp::HoiPhucSach => {
                 if it.len() != 1 || !is_stk(it[0].template_id.0) { return Err(bad("need STK")); }
-                let db = get_opt(it[0], 212).unwrap_or(1_000);
-                if db >= 1_000 { return Err(CombineError::CapReached(op)); }
-                (0, (((1_000 - db) * 50) / 1_000).max(5) as u32, 10_000, 10_000)
+                let db = get_opt(it[0], 212).unwrap_or(1_000); if db >= 1_000 { return Err(CombineError::CapReached(op)); }
+                (0, u32::try_from(((1_000_i64 - i64::from(db.max(0))).saturating_mul(50) / 1_000).max(5)).unwrap_or(50), 10_000, 10_000)
             }
             CombineOp::PhanRaSach => if it.len() == 1 && is_stk(it[0].template_id.0) { (10_000_000, 0, 10_000, 10_000) } else { return Err(bad("need STK")); },
             CombineOp::HocTuyetKy => {
@@ -274,12 +268,17 @@ impl CombineService {
         Ok(CombinePreview { op, gold_cost, gem_cost, ui_rate_bps, server_rate_bps })
     }
 
-    /// Executes batch `PhaLeHoaTrangBi` (`startCombineVip` `x1`, `x10`, `x100`), stopping on first star gain.
+    /// Executes batch `PhaLeHoaTrangBi` (`startCombineVip` `x1`, `x10`, `x100`), stopping on first star gain or empty wallet.
     pub fn execute_vip_batch(inv: &mut Inventory, slot: usize, max_rolls: u8, ctx: &CombineContext, catalog: &dyn ItemCatalog, rng: &mut GameRng) -> Result<CombineOutcome, CombineError> {
         let mut attempts = 0;
         for _ in 0..max_rolls.clamp(1, 100) {
             attempts += 1;
-            if Self::execute(inv, CombineOp::PhaLeHoaTrangBi, &[slot], ctx, catalog, rng)?.success { return Ok(CombineOutcome { success: true, attempts, badge_awarded: None, new_skill_point: None }); }
+            match Self::execute(inv, CombineOp::PhaLeHoaTrangBi, &[slot], ctx, catalog, rng) {
+                Ok(out) if out.success => return Ok(CombineOutcome { success: true, attempts, badge_awarded: None, new_skill_point: None }),
+                Ok(_) => {}
+                Err(CombineError::Inventory(InventoryError::InsufficientCurrency(..))) if attempts > 1 => return Ok(CombineOutcome { success: false, attempts: attempts - 1, badge_awarded: None, new_skill_point: None }),
+                Err(err) => return Err(err),
+            }
         }
         Ok(CombineOutcome { success: false, attempts, badge_awarded: None, new_skill_point: None })
     }
@@ -289,17 +288,15 @@ impl CombineService {
         let q = Self::preview(inv, op, slots, ctx, catalog)?;
         if inv.gold < q.gold_cost { return Err(InventoryError::InsufficientCurrency("gold", q.gold_cost, inv.gold).into()); }
         if inv.gem < q.gem_cost { return Err(InventoryError::InsufficientCurrency("gem", u64::from(q.gem_cost), u64::from(inv.gem)).into()); }
+        if !Self::has_bag_capacity(inv, op, slots) { return Err(InventoryError::ContainerFull(ContainerKind::Bag).into()); }
         if op != CombineOp::PhaLeHoaTrangBi { inv.sub_gold(q.gold_cost)?; inv.sub_gem(q.gem_cost)?; }
         let ok = rng.is_true(q.server_rate_bps, 10_000);
         let slot_id = |iv: &Inventory, id: i16| *slots.iter().find(|&&s| iv.bag[s].as_ref().is_some_and(|i| i.template_id.0 == id)).expect("v");
-
         if let Some(fr) = FIXED_RECIPES.iter().find(|r| r.0 == op) {
-            if let Some((id2, q2)) = fr.2 { let s2 = slot_id(inv, id2); inv.sub_from_bag_slot(s2, q2)?; inv.sub_from_bag_slot(if slots[0] == s2 { slots[1] } else { slots[0] }, if ok { fr.1.2 } else { fr.1.3 })?; }
-            else { inv.sub_from_bag_slot(slots[0], if ok { fr.1.2 } else { fr.1.3 })?; }
+            if let Some((id2, q2)) = fr.2 { let s2 = slot_id(inv, id2); inv.sub_from_bag_slot(s2, q2)?; inv.sub_from_bag_slot(if slots[0] == s2 { slots[1] } else { slots[0] }, if ok { fr.1.2 } else { fr.1.3 })?; } else { inv.sub_from_bag_slot(slots[0], if ok { fr.1.2 } else { fr.1.3 })?; }
             if ok { let oid = rng.next_range(i32::from(fr.5.0), i32::from(fr.5.1)) as i16; inv.add_to_bag(Self::mk(oid, fr.5.2, if fr.5.3 { &[(30, 0)] } else { &[] }), oid != 1655)?; }
             return Ok(CombineOutcome { success: ok, attempts: 1, badge_awarded: None, new_skill_point: None });
         }
-
         let (mut badge_awarded, mut new_skill_point) = (None, None);
         match op {
             CombineOp::EpSaoTrangBi => {
@@ -313,17 +310,13 @@ impl CombineService {
             CombineOp::PhaLeHoaTrangBi => { inv.sub_gold(q.gold_cost)?; if ok { inv.sub_gem(q.gem_cost)?; add_opt_param(inv.bag[slots[0]].as_mut().expect("v"), 107, 1); } }
             CombineOp::NangCapVatPham => {
                 let es = *slots.iter().find(|&&s| catalog.meta_of(inv.bag[s].as_ref().expect("v").template_id).item_type < 5).expect("v");
-                let (lv, ss) = (get_opt(inv.bag[es].as_ref().expect("v"), 72).unwrap_or(0), *slots.iter().find(|&&s| s != es && inv.bag[s].as_ref().is_some_and(|i| i.template_id.0 != 987)).expect("v"));
-                let ps = slots.iter().copied().find(|&s| inv.bag[s].as_ref().is_some_and(|i| i.template_id.0 == 987));
+                let (lv, req_stone) = { let eq = inv.bag[es].as_ref().expect("v"); (get_opt(eq, 72).unwrap_or(0), [223i16, 222, 224, 221, 220][catalog.meta_of(eq.template_id).item_type as usize]) };
+                let ss = *slots.iter().find(|&&s| s != es && inv.bag[s].as_ref().is_some_and(|i| i.template_id.0 == req_stone && i.quantity >= NANG_CAP_STONES[lv.max(0) as usize])).expect("v");
+                let ps = slots.iter().copied().find(|&s| s != es && s != ss && inv.bag[s].as_ref().is_some_and(|i| i.template_id.0 == 987));
                 inv.sub_from_bag_slot(ss, NANG_CAP_STONES[lv.max(0) as usize])?; if let Some(p) = ps { inv.sub_from_bag_slot(p, 1)?; }
                 let eq = inv.bag[es].as_mut().expect("v");
-                if ok {
-                    for o in &mut eq.options { if matches!(o.id, 0 | 6 | 7 | 14 | 22 | 23 | 27 | 28 | 47) { o.param += (o.param * 10 / 100).max(1); } }
-                    set_opt(eq, 72, lv + 1); if lv == 7 { badge_awarded = Some(const_task_badges::THANH_DAP_DO_7); }
-                } else if ps.is_none() && matches!(lv, 2 | 4 | 6) {
-                    for o in &mut eq.options { if matches!(o.id, 0 | 6 | 7 | 14 | 22 | 23 | 27 | 28 | 47) { o.param = (o.param - (o.param * 11 / 100).max(1)).max(1); } }
-                    set_opt(eq, 72, lv - 1); add_opt_param(eq, 209, 1);
-                }
+                if ok { for o in &mut eq.options { if matches!(o.id, 0 | 6 | 7 | 14 | 22 | 23 | 27 | 28 | 47) { let p = i64::from(o.param); o.param = (p + (p * 10 / 100).max(1)).clamp(1, i64::from(i32::MAX)) as i32; } } set_opt(eq, 72, lv + 1); if lv == 7 { badge_awarded = Some(const_task_badges::THANH_DAP_DO_7); } }
+                else if ps.is_none() && matches!(lv, 2 | 4 | 6) { for o in &mut eq.options { if matches!(o.id, 0 | 6 | 7 | 14 | 22 | 23 | 27 | 28 | 47) { let p = i64::from(o.param); o.param = (p - (p * 11 / 100).max(1)).clamp(1, i64::from(i32::MAX)) as i32; } } set_opt(eq, 72, lv - 1); add_opt_param(eq, 209, 1); }
             }
             CombineOp::NangCapBongTai | CombineOp::NangCapBongTai3 => {
                 let (b, sh, full, fail, out, lv) = if op == CombineOp::NangCapBongTai { (454, 933, 9_999, 99, 921, 2) } else { (921, 1820, 20_000, 200, 1819, 3) };
@@ -350,13 +343,14 @@ impl CombineService {
                 let (si, di) = if (555..=567).contains(&inv.bag_item(slots[1])?.template_id.0) && get_opt(inv.bag_item(slots[1])?, 72).is_none() { (slots[0], slots[1]) } else { (slots[1], slots[0]) };
                 let (src, mut dst) = (inv.sub_from_bag_slot(si, 1)?, inv.sub_from_bag_slot(di, 1)?);
                 let (lv, dr) = (get_opt(&src, 72).unwrap_or(4), get_opt(&src, 209).unwrap_or(0));
-                for o in &mut dst.options { if matches!(o.id, 0 | 6 | 7 | 14 | 22 | 23 | 27 | 28 | 47) { let mut v = f64::from(o.param); for _ in 0..lv { v *= 1.1; } for _ in 0..dr { v *= 0.9; } o.param = (v as i32).max(1); } }
-                for c in &src.options { if matches!(c.id, 72 | 95..=102 | 107 | 218 | 228) { set_opt(&mut dst, c.id, c.param); } }
+                for o in &mut dst.options { if matches!(o.id, 0 | 6 | 7 | 14 | 22 | 23 | 27 | 28 | 47) { let mut v = f64::from(o.param); for _ in 0..lv { v *= 1.1; } v *= 0.9_f64.powi(dr.clamp(0, 1_000)); o.param = (v as i32).max(1); } }
+                let mut after_218 = false;
+                for c in &src.options { if matches!(c.id, 5 | 14 | 50 | 72 | 77 | 94 | 95..=103 | 107 | 108 | 218 | 228) { if after_218 { dst.options.push(*c); } else { set_opt(&mut dst, c.id, c.param); } if c.id == 218 { after_218 = true; } } }
                 set_opt(&mut dst, 30, 0); inv.add_to_bag(dst, false)?;
             }
             CombineOp::PhanRaTrangBiKichHoat => { inv.sub_from_bag_slot(slots[0], 1)?; inv.add_to_bag(Self::mk(1656, 1, &[]), true)?; }
             CombineOp::NangCapSaoPhaLe => { let hs = slot_id(inv, 1423); inv.sub_from_bag_slot(hs, 1)?; if ok { let mut b = inv.sub_from_bag_slot(if slots[0] == hs { slots[1] } else { slots[0] }, 1)?; b.template_id.0 += 975; inv.add_to_bag(b, true)?; } }
-            CombineOp::DanhBongSaoPhaLe => { let ms = slot_id(inv, 1439); inv.sub_from_bag_slot(ms, 1)?; let mut b = inv.sub_from_bag_slot(if slots[0] == ms { slots[1] } else { slots[0] }, 2)?; b.quantity = 1; b.template_id.0 += 10; if let Some(o) = b.options.first_mut() { o.param += 1; } inv.add_to_bag(b, true)?; }
+            CombineOp::DanhBongSaoPhaLe => { let ms = slot_id(inv, 1439); inv.sub_from_bag_slot(ms, 1)?; let mut b = inv.sub_from_bag_slot(if slots[0] == ms { slots[1] } else { slots[0] }, 2)?; b.quantity = 1; b.template_id.0 += 10; if let Some(o) = b.options.first_mut() { o.param = o.param.saturating_add(1); } inv.add_to_bag(b, true)?; }
             CombineOp::CuongHoaLoSaoPhaLe => {
                 let (hs, ds) = (slot_id(inv, 1423), slot_id(inv, 1438)); let es = *slots.iter().find(|&&s| s != hs && s != ds).expect("v");
                 inv.sub_from_bag_slot(hs, 1)?; inv.sub_from_bag_slot(ds, 1)?;
@@ -384,11 +378,21 @@ impl CombineService {
         Ok(CombineOutcome { success: ok, attempts: 1, badge_awarded, new_skill_point })
     }
 
-    fn sub_opt31(inv: &mut Inventory, slot: usize, delta: i32) {
-        if let Some(it) = &mut inv.bag[slot] { let rem = get_opt(it, 31).unwrap_or(0) - delta; if rem > 0 { set_opt(it, 31, rem); } else { inv.bag[slot] = None; } }
+    fn has_bag_capacity(inv: &Inventory, op: CombineOp, slots: &[usize]) -> bool {
+        if inv.empty_bag_slots() > 0 { return true; }
+        let (qty, id) = (|s: usize| inv.bag[s].as_ref().map_or(0, |i| i.quantity), |s: usize| inv.bag[s].as_ref().map_or(0, |i| i.template_id.0));
+        if let Some(fr) = FIXED_RECIPES.iter().find(|r| r.0 == op) { return slots.iter().any(|&s| fr.2.map_or(qty(s) == fr.1.2, |(id2, q2)| qty(s) == if id(s) == id2 { q2 } else { fr.1.2 })); }
+        match op {
+            CombineOp::NangCapBongTai | CombineOp::NangCapBongTai3 => slots.iter().any(|&s| qty(s) == 1 && matches!(id(s), 454 | 921)),
+            CombineOp::NhapNgocRong => qty(slots[0]) == 7,
+            CombineOp::CheTaoTrangBiThienSu => slots.iter().any(|&s| qty(s) == if (1066..=1070).contains(&id(s)) { 999 } else { 1 }),
+            CombineOp::ChuyenHoaTrangBiVang | CombineOp::ChuyenHoaTrangBiNgoc | CombineOp::NangCapSaoPhaLe => slots.iter().any(|&s| qty(s) == 1),
+            CombineOp::PhanRaTrangBiKichHoat | CombineOp::PhanRaSach => qty(slots[0]) == 1,
+            CombineOp::DanhBongSaoPhaLe => slots.iter().any(|&s| qty(s) == if id(s) == 1439 { 1 } else { 2 }),
+            CombineOp::DoiSachTuyetKy | CombineOp::DoiSachTuyetKySealed => slots.iter().any(|&s| qty(s) == if id(s) == 1283 { 10 } else { 1 }),
+            _ => true,
+        }
     }
-
-    fn mk(id: i16, qty: u32, opts: &[(u16, i32)]) -> ItemInstance {
-        ItemInstance { template_id: TemplateId(id), quantity: qty, options: opts.iter().map(|&(i, p)| ItemOption { id: i, param: p }).collect(), create_time_ms: 0 }
-    }
+    fn sub_opt31(inv: &mut Inventory, slot: usize, delta: i32) { if let Some(it) = &mut inv.bag[slot] { let rem = get_opt(it, 31).unwrap_or(0) - delta; if rem > 0 { set_opt(it, 31, rem); } else { inv.bag[slot] = None; } } }
+    fn mk(id: i16, qty: u32, opts: &[(u16, i32)]) -> ItemInstance { ItemInstance { template_id: TemplateId(id), quantity: qty, options: opts.iter().map(|&(i, p)| ItemOption { id: i, param: p }).collect(), create_time_ms: 0 } }
 }

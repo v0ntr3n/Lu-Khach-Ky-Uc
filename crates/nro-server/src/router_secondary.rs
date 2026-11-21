@@ -9,6 +9,7 @@ use nro_db::{
     json_columns::{PetSnapshot, SkillSlot},
     player_repo::PlayerSnapshot,
 };
+use nro_player::npoint::LIMIT_TIERS;
 use nro_protocol::{Packet, PacketWriter, ProtocolError, RadarAction, SessionHandle};
 use nro_world::{ZoneCommand, s2c_packets};
 
@@ -17,7 +18,7 @@ use super::{
     router_secondary_clan::{build_clan_info_pkt, clear_pending_clan_invites},
     router_secondary_clan_ops::clear_clan_join_requests,
 };
-use crate::runtime::unix_now_ms;
+use crate::runtime::{LeaderboardSlot, unix_now_ms};
 
 const PET_FUSION_COOLDOWN_MS: i64 = 5_000;
 
@@ -25,6 +26,8 @@ static PET_FUSION_COOLDOWN: OnceLock<DashMap<PlayerId, i64>> = OnceLock::new();
 fn pet_fusion_cooldown() -> &'static DashMap<PlayerId, i64> {
     PET_FUSION_COOLDOWN.get_or_init(DashMap::new)
 }
+
+const STARTER_PET_CLAIMED_FLAG: i32 = 1 << 30;
 
 pub(super) fn clear_clan_invites(pid: PlayerId) {
     clear_pending_clan_invites(pid);
@@ -38,8 +41,8 @@ impl ServerSessionHandler {
         if snap.intrinsic.intrinsic_id > 0 && let Some(intr) = self.shared.templates.intrinsics.iter().find(|r| r.id == i32::from(snap.intrinsic.intrinsic_id)) {
             session.send(s2c_packets::intrinsic_info(intr.icon as i16, &intr.name.replacen('#', &snap.intrinsic.param1.to_string(), 1))?).await?;
         }
-        if snap.clan_id.0 >= 0 && let Ok(clans) = self.shared.clans_repo.load_all().await {
-            if let Some(clan) = clans.iter().find(|c| c.id == snap.clan_id && c.members.iter().any(|m| m.id == snap.id.0 as i32)) { session.send(build_clan_info_pkt(Some(clan), snap.id)?).await?; }
+        if snap.clan_id.0 >= 0 && let Ok(clan_opt) = self.shared.clans_repo.get_by_id(snap.clan_id).await {
+            if let Some(clan) = clan_opt.as_ref().filter(|c| c.members.iter().any(|m| m.id == snap.id.0 as i32)) { session.send(build_clan_info_pkt(Some(clan), snap.id)?).await?; }
             else {
                 for mut e in self.shared.clients.authenticated.iter_mut() { if e.snapshot.id == snap.id { e.snapshot.clan_id = ClanId(-1); } }
                 session.send(build_clan_info_pkt(None, snap.id)?).await?;
@@ -49,8 +52,12 @@ impl ServerSessionHandler {
     }
 
     pub(super) async fn grant_starter_pet(&self, session: &SessionHandle, sid: u64) -> Result<(), ProtocolError> {
-        let pkts = self.shared.clients.authenticated.get_mut(&sid).and_then(|mut entry| {
-            if entry.snapshot.pet.is_some() { return None; }
+        let res = self.shared.clients.authenticated.get_mut(&sid).map(|mut entry| {
+            if entry.snapshot.pet.is_some() { return Ok(None); }
+            if (entry.snapshot.data_event.0[5] & STARTER_PET_CLAIMED_FLAG) != 0 {
+                return Err("Bạn đã nhận Đệ Tử khởi đầu trước đó rồi!");
+            }
+            entry.snapshot.data_event.0[5] |= STARTER_PET_CLAIMED_FLAG;
             let g = entry.snapshot.gender;
             let first_sk = match g { Gender::TraiDat => 0, Gender::Namec => 2, Gender::Xayda => 4 };
             let mut skills = vec![SkillSlot { template_id: first_sk, point: 1, last_time_use_ms: 0, curr_level: 0 }];
@@ -63,11 +70,15 @@ impl ServerSessionHandler {
                 },
             });
             super::recalculate_session_stats(sid, &mut entry.snapshot, self.shared.config.parity_mode);
-            Some((s2c_packets::have_pet(true), self.pkt_pet_detail(&entry.snapshot)))
+            Ok(Some((s2c_packets::have_pet(true), self.pkt_pet_detail(&entry.snapshot))))
         });
-        if let Some((hp_pkt, det_pkt)) = pkts {
-            session.send(hp_pkt).await?; if let Some(dp) = det_pkt { session.send(dp).await?; }
-            session.send(s2c_packets::thong_bao("Chúc mừng bạn đã nhận được Đệ Tử!")?).await?;
+        match res {
+            Some(Ok(Some((hp_pkt, det_pkt)))) => {
+                session.send(hp_pkt).await?; if let Some(dp) = det_pkt { session.send(dp).await?; }
+                session.send(s2c_packets::thong_bao("Chúc mừng bạn đã nhận được Đệ Tử!")?).await?;
+            }
+            Some(Err(msg)) => session.send(s2c_packets::thong_bao(msg)?).await?,
+            _ => {}
         }
         Ok(())
     }
@@ -117,7 +128,13 @@ impl ServerSessionHandler {
                     if pet.fusion_type != const_player::NON_FUSION {
                         return Err("Vui lòng tách hợp thể trước khi hợp thể vĩnh viễn!");
                     }
-                    let bonus = pet.stats.power.max(0);
+                    if !pet.items_body.iter().all(Option::is_none) {
+                        return Err("Vui lòng tháo hết trang bị của đệ tử trước khi hợp thể vĩnh viễn!");
+                    }
+                    entry.snapshot.data_event.0[5] |= STARTER_PET_CLAIMED_FLAG;
+                    let lim_idx = usize::from(entry.snapshot.stats.limit_power).min(LIMIT_TIERS.len() - 1);
+                    let max_add = LIMIT_TIERS[lim_idx].0.saturating_sub(entry.snapshot.stats.power).max(0);
+                    let bonus = pet.stats.power.max(0).min(max_add);
                     entry.snapshot.stats.power = entry.snapshot.stats.power.saturating_add(bonus);
                     entry.snapshot.stats.tiem_nang = entry.snapshot.stats.tiem_nang.saturating_add(bonus);
                     entry.snapshot.pet = None;
@@ -130,8 +147,10 @@ impl ServerSessionHandler {
                 });
                 match res {
                     Some(Ok((have_pkt, pt_pkt))) => {
+                        self.shared.leaderboards.mark_dirty(LeaderboardSlot::Power);
                         session.send(have_pkt).await?;
                         session.send(pt_pkt).await?;
+                        self.advance_task_on_power(session, sid).await?;
                         session.send(s2c_packets::thong_bao("Hợp thể vĩnh viễn thành công!")?).await?;
                     }
                     Some(Err(msg)) => session.send(s2c_packets::thong_bao(msg)?).await?,
@@ -139,11 +158,18 @@ impl ServerSessionHandler {
                 }
                 return Ok(());
             }
-            if let Some(p) = self.shared.clients.authenticated.get_mut(&sid).and_then(|mut e| {
-                e.snapshot.pet.as_mut()?.status = val.clamp(0, 4);
-                self.pkt_pet_detail(&e.snapshot)
-            }) {
-                session.send(p).await?;
+            let status_res = self.shared.clients.authenticated.get_mut(&sid).and_then(|mut e| {
+                let pet = e.snapshot.pet.as_mut()?;
+                if pet.fusion_type != const_player::NON_FUSION {
+                    return Some(Err("Không thể đổi trạng thái đệ tử khi đang hợp thể!"));
+                }
+                pet.status = val.clamp(0, 3);
+                Some(Ok(self.pkt_pet_detail(&e.snapshot)))
+            });
+            match status_res {
+                Some(Ok(Some(p))) => session.send(p).await?,
+                Some(Err(msg)) => session.send(s2c_packets::thong_bao(msg)?).await?,
+                _ => {}
             }
             return Ok(());
         }
@@ -151,20 +177,55 @@ impl ServerSessionHandler {
         let now_ms = unix_now_ms();
         let outcome = self.shared.clients.authenticated.get_mut(&sid).map(|mut entry| {
             let (pid, loc, gender) = (entry.snapshot.id, entry.snapshot.location, entry.snapshot.gender);
-            let Some(pet) = entry.snapshot.pet.as_mut() else {
+            let Some(pet_ref) = entry.snapshot.pet.as_ref() else {
                 return Err("Bạn chưa có đệ tử để hợp thể!");
             };
-            if pet.stats.hp <= 0 {
+            if pet_ref.stats.hp <= 0 {
                 return Err("Đệ tử đã chết, không thể hợp thể!");
             }
             if pet_fusion_cooldown().get(&pid).is_some_and(|t| now_ms.saturating_sub(*t) < PET_FUSION_COOLDOWN_MS) {
                 return Err("Vui lòng đợi 5 giây giữa các lần hợp thể và tách hợp thể!");
             }
+            let entering_fusion = pet_ref.fusion_type == const_player::NON_FUSION;
+            let target_mode = if entering_fusion {
+                match val {
+                    const_player::HOP_THE_PORATA => {
+                        if !entry.snapshot.items_bag.iter().flatten().any(|it| it.template_id.0 == 454 && it.quantity > 0) {
+                            return Err("Bạn cần có Bông tai Porata trong hành trang!");
+                        }
+                        const_player::HOP_THE_PORATA
+                    }
+                    const_player::HOP_THE_PORATA2 => {
+                        if !entry.snapshot.items_bag.iter().flatten().any(|it| it.template_id.0 == 921 && it.quantity > 0) {
+                            return Err("Bạn cần có Bông tai Porata cấp 2 trong hành trang!");
+                        }
+                        const_player::HOP_THE_PORATA2
+                    }
+                    const_player::HOP_THE_PORATA3 => {
+                        if !entry.snapshot.items_bag.iter().flatten().any(|it| it.template_id.0 == 1819 && it.quantity > 0) {
+                            return Err("Bạn cần có Bông tai Porata cấp 3 trong hành trang!");
+                        }
+                        const_player::HOP_THE_PORATA3
+                    }
+                    _ => const_player::LUONG_LONG_NHAT_THE,
+                }
+            } else {
+                const_player::NON_FUSION
+            };
             pet_fusion_cooldown().insert(pid, now_ms);
-            let entering_fusion = pet.fusion_type == const_player::NON_FUSION;
-            pet.fusion_type = if entering_fusion { const_player::LUONG_LONG_NHAT_THE } else { const_player::NON_FUSION };
-            pet.status = if entering_fusion { 4 } else { 0 };
-            let wire_mode = if entering_fusion { pet.fusion_type } else { 1_i8 };
+            if let Some(pet) = entry.snapshot.pet.as_mut() {
+                pet.fusion_type = target_mode;
+                pet.fusion_time_left_ms = if target_mode == const_player::LUONG_LONG_NHAT_THE { 600_000 } else { 0 };
+                pet.status = if entering_fusion { 4 } else { 0 };
+            }
+            let wire_mode = if entering_fusion {
+                match target_mode {
+                    const_player::HOP_THE_PORATA | const_player::HOP_THE_PORATA2 | const_player::HOP_THE_PORATA3 => 6_i8,
+                    other => other,
+                }
+            } else {
+                1_i8
+            };
             super::recalculate_session_stats(sid, &mut entry.snapshot, self.shared.config.parity_mode);
             let (eh, eb, el, _, is_disg) = effective_appearance(&self.shared.templates, &entry.snapshot);
             let (parts, upd_body) = if entering_fusion {
@@ -183,12 +244,13 @@ impl ServerSessionHandler {
             let mut w = PacketWriter::with_capacity(5);
             w.write_i8(wire_mode);
             w.write_i32(pid.0 as i32);
-            Ok((w.finish(cmd_message::FUSION), upd_body, s2c_packets::me_load_point(&entry.snapshot.stats), loc))
+            Ok((w.finish(cmd_message::FUSION), upd_body, s2c_packets::me_load_point(&entry.snapshot.stats), self.pkt_pet_detail(&entry.snapshot), loc))
         });
         match outcome {
-            Some(Ok((f_pkt, upd_body, pt_pkt, loc))) => {
-                self.broadcast_to_zone_peers(loc, None, &f_pkt);
-                self.broadcast_to_zone_peers(loc, None, &upd_body);
+            Some(Ok((f_pkt, upd_body, pt_pkt, pet_pkt, loc))) => {
+                self.broadcast_zone_or_self(loc, sid, &f_pkt);
+                self.broadcast_zone_or_self(loc, sid, &upd_body);
+                if let Some(pp) = pet_pkt { session.send(pp).await?; }
                 session.send(pt_pkt).await
             }
             Some(Err(msg)) => session.send(s2c_packets::thong_bao(msg)?).await,
@@ -231,5 +293,41 @@ impl ServerSessionHandler {
             RadarAction::Unknown(_) => {}
         }
         Ok(())
+    }
+
+    pub(crate) fn tick_timed_fusions(&self, delta_ms: i32) {
+        let mut expired = Vec::new();
+        for mut entry in self.shared.clients.authenticated.iter_mut() {
+            let sid = *entry.key();
+            let Some(pet) = entry.snapshot.pet.as_mut() else { continue; };
+            if pet.fusion_type != const_player::LUONG_LONG_NHAT_THE { continue; }
+            pet.fusion_time_left_ms = pet.fusion_time_left_ms.saturating_sub(delta_ms);
+            if pet.fusion_time_left_ms > 0 { continue; }
+            pet.fusion_type = const_player::NON_FUSION;
+            pet.fusion_time_left_ms = 0;
+            pet.status = 0;
+            super::recalculate_session_stats(sid, &mut entry.snapshot, self.shared.config.parity_mode);
+            let (pid, loc) = (entry.snapshot.id, entry.snapshot.location);
+            let (eh, eb, el, _, is_disg) = effective_appearance(&self.shared.templates, &entry.snapshot);
+            if let (Some(ek), Ok(tx)) = (entry.entity_key, self.shared.world_router.resolve_sender(loc.map_id, loc.zone_id)) {
+                let _ = tx.try_send(ZoneCommand::UpdatePlayerParts(ek, (eh, eb, el)));
+                let _ = tx.try_send(ZoneCommand::UpdatePlayerStats(ek, entry.snapshot.stats));
+            }
+            let mut w = PacketWriter::with_capacity(5);
+            w.write_i8(1_i8);
+            w.write_i32(pid.0 as i32);
+            let upd_body = s2c_packets::update_body(pid, is_disg.then_some((eh, eb, el, 0)));
+            let pt_pkt = s2c_packets::me_load_point(&entry.snapshot.stats);
+            let pet_pkt = self.pkt_pet_detail(&entry.snapshot);
+            expired.push((sid, loc, entry.handle.clone(), w.finish(cmd_message::FUSION), upd_body, pt_pkt, pet_pkt));
+        }
+        for (sid, loc, handle, f_pkt, upd_body, pt_pkt, pet_pkt) in expired {
+            self.broadcast_zone_or_self(loc, sid, &f_pkt);
+            self.broadcast_zone_or_self(loc, sid, &upd_body);
+            if handle.sent_key() {
+                if let Some(pp) = pet_pkt { let _ = handle.try_send(pp); }
+                let _ = handle.try_send(pt_pkt);
+            }
+        }
     }
 }

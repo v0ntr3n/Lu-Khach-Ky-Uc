@@ -115,7 +115,7 @@ impl NPoint {
                 return clamp_i32(lz);
             }
             SkillKind::QuaCauKenhKhi => {
-                let mut q = (req.qckk_surrounding_hp.0 * 10 / 100).saturating_add(req.qckk_surrounding_hp.1 * 10 / 100).saturating_add(d * 10);
+                let mut q = (req.qckk_surrounding_hp.0.saturating_mul(10) / 100).saturating_add(req.qckk_surrounding_hp.1.saturating_mul(10) / 100).saturating_add(d * 10);
                 if req.sets.kirin >= 5 { q = q.saturating_mul(2); }
                 return clamp_i32(add_pct(q, rng_range(rng, -5, 5)));
             }
@@ -172,26 +172,26 @@ impl NPoint {
         let (piercing, is_mob, cap_mabu) = hit.hit_flags;
         let mut d = hit.raw_damage.max(0);
         if cap_mabu { d = d.min(i64::from(self.hp_max / 20).max(1)); }
-        if let Some(sk) = hit.attacker_skill && sk.is_beam() && self.mods.vo_hieu_chuong > 0 {
+        if !piercing && let Some(sk) = hit.attacker_skill && sk.is_beam() && self.mods.vo_hieu_chuong > 0 {
             let mp_gain = clamp_i32(d.saturating_mul(i64::from(self.mods.vo_hieu_chuong)) / 100);
             self.add_mp(i64::from(mp_gain));
             return InjuryOutcome { damage_taken: 0, mp_absorbed: mp_gain, reflect_base_damage: 0, shield_broken: false, dodged: false };
         }
-        let (mut ne, mut giap) = (i32::from(self.mods.tl_ne_don), i32::from(self.mods.tl_giap));
+        let (mut ne, mut xb, mut giap) = (i32::from(self.mods.tl_ne_don), i32::from(self.mods.tl_ne_don_xinbato), i32::from(self.mods.tl_giap));
         if !is_mob && let Some(sk) = hit.attacker_skill {
-            ne = if sk.allows_dodge_and_gx() { ne - hit.attacker_pen.0 } else { 0 };
+            if sk.allows_dodge_and_gx() { ne -= hit.attacker_pen.0; } else { ne = 0; xb = 0; }
             if sk.is_beam() { giap = (giap - hit.attacker_pen.1).max(0); } else if sk.is_melee() { giap = (giap - hit.attacker_pen.2).max(0); }
         }
-        if piercing { giap = 0; }
-        let (ne, xb, giap) = (ne.clamp(0, 90), i32::from(self.mods.tl_ne_don_xinbato).clamp(0, 90), giap.clamp(0, 86));
-        if rng_ratio(rng, ne as u32, 100) || (xb > 0 && rng_ratio(rng, xb as u32, 100)) {
+        if piercing { (ne, xb, giap) = (0, 0, 0); }
+        let (ne, xb, giap) = (ne.clamp(0, 90), xb.clamp(0, 90), giap.clamp(0, 86));
+        if !piercing && (rng_ratio(rng, ne as u32, 100) || (xb > 0 && rng_ratio(rng, xb as u32, 100))) {
             return InjuryOutcome { damage_taken: 0, mp_absorbed: 0, reflect_base_damage: 0, shield_broken: false, dodged: true };
         }
         d = d.saturating_sub((d / 100).saturating_mul(i64::from(giap)));
         if !piercing { d = (d - i64::from(self.def)).max(1); }
         let (gx1, gx2, shielding, pho_ban, bat_tu) = hit.defense_state;
         if !piercing && (is_mob || hit.attacker_skill.is_some_and(SkillKind::allows_dodge_and_gx)) {
-            if gx2 { d = d * 40 / 100; } else if gx1 { d /= 2; }
+            if gx2 { d = (d / 100).saturating_mul(40); } else if gx1 { d /= 2; }
         }
         let (mut shield_broken, mut reflect_base) = (false, 0_i32);
         if !piercing && shielding && !is_mob {
@@ -218,7 +218,7 @@ impl NPoint {
         }
         if ctx.bonus_flags.3 { tn = tn.saturating_add(snap / 5); }
         if ctx.intrinsic.0 == 24 { tn = add_pct(tn, i64::from(ctx.intrinsic.1)); }
-        if self.core.power >= 60_000_000_000 { tn -= tn * 80 / 100; }
+        if self.core.power >= 60_000_000_000 { tn = tn.saturating_sub((tn / 100).saturating_mul(80)); }
         if let Some((santa, tl_pet)) = ctx.pet_master_bonus {
             if santa { tn = tn.saturating_add(snap.saturating_mul(2)); }
             if tl_pet > 0 { tn = tn.saturating_add((snap / 100).saturating_mul(i64::from(tl_pet) + 100)); }
@@ -242,17 +242,20 @@ impl NPoint {
         let cost = match kind {
             StatUpgradeKind::Hp | StatUpgradeKind::Mp => {
                 let base = if kind == StatUpgradeKind::Hp { self.core.hpg } else { self.core.mpg };
-                if base + p * 20 > i64::from(tier.1) { return Err(PlayerError::PowerLimitReached); }
-                p * (2 * (base + 1000) + p * 20 - 20) / 2
+                if base.saturating_add(p.saturating_mul(20)) > i64::from(tier.1) { return Err(PlayerError::PowerLimitReached); }
+                let b = base.max(0);
+                p * (2 * (b + 1000) + p * 20 - 20) / 2
             }
             StatUpgradeKind::Dame => {
-                if self.core.dameg + p > i64::from(tier.2) { return Err(PlayerError::PowerLimitReached); }
-                p * (2 * self.core.dameg + p - 1) / 2 * 100
+                if self.core.dameg.saturating_add(p) > i64::from(tier.2) { return Err(PlayerError::PowerLimitReached); }
+                let b = self.core.dameg.max(0);
+                p * (2 * b + p - 1) / 2 * 100
             }
             StatUpgradeKind::Def => {
                 let d = i64::from(self.core.defg);
                 if d + p > i64::from(tier.3) { return Err(PlayerError::PowerLimitReached); }
-                if matches!(parity, ParityMode::Fixed) { p * (2 * (d + 5) + p - 1) * 100_000 / 2 } else { (d + 5) * 100_000 }
+                let db = d.max(0);
+                if matches!(parity, ParityMode::Fixed) { p * (2 * (db + 5) + p - 1) * 100_000 / 2 } else { (db + 5) * 100_000 }
             }
             StatUpgradeKind::Crit => {
                 let c = usize::from(self.core.critg);
@@ -264,8 +267,9 @@ impl NPoint {
                 }
             }
         };
-        if self.core.tiem_nang < cost { return Err(PlayerError::InsufficientPotential { required: cost as u64, available: self.core.tiem_nang as u64 }); }
-        self.core.tiem_nang -= cost;
+        let cost = cost.max(0);
+        if self.core.tiem_nang < cost { return Err(PlayerError::InsufficientPotential { required: cost as u64, available: self.core.tiem_nang.max(0) as u64 }); }
+        self.core.tiem_nang = self.core.tiem_nang.saturating_sub(cost);
         match kind {
             StatUpgradeKind::Hp => self.core.hpg += p * 20,
             StatUpgradeKind::Mp => self.core.mpg += p * 20,

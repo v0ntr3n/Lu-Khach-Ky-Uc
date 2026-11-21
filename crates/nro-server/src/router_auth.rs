@@ -34,10 +34,14 @@ impl Drop for AccountReservationGuard<'_> {
 
 impl ServerSessionHandler {
     fn try_reserve_account(&self, account_id: AccountId, sid: u64) -> Result<AccountReservationGuard<'_>, u64> {
+        let mut already_owned = false;
         let occupied = match self.shared.clients.accounts.entry(account_id) {
             Entry::Occupied(mut occ) => {
                 let old_sid = *occ.get();
-                if !self.shared.clients.sessions.contains_key(&old_sid)
+                if old_sid == sid {
+                    already_owned = true;
+                    None
+                } else if !self.shared.clients.sessions.contains_key(&old_sid)
                     && !self.shared.clients.authenticated.contains_key(&old_sid)
                 {
                     occ.insert(sid);
@@ -53,17 +57,14 @@ impl ServerSessionHandler {
         };
         match occupied {
             Some(old_sid) => Err(old_sid),
-            None => Ok(AccountReservationGuard { accounts: &self.shared.clients.accounts, account_id, sid, armed: true }),
+            None => Ok(AccountReservationGuard { accounts: &self.shared.clients.accounts, account_id, sid, armed: !already_owned }),
         }
     }
 
-    pub(super) async fn handle_login(
-        &self,
-        session: &SessionHandle,
-        username: &str,
-        password: &str,
-        login_type: i8,
-    ) -> Result<(), ProtocolError> {
+    pub(super) async fn handle_login(&self, session: &SessionHandle, username: &str, password: &str, login_type: i8) -> Result<(), ProtocolError> {
+        if username.len() > 64 || password.len() > 128 {
+            return send_dialog(session, "Tài khoản hoặc mật khẩu quá dài!");
+        }
         if session.account_id().0 > 0 {
             debug!(sid = session.id(), account_id = session.account_id().0, "ignoring duplicate Login on authenticated session");
             return Ok(());
@@ -71,20 +72,14 @@ impl ServerSessionHandler {
         if self.shared.maintenance.is_maintaining() {
             return send_dialog(session, "Máy chủ đang bảo trì định kỳ, vui lòng quay lại sau!");
         }
-        if let Err(wait) = self.shared.rate_limiter.check_login_cooldown(session.ip()) {
-            return send_dialog(session, &format!("Vui lòng thử lại sau {} giây.", wait.as_secs().max(1)));
-        }
         if self.shared.clients.authenticated.len() >= self.shared.config.rate_limit.max_online_players {
             return send_dialog(session, "Máy chủ đã đầy, vui lòng chọn khu vực khác!");
         }
-        let ip_str = session.ip().to_string();
-        let wait_secs = self.shared.config.rate_limit.login_wait_secs;
-        let auth = match self
-            .shared
-            .accounts_repo
-            .login_with_type(username, password, login_type, &ip_str, wait_secs, Utc::now())
-            .await
-        {
+        if !session.take_auth_cooldown_bypass() && let Err(wait) = self.shared.rate_limiter.check_login_cooldown(session.ip()) {
+            return send_dialog(session, &format!("Vui lòng thử lại sau {} giây.", wait.as_secs().max(1)));
+        }
+        let (ip_str, wait_secs) = (session.ip().to_string(), self.shared.config.rate_limit.login_wait_secs);
+        let auth = match self.shared.accounts_repo.login_with_type(username, password, login_type, &ip_str, wait_secs, Utc::now()).await {
             Ok(acc) => acc,
             Err(DbError::InvalidCredentials) => return send_dialog(session, "Tài khoản hoặc mật khẩu không chính xác!"),
             Err(DbError::AccountBanned { .. }) => return send_dialog(session, "Tài khoản của bạn đang bị khóa!"),
@@ -112,7 +107,7 @@ impl ServerSessionHandler {
                 }
             }
             Ok(None) => {
-                drop(guard);
+                guard.armed = false;
                 info!(sid = session.id(), account_id = auth.user_id.0, "login succeeded without character; streaming version/data before CREATE_PLAYER");
                 session.mark_authenticated(auth.user_id, 0.into());
                 session.send(self.shared.assets.pkt_small_version_for_zoom(session.zoom_level())).await?;
@@ -131,27 +126,35 @@ impl ServerSessionHandler {
         Ok(())
     }
 
-    pub(super) async fn handle_register(
-        &self,
-        session: &SessionHandle,
-        username: &str,
-        password: &str,
-        guest_user: Option<&str>,
-    ) -> Result<(), ProtocolError> {
+    pub(super) async fn handle_register(&self, session: &SessionHandle, username: &str, password: &str, guest_user: Option<&str>) -> Result<(), ProtocolError> {
+        if username.len() > 64 || password.len() > 128 {
+            session.send(s2c_packets::register_result(false, "Tài khoản hoặc mật khẩu quá dài!")).await?;
+            return Ok(());
+        }
         if self.shared.maintenance.is_maintaining() {
             session.send(s2c_packets::register_result(false, "Máy chủ đang bảo trì định kỳ, vui lòng quay lại sau!")).await?;
             return Ok(());
         }
-        if let Err(wait) = self.shared.rate_limiter.check_login_cooldown(session.ip()) {
+        if let Err(wait) = self.shared.rate_limiter.check_login_cooldown(session.ip())
+            .and_then(|()| self.shared.rate_limiter.check_account_creation_limit(session.ip()))
+        {
             let msg = format!("Vui lòng thử lại sau {} giây.", wait.as_secs().max(1));
             session.send(s2c_packets::register_result(false, &msg)).await?;
             return Ok(());
+        }
+        if let Some(guest) = guest_user {
+            let aid = session.account_id();
+            let owned = aid.0 > 0 && matches!(self.shared.accounts_repo.get_by_id(aid), Ok(Some(acc)) if acc.username.eq_ignore_ascii_case(guest.trim()));
+            if !owned {
+                session.send(s2c_packets::register_result(false, "Phiên đăng nhập không khớp tài khoản khách!")).await?;
+                return Ok(());
+            }
         }
         let ip_str = session.ip().to_string();
         match self.shared.accounts_repo.register_account(username, password, guest_user, &ip_str, Utc::now()).await {
             Ok(acc) => {
                 info!(sid = session.id(), account_id = acc.id, username = %acc.username, "registered account");
-                self.shared.rate_limiter.clear_login_cooldown(session.ip());
+                session.grant_auth_cooldown_bypass();
                 session.send(s2c_packets::register_result(true, "")).await?;
             }
             Err(DbError::DuplicateKey { .. }) => {
@@ -172,7 +175,9 @@ impl ServerSessionHandler {
         if self.shared.maintenance.is_maintaining() {
             return send_dialog(session, "Máy chủ đang bảo trì định kỳ, vui lòng quay lại sau!");
         }
-        if let Err(wait) = self.shared.rate_limiter.check_login_cooldown(session.ip()) {
+        if let Err(wait) = self.shared.rate_limiter.check_login_cooldown(session.ip())
+            .and_then(|()| self.shared.rate_limiter.check_account_creation_limit(session.ip()))
+        {
             return send_dialog(session, &format!("Vui lòng thử lại sau {} giây.", wait.as_secs().max(1)));
         }
         if self.shared.clients.authenticated.len() >= self.shared.config.rate_limit.max_online_players {
@@ -187,20 +192,14 @@ impl ServerSessionHandler {
             }
         };
         info!(sid = session.id(), account_id = guest.id, username = %guest.username, "created local guest account for Login2");
-        self.shared.rate_limiter.clear_login_cooldown(session.ip());
+        session.grant_auth_cooldown_bypass();
         let mut pw = PacketWriter::with_capacity(guest.username.len() + 8);
         pw.write_utf(&guest.username)?;
         session.send(pw.finish(cmd_message::LOGIN2)).await?;
         Ok(())
     }
 
-    pub(super) async fn handle_create_char(
-        &self,
-        session: &SessionHandle,
-        name: &str,
-        gender_raw: i8,
-        hair: i8,
-    ) -> Result<(), ProtocolError> {
+    pub(super) async fn handle_create_char(&self, session: &SessionHandle, name: &str, gender_raw: i8, hair: i8) -> Result<(), ProtocolError> {
         if session.player_id().0 != 0 {
             return Ok(());
         }
@@ -321,21 +320,21 @@ impl ServerSessionHandler {
             return Ok(false);
         };
         drop(outbound_tx);
-        let fwd_session = session.clone();
+        let (fwd_session, cancel) = (session.clone(), session.cancel_token());
         tokio::spawn(async move {
-            while let Some(pkt) = outbound_rx.recv().await {
-                if fwd_session.send(pkt).await.is_err() {
-                    break;
+            loop {
+                tokio::select! {
+                    biased;
+                    () = cancel.cancelled() => break,
+                    maybe = outbound_rx.recv() => match maybe {
+                        Some(pkt) if fwd_session.send(pkt).await.is_ok() => {}
+                        _ => break,
+                    }
                 }
             }
         });
 
-        let selected_skill = snap
-            .skills
-            .iter()
-            .find(|sk| sk.point > 0)
-            .and_then(|sk| i16::try_from(sk.template_id).ok())
-            .unwrap_or(0);
+        let selected_skill = snap.skills.iter().find(|sk| sk.point > 0).and_then(|sk| i16::try_from(sk.template_id).ok()).unwrap_or(0);
         let new_loc = snap.location;
         session.mark_authenticated(account_id, snap.id);
         let entry = ActivePlayerEntry {
@@ -347,6 +346,7 @@ impl ServerSessionHandler {
             self.cleanup_trade_on_disconnect(ev_pid);
             self.cleanup_combat_on_disconnect(ev_pid, ev_loc, 0);
             super::router_skill::clear_skill_state(ev_pid);
+            let _ = super::router_skill::take_monkey_revert_pending(ev_pid);
             super::router_secondary::clear_clan_invites(ev_pid);
             if (ev_loc.map_id, ev_loc.zone_id) != (new_loc.map_id, new_loc.zone_id)
                 && let Ok(old_tx) = self.shared.world_router.resolve_sender(ev_loc.map_id, ev_loc.zone_id)

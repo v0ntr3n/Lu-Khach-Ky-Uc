@@ -277,8 +277,8 @@ impl TradeSession {
             self.state = TradeState::Cancelled;
             return Err(TradeError::InsufficientRecipientBagSpace { needed: self.escrow_items_1.len(), empty: self.working_2.empty_bag_slots() });
         }
-        let next_g1 = self.working_1.gold - self.escrow_gold_1 + self.escrow_gold_2;
-        let next_g2 = self.working_2.gold - self.escrow_gold_2 + self.escrow_gold_1;
+        let next_g1 = (self.working_1.gold - self.escrow_gold_1).saturating_add(self.escrow_gold_2);
+        let next_g2 = (self.working_2.gold - self.escrow_gold_2).saturating_add(self.escrow_gold_1);
         if next_g1 > LIMIT_GOLD || next_g2 > LIMIT_GOLD {
             self.state = TradeState::Cancelled;
             return Err(TradeError::GoldCapOverflow);

@@ -125,6 +125,18 @@ impl PlayerRepo {
         Ok(snap)
     }
 
+    /// Returns `true` if `name` is already claimed in `idx_player_name` by a player other than `exclude`.
+    pub fn is_name_taken(&self, name: &str, exclude: PlayerId) -> DbResult<bool> {
+        let name_key = canonical_lookup_key(name);
+        let exclude_key = enc_i64(exclude.0);
+        Ok(self
+            .pool
+            .ks()
+            .idx_player_name
+            .get(&name_key)?
+            .is_some_and(|b| b.as_ref() != &exclude_key[..]))
+    }
+
     pub async fn create_player(&self, seed: &NewPlayerSeed) -> DbResult<PlayerId> {
         let name_key = canonical_lookup_key(&seed.name);
         let acc_key = enc_i32(seed.account_id.0);
@@ -142,7 +154,14 @@ impl PlayerRepo {
             });
         }
 
-        let pid = PlayerId(self.pool.alloc_player_id());
+        let raw_pid = self.pool.alloc_player_id()?;
+        if !(1..=i64::from(i32::MAX)).contains(&raw_pid) {
+            return Err(DbError::InvalidColumnFormat {
+                column: "player.id",
+                reason: format!("allocated player id {raw_pid} outside wire range"),
+            });
+        }
+        let pid = PlayerId(raw_pid);
         let snap = PlayerSnapshot::from_seed(pid, seed);
         let pid_key = enc_i64(pid.0);
 
@@ -193,17 +212,73 @@ impl PlayerRepo {
         normalized.training.last_time_offline_ms = now_ms;
 
         let pid_key = enc_i64(normalized.id.0);
-        let _guard = self.pool.lock_stripe(normalized.id.0.cast_unsigned());
-        let prev_snap: Option<PlayerSnapshot> = self
-            .pool
-            .ks()
-            .players
-            .get(pid_key)?
-            .map(|b| decode_val("player", &b))
-            .transpose()?;
+        let pid_seed = normalized.id.0.cast_unsigned();
+        let mut need_global_lock = false;
+        let (_global_guard, _pid_guard, prev_snap) = loop {
+            let global_guard = need_global_lock.then(|| self.pool.lock_stripe(0));
+            let pid_guard =
+                (!need_global_lock || pid_seed & 63 != 0).then(|| self.pool.lock_stripe(pid_seed));
+            let prev_snap: Option<PlayerSnapshot> = self
+                .pool
+                .ks()
+                .players
+                .get(pid_key)?
+                .map(|b| decode_val("player", &b))
+                .transpose()?;
+            if !need_global_lock
+                && prev_snap.as_ref().is_some_and(|prev| prev.name != normalized.name)
+            {
+                need_global_lock = true;
+                continue;
+            }
+            break (global_guard, pid_guard, prev_snap);
+        };
+
+        if prev_snap.as_ref().is_some_and(|prev| prev.training.last_time_offline_ms > now_ms) {
+            debug!(player_id = normalized.id.0, now_ms, "skipping stale player snapshot write");
+            return Ok(());
+        }
+
+        let rename_keys = if let Some(prev) = &prev_snap
+            && prev.name != normalized.name
+        {
+            let old_name_key = canonical_lookup_key(&prev.name);
+            let new_name_key = canonical_lookup_key(&normalized.name);
+            if old_name_key != new_name_key {
+                let taken_by_other = self
+                    .pool
+                    .ks()
+                    .idx_player_name
+                    .get(&new_name_key)?
+                    .is_some_and(|b| b.as_ref() != &pid_key[..]);
+                if taken_by_other {
+                    return Err(DbError::DuplicateKey {
+                        entity: "player.name",
+                        key: normalized.name,
+                    });
+                }
+                let remove_old = self
+                    .pool
+                    .ks()
+                    .idx_player_name
+                    .get(&old_name_key)?
+                    .is_some_and(|b| b.as_ref() == &pid_key[..]);
+                Some((remove_old.then_some(old_name_key), new_name_key))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         let mut batch = self.pool.ks().db.batch();
         batch.insert(&self.pool.ks().players, &pid_key[..], encode_val("player", &normalized)?);
+        if let Some((old_opt, new_name_key)) = rename_keys {
+            if let Some(old_name_key) = old_opt {
+                batch.remove(&self.pool.ks().idx_player_name, old_name_key);
+            }
+            batch.insert(&self.pool.ks().idx_player_name, new_name_key, &pid_key[..]);
+        }
 
         let new_lb = leaderboard_metrics(&normalized);
         if let Some(prev) = &prev_snap {

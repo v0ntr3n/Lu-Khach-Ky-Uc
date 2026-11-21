@@ -300,26 +300,28 @@ impl ChonAiDayPool {
     #[must_use]
     #[allow(clippy::cast_possible_truncation)]
     pub fn draw_winner(&mut self, rng: &mut GameRng, parity: ParityMode) -> Option<(PlayerId, u64)> {
-        let total: u64 = self.entries.iter().map(|(_, s)| *s).sum();
+        let total: u128 = self.entries.iter().map(|(_, s)| u128::from(*s)).sum();
         if total == 0 { self.entries.clear(); return None; }
         if self.entries.len() == 1 && !matches!(parity, ParityMode::Legacy) {
             let solo = self.entries[0].0;
             self.entries.clear();
-            return Some((solo, total * 90 / 100));
+            return Some((solo, u64::try_from(total * 90 / 100).unwrap_or(u64::MAX)));
         }
         let winner = if matches!(parity, ParityMode::Legacy) {
             self.entries.sort_by_key(|b| std::cmp::Reverse(b.1));
             self.entries[(rng.next_u64() as usize) % self.entries.len().min(5)].0
         } else {
-            let (mut roll, mut picked) = (rng.next_u64() % total, self.entries[0].0);
+            let (mut roll, mut picked) = (u128::from(rng.next_u64()) % total, self.entries[0].0);
             for &(pid, s) in &self.entries {
+                let s = u128::from(s);
                 if roll < s { picked = pid; break; }
                 roll -= s;
             }
             picked
         };
         self.entries.clear();
-        Some((winner, total * if self.is_vip { 90 } else { 80 } / 100))
+        let pct = if self.is_vip { 90u128 } else { 80u128 };
+        Some((winner, u64::try_from(total * pct / 100).unwrap_or(u64::MAX)))
     }
 }
 

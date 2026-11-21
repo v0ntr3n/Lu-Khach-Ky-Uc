@@ -97,7 +97,7 @@ impl DailyQuestState {
     }
 
     /// Returns `true` when `count >= max_count` (`isDone`).
-    #[inline] pub const fn is_done(&self) -> bool { self.template_id.is_some() && self.count >= self.max_count }
+    #[inline] pub const fn is_done(&self) -> bool { self.template_id.is_some() && self.max_count > 0 && self.count >= self.max_count }
 }
 
 /// Player quest state (`TaskPlayer.java` + `TaskService.java` without any IP DRM checks).
@@ -145,15 +145,15 @@ impl TaskPlayer {
     pub fn record_event(&mut self, expected_key: u32, amount: u16, gender: Gender) -> Option<(u16, u16)> {
         let _ = consts::PER100;
         if self.current_key() != expected_key { return None; }
-        if let Some(sub) = self.sub_tasks.get_mut(usize::from(self.main_index)) {
-            sub.count = sub.count.saturating_add(amount);
-            if sub.count < sub.max_count { return None; }
-        }
+        let sub = self.sub_tasks.get_mut(usize::from(self.main_index))?;
+        sub.count = sub.count.saturating_add(amount);
+        if sub.count < sub.max_count { return None; }
         self.main_index += 1;
         if usize::from(self.main_index) >= self.sub_tasks.len() {
             let done_id = self.main_id;
             self.main_id = match done_id { 3 => 4 + u16::from(gender_index(gender)), 4..=6 => 7, _ => done_id + 1 };
             self.main_index = 0;
+            self.sub_tasks.clear();
             return Some((done_id, self.main_id));
         }
         None
@@ -375,10 +375,12 @@ impl Clan {
 
     /// Fulfills 1 Pea (`max 5`) on request `msg_id`, crediting donor & recipient (`ClanService.clanDonate`).
     pub fn donate_pea(&mut self, donor_id: PlayerId, msg_id: u32) -> Result<PlayerId, PlayerError> {
-        let req = self.pea_requests.iter_mut().find(|r| r.0 == msg_id && r.2 < 5).ok_or(PlayerError::ClanActionDenied)?;
-        let receiver_id = req.1;
-        if receiver_id == donor_id { return Err(PlayerError::ClanActionDenied); }
-        req.2 += 1;
+        let idx = self.pea_requests.iter().position(|r| r.0 == msg_id && r.2 < 5).ok_or(PlayerError::ClanActionDenied)?;
+        let receiver_id = self.pea_requests[idx].1;
+        if receiver_id == donor_id || !self.members.iter().any(|m| m.player_id == donor_id) || !self.members.iter().any(|m| m.player_id == receiver_id) {
+            return Err(PlayerError::ClanActionDenied);
+        }
+        self.pea_requests[idx].2 += 1;
         if let Some(d) = self.members.iter_mut().find(|m| m.player_id == donor_id) { d.pea_stats.0 += 1; }
         if let Some(r) = self.members.iter_mut().find(|m| m.player_id == receiver_id) { r.pea_stats.1 += 1; }
         Ok(receiver_id)

@@ -42,8 +42,8 @@ fn next_main_task_id(tpl: &GameTemplates, done_id: i8, gender_idx: usize) -> i8 
     if tpl.tasks.iter().any(|t| t.id == i32::from(preferred)) { preferred } else { done_id.saturating_add(1) }
 }
 
-fn is_map_visit_subtask(sub: &SubTaskTemplateRecord) -> bool {
-    if sub.npc_id >= 0 || sub.max_count > 1 {
+fn is_map_visit_subtask(sub: &SubTaskTemplateRecord, gender_idx: usize) -> bool {
+    if resolve_task_npc_id(sub.npc_id, gender_idx) >= 0 || sub.max_count > 1 {
         return false;
     }
     let s = sub.name.trim().to_lowercase();
@@ -166,7 +166,7 @@ impl ServerSessionHandler {
                 let sub_idx = usize::from(e.snapshot.main_task.sub_index.max(0).cast_unsigned());
                 if let Some(t_tpl) = self.shared.templates.tasks.iter().find(|t| t.id == i32::from(task_id))
                     && let Some(sub) = t_tpl.sub_tasks.get(sub_idx)
-                    && ((task_id == 3 && sub_idx == 0) || (sub.npc_id < 0 && sub.name.to_lowercase().contains("tiềm năng")))
+                    && ((task_id == 3 && sub_idx == 0) || (resolve_task_npc_id(sub.npc_id, g) < 0 && sub.name.to_lowercase().contains("tiềm năng")))
                 {
                     let sub_len = t_tpl.sub_tasks.len().min(127);
                     out_pkts = self.apply_subtask_delta(&mut e, sub_idx, sub_len, sub.max_count.max(1), 1, g);
@@ -200,7 +200,7 @@ impl ServerSessionHandler {
                 let sub_idx = usize::from(e.snapshot.main_task.sub_index.max(0).cast_unsigned());
                 if let Some(t_tpl) = self.shared.templates.tasks.iter().find(|t| t.id == i32::from(task_id))
                     && let Some(sub) = t_tpl.sub_tasks.get(sub_idx)
-                    && sub.npc_id < 0
+                    && resolve_task_npc_id(sub.npc_id, g) < 0
                     && item_matches_subtask(&self.shared.templates, task_id, sub_idx, sub, &t_tpl.detail, g, template_id)
                 {
                     let sub_len = t_tpl.sub_tasks.len().min(127);
@@ -230,6 +230,10 @@ impl ServerSessionHandler {
     ) -> Result<Option<String>, ProtocolError> {
         let (mut out_pkts, mut say_reply) = (Vec::new(), None);
         if let Some(mut e) = self.shared.clients.authenticated.get_mut(&sid) {
+            let map_id = e.snapshot.location.map_id;
+            let on_map = npc_id >= 0 && self.shared.templates.maps.iter().find(|m| m.id == map_id)
+                .is_some_and(|m| m.npcs.iter().any(|&(tid, _, _)| i16::from(tid) == npc_id || i16::from(tid.cast_unsigned()) == npc_id));
+            if !on_map { return Ok(None); }
             let g = usize::from(u8::from(e.snapshot.gender)).min(2);
             let elder = home_elder_npc(g);
             if e.snapshot.main_task.task_id == 0 {
@@ -313,8 +317,8 @@ impl ServerSessionHandler {
                 let cur_map = e.snapshot.location.map_id;
                 if let Some(t_tpl) = self.shared.templates.tasks.iter().find(|t| t.id == i32::from(task_id))
                     && let Some(sub) = t_tpl.sub_tasks.get(sub_idx)
-                    && sub.npc_id < 0
-                    && !is_map_visit_subtask(sub)
+                    && resolve_task_npc_id(sub.npc_id, g) < 0
+                    && !is_map_visit_subtask(sub, g)
                     && mob_matches_subtask(&self.shared.templates, task_id, sub_idx, sub, &t_tpl.detail, g, cur_map, mob_temp_id)
                 {
                     let delta = if matches!(task_id, 14 | 15) { coop_delta.unwrap_or(0) } else { 1 };
@@ -334,7 +338,7 @@ impl ServerSessionHandler {
         let sub_idx = usize::from(e.snapshot.main_task.sub_index.max(0).cast_unsigned());
         if let Some(t_tpl) = self.shared.templates.tasks.iter().find(|t| t.id == tid) && let Some(sub) = t_tpl.sub_tasks.get(sub_idx) {
             let task11_home = tid == 11 && sub_idx == 3 && (sub.npc_id == 105 || sub.map_id.0 == 42) && matches!(map_id.0, 21..=23);
-            if task11_home || (is_map_visit_subtask(sub) && resolve_task_map_id(sub.map_id.0, gender_idx) == map_id.0) {
+            if task11_home || (is_map_visit_subtask(sub, gender_idx) && resolve_task_map_id(sub.map_id.0, gender_idx) == map_id.0) {
                 let (sub_len, req_max) = (t_tpl.sub_tasks.len().min(127), sub.max_count.max(1));
                 let delta = if task11_home { req_max } else { 1 };
                 out_pkts.extend(self.apply_subtask_delta(e, sub_idx, sub_len, req_max, delta, gender_idx));

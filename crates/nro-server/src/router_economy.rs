@@ -4,8 +4,10 @@ use std::sync::OnceLock;
 
 use dashmap::DashMap;
 use nro_consts::const_map;
-use nro_core::{CoreStats, GameRng, Gender, ItemInstance, MapId, PlayerId, TemplateId, ZoneId};
+use nro_core::{CoreStats, GameRng, Gender, ItemInstance, MapId, ParityMode, PlayerId, TemplateId, ZoneId};
+use nro_db::json_columns::PetSnapshot;
 use nro_economy::{BuffSlot, InventoryError, ItemCatalog, ItemMeta, TimedBuffState, opt_id};
+use nro_player::{npoint::{ActiveBuffs, NPoint, StatContext}, pet::{FusionKind, PetKind}, set_clothes::SetClothes};
 use nro_protocol::{ProtocolError, SessionHandle};
 use nro_world::{ZoneCommand, s2c_packets};
 
@@ -15,6 +17,20 @@ use crate::runtime::unix_now_ms;
 static SESSION_BUFFS: OnceLock<DashMap<u64, TimedBuffState>> = OnceLock::new();
 pub(super) fn session_buffs() -> &'static DashMap<u64, TimedBuffState> { SESSION_BUFFS.get_or_init(DashMap::new) }
 pub(super) fn clear_session_buffs(sid: u64) { session_buffs().remove(&sid); }
+
+pub(super) fn prune_expired_session_buffs(sid: u64, now_ms: i64) -> bool {
+    let (removed, empty) = if let Some(mut entry) = session_buffs().get_mut(&sid) {
+        let before = entry.active.len();
+        entry.active.retain(|&mut (_, exp)| exp > now_ms);
+        (entry.active.len() < before, entry.active.is_empty())
+    } else {
+        return false;
+    };
+    if empty {
+        session_buffs().remove_if(&sid, |_, v| v.active.is_empty());
+    }
+    removed
+}
 
 fn check_equip_requirements(
     item: &ItemInstance,
@@ -117,6 +133,9 @@ impl ServerSessionHandler {
             };
             if !moved { return None; }
             sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
+            if pet_changed && let Some(pet) = entry.snapshot.pet.as_mut() {
+                recalculate_pet_stats(pet, self.shared.config.parity_mode);
+            }
             if body_changed { super::recalculate_session_stats(sid, &mut entry.snapshot, self.shared.config.parity_mode); }
             let (eh, eb, el, ebag, is_disg) = effective_appearance(&self.shared.templates, &entry.snapshot);
             let (loc, pid) = (entry.snapshot.location, entry.snapshot.id);
@@ -136,7 +155,7 @@ impl ServerSessionHandler {
         if let Some((inv_pkts, body_bcast, pet_pkt)) = outcome {
             for p in inv_pkts { session.send(p).await?; }
             if let Some((pt_pkt, upd_body, flag_bag, loc)) = body_bcast {
-                session.send(pt_pkt).await?; self.broadcast_to_zone_peers(loc, None, &upd_body); self.broadcast_to_zone_peers(loc, None, &flag_bag);
+                session.send(pt_pkt).await?; self.broadcast_zone_or_self(loc, sid, &upd_body); self.broadcast_zone_or_self(loc, sid, &flag_bag);
             }
             if let Some(pp) = pet_pkt { session.send(pp).await?; }
         }
@@ -145,25 +164,45 @@ impl ServerSessionHandler {
 
     pub(super) async fn handle_map_transport(&self, session: &SessionHandle, sid: u64, opt_idx: Option<i8>) -> Result<(), ProtocolError> {
         let Some(raw_idx) = opt_idx.and_then(|i| usize::try_from(i).ok()) else { return Ok(()); };
-        let prep = self.shared.clients.authenticated.get(&sid).and_then(|entry| {
+        let mut in_trade = false;
+        let prep = self.shared.clients.authenticated.get_mut(&sid).and_then(|mut entry| {
+            if super::router_shop::is_in_trade(entry.snapshot.id) { in_trade = true; return None; }
             if entry.snapshot.stats.hp <= 0 { return None; }
             let pid = entry.snapshot.id;
-            let (is_194, dests) = capsule_dests().get(&pid).map(|v| v.value().clone())?;
-            let &dst_map = dests.get(raw_idx)?;
-            let req_tid = if is_194 { TemplateId(194) } else { TemplateId(193) };
-            if !entry.snapshot.items_bag.iter().any(|s| s.as_ref().is_some_and(|it| it.template_id == req_tid && it.quantity > 0)) { return None; }
-            Some((pid, is_194, dst_map, if entry.snapshot.have_tennis_space_ship { 3 } else { 1 }))
+            let (is_194, dst_map) = capsule_dests().get(&pid).and_then(|v| v.value().1.get(raw_idx).map(|&m| (v.value().0, m)))?;
+            let deducted = if is_194 {
+                if !entry.snapshot.items_bag.iter().any(|s| s.as_ref().is_some_and(|it| it.template_id == TemplateId(194) && it.quantity > 0)) { return None; }
+                None
+            } else {
+                let mut inv = snapshot_to_economy_inv(&entry.snapshot);
+                let refund_item = inv.bag.iter().flatten().find(|it| it.template_id == TemplateId(193)).map_or_else(
+                    || ItemInstance::with_options(TemplateId(193), 1, Vec::new(), unix_now_ms()),
+                    |it| ItemInstance { template_id: TemplateId(193), quantity: 1, options: it.options.clone(), create_time_ms: it.create_time_ms },
+                );
+                inv.sub_template_from_bag(TemplateId(193), 1).ok()?;
+                sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
+                Some((refund_item, s2c_packets::inventory_bag(&entry.snapshot.items_bag)))
+            };
+            capsule_dests().remove(&pid);
+            Some((dst_map, if entry.snapshot.have_tennis_space_ship { 3 } else { 1 }, deducted))
         });
-        if let Some((pid, is_194, dst_map, ship)) = prep {
-            let moved = self.switch_player_zone_with_ship(session, sid, Some(dst_map), ZoneId(0), Some((250, 5)), ship).await?;
-            if moved {
-                capsule_dests().remove(&pid);
-                if !is_194 && let Some(bp) = self.shared.clients.authenticated.get_mut(&sid).and_then(|mut entry| {
-                    let mut inv = snapshot_to_economy_inv(&entry.snapshot);
-                    inv.sub_template_from_bag(TemplateId(193), 1).ok()?;
-                    sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
-                    Some(s2c_packets::inventory_bag(&entry.snapshot.items_bag))
-                }) { session.send(bp).await?; }
+        if in_trade { return send_thong_bao(session, "Không thể thao tác khi đang giao dịch!"); }
+        if let Some((dst_map, ship, deducted)) = prep {
+            let res = self.switch_player_zone_with_ship(session, sid, Some(dst_map), ZoneId(0), Some((250, 5)), ship).await;
+            if matches!(res, Ok(true)) {
+                if let Some((_, pkt)) = deducted { session.send(pkt).await?; }
+            } else {
+                if let Some((refund_item, _)) = deducted {
+                    let stackable = DbItemCatalog(&self.shared.templates).meta_of(TemplateId(193)).stackable;
+                    let bp = self.shared.clients.authenticated.get_mut(&sid).map(|mut entry| {
+                        let mut inv = snapshot_to_economy_inv(&entry.snapshot);
+                        let _ = inv.add_to_bag(refund_item, stackable);
+                        sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
+                        s2c_packets::inventory_bag(&entry.snapshot.items_bag)
+                    });
+                    if res.is_ok() && let Some(pkt) = bp { session.send(pkt).await?; }
+                }
+                res?;
             }
         }
         Ok(())
@@ -215,4 +254,39 @@ pub(super) fn apply_session_buffs_before_clamp(sid: u64, stats: &mut CoreStats) 
 pub(super) const fn resolve_equip_body_slot(item_type: u8, body_len: usize) -> Option<usize> {
     let slot = match item_type { 0..=5 => item_type as usize, 25 => 4, 32 => 6, 72 => 7, 11 => 8, 23 | 24 => 9, 35 => 10, _ => return None };
     if slot < body_len { Some(slot) } else { None }
+}
+
+fn recalculate_pet_stats(pet: &mut PetSnapshot, parity: ParityMode) {
+    let mut npoint = NPoint::new(pet.stats);
+    let kind = PetKind::from_repr(u8::try_from(pet.type_pet).unwrap_or(0)).unwrap_or_default();
+    let fusion_kind = if pet.fusion_type == 0 {
+        FusionKind::None
+    } else {
+        FusionKind::from_repr(u8::try_from(pet.fusion_type).unwrap_or(0))
+            .unwrap_or(FusionKind::LuongLongNhatThe)
+    };
+    let ctx = StatContext {
+        body: &pet.items_body,
+        radar_options: &[],
+        badge_options: &[],
+        bag_gear: (None, None),
+        sets: SetClothes::recompute(&pet.items_body, None, false),
+        buffs: ActiveBuffs { war_mults: (1, 1), ..Default::default() },
+        is_human_player: false,
+        self_pet_info: Some((kind, fusion_kind, pet.fusion_type != 0)),
+        fused_pet_stats: None,
+        form_state: (0, 0, None),
+        map_env: (false, false),
+        parity,
+    };
+    npoint.cal_point(&ctx);
+    pet.stats.hp_max = i64::from(npoint.hp_max);
+    pet.stats.mp_max = i64::from(npoint.mp_max);
+    pet.stats.dame = i64::from(npoint.dame);
+    pet.stats.def = npoint.def;
+    pet.stats.crit = u8::try_from(npoint.crit.clamp(0, i32::from(u8::MAX))).unwrap_or(0);
+    pet.stats.speed = npoint.speed;
+    pet.stats.dodge = u8::try_from(npoint.mods.tl_ne_don.clamp(0, 90)).unwrap_or(0);
+    pet.stats.hp = pet.stats.hp.clamp(0, pet.stats.hp_max);
+    pet.stats.mp = pet.stats.mp.clamp(0, pet.stats.mp_max);
 }

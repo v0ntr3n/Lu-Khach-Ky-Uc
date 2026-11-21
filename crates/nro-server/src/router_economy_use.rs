@@ -1,7 +1,8 @@
 //! Item consumption/drop (`-43`) and skill learning/upgrades.
 
 use nro_consts::{cmd_message, const_npc, const_player};
-use nro_core::{GameRng, ItemInstance, Location, MapId, PlayerId, TemplateId, ZoneId};
+use nro_boss::BossStatus;
+use nro_core::{ClanId, GameRng, ItemInstance, Location, MapId, PlayerId, TemplateId, ZoneId};
 use nro_db::{StrNum, json_columns::{EggTimer, RadarCardOption, RadarCardRecord, SkillSlot}};
 use nro_economy::{ItemCatalog, MabuEggState, UseItemCtx, UseItemEffect, UseItemService};
 use nro_player::skills::SkillKind;
@@ -9,7 +10,7 @@ use nro_protocol::{Packet, PacketWriter, ProtocolError, SessionHandle};
 use nro_world::{GroundDropKind, ZoneCommand, s2c_packets};
 
 use super::{
-    DbItemCatalog, ServerSessionHandler, capsule_dests, effective_appearance, npc_menu_index,
+    DbItemCatalog, ServerSessionHandler, capsule_dests, con_meo_state, effective_appearance, npc_menu_index,
     router_economy::{resolve_equip_body_slot, session_buffs},
     send_thong_bao, snapshot_to_economy_inv, sync_economy_inv_to_snapshot, wallet_money_pkt,
 };
@@ -48,7 +49,7 @@ impl ServerSessionHandler {
                 }
                 for p in inv_pkts { session.send(p).await?; }
                 if let Some((pt_pkt, upd_body, flag_bag)) = bcast {
-                    session.send(pt_pkt).await?; self.broadcast_to_zone_peers(loc, None, &upd_body); self.broadcast_to_zone_peers(loc, None, &flag_bag);
+                    session.send(pt_pkt).await?; self.broadcast_zone_or_self(loc, sid, &upd_body); self.broadcast_zone_or_self(loc, sid, &flag_bag);
                 }
             }
             return Ok(());
@@ -80,7 +81,13 @@ impl ServerSessionHandler {
                 _ => return Ok(()),
             }
         }
-        let (mut teleport_target, mut died_info, mut extra_pkts, mut zone_bcasts, mut err_msg, mut power_gained) = (None::<MapId>, None::<(PlayerId, Location, i64)>, Vec::<Packet>::new(), None::<(Location, Vec<Packet>)>, None::<String>, false);
+        let (mut teleport_target, mut died_info, mut extra_pkts, mut zone_bcasts, mut err_msg, mut power_gained, mut satellite_drop) = (None::<MapId>, None::<(PlayerId, Location, i64)>, Vec::<Packet>::new(), None::<(Location, Vec<Packet>)>, None::<String>, false, None::<(TemplateId, Location, PlayerId, ClanId)>);
+        let hungry_soi_in_zone = self.shared.clients.authenticated.get(&sid).map(|e| (e.snapshot.location.map_id, e.snapshot.location.zone_id)).is_some_and(|(mid, zid)| {
+            self.shared.bosses.lock().instances().values().any(|b| {
+                b.boss_type.0 == 84 && b.map_id == mid && b.zone_id == zid && b.stats.hp > 0
+                    && !matches!(b.lifecycle.status, BossStatus::Rest | BossStatus::Die | BossStatus::LeaveMap)
+            })
+        });
         let catalog = DbItemCatalog(&self.shared.templates);
         let packets = self.shared.clients.authenticated.get_mut(&sid).and_then(|mut entry| {
             if super::router_shop::is_in_trade(entry.snapshot.id) { err_msg = Some(String::from("Không thể thao tác khi đang giao dịch!")); return None; }
@@ -102,7 +109,7 @@ impl ServerSessionHandler {
             let result = {
                 let snap = &mut entry.snapshot;
                 let fusion_mode = snap.pet.as_mut().map_or(&mut fallback_fusion, |p| &mut p.fusion_type);
-                let mut ctx = UseItemCtx { now_ms, current_day, last_wood_chest_day: &mut last_wood_chest_day, last_pea_ms: &mut last_pea_ms, gender, stats: &mut snap.stats, buffs: &mut buffs, fusion_mode, has_pet, pet_type: &mut pet_type, pet_power, pet_unlocked_skills: 0b1111, zone_satellites: 0, hungry_soi_in_zone: false, mabu_egg: &mut mabu_egg };
+                let mut ctx = UseItemCtx { now_ms, current_day, last_wood_chest_day: &mut last_wood_chest_day, last_pea_ms: &mut last_pea_ms, gender, stats: &mut snap.stats, buffs: &mut buffs, fusion_mode, has_pet, pet_type: &mut pet_type, pet_power, pet_unlocked_skills: 0b1111, zone_satellites: 0, hungry_soi_in_zone, mabu_egg: &mut mabu_egg };
                 UseItemService::use_bag_item(&mut inv, bag_slot, &mut ctx, &catalog, &mut rng)
             };
             entry.last_pea_ms = last_pea_ms;
@@ -113,6 +120,13 @@ impl ServerSessionHandler {
             }
             match result {
                 Ok(effect) => {
+                    if let UseItemEffect::LearnedSkill(book_tid) = &effect {
+                        let Some(pkt) = self.apply_skill_book(&mut entry.snapshot, *book_tid) else {
+                            err_msg = Some(String::from("Không thể học kỹ năng từ sách này!"));
+                            return None;
+                        };
+                        extra_pkts.push(pkt);
+                    }
                     session_buffs().insert(sid, buffs.clone());
                     sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
                     super::recalculate_session_stats(sid, &mut entry.snapshot, self.shared.config.parity_mode);
@@ -154,9 +168,10 @@ impl ServerSessionHandler {
                             capsule_dests().insert(entry.snapshot.id, (is_194, dests));
                         }
                         UseItemEffect::SummonDragon(is_earth) => {
-                            if (14..=20).all(|b| inv.count_template_in_bag(TemplateId(b)) >= 1) {
+                            let mut ball_range = if is_earth { 14..=20 } else { 353..=359 };
+                            if ball_range.all(|b| inv.count_template_in_bag(TemplateId(b)) >= 1) {
                                 let npc_id = if is_earth { i16::from(const_npc::RONG_THIENG) } else { i16::from(const_npc::RONG_THIENG_NAMEC) };
-                                npc_menu_index().insert(entry.snapshot.id, const_npc::SHENRON_1_1);
+                                npc_menu_index().insert(entry.snapshot.id, (npc_id, const_npc::SHENRON_1_1));
                                 if let Ok(menu) = s2c_packets::npc_open_menu(
                                     npc_id,
                                     "Hãy nói ra điều ước của ngươi...",
@@ -169,10 +184,12 @@ impl ServerSessionHandler {
                                 extra_pkts.push(tb);
                             }
                         }
-                        UseItemEffect::DropSatellite(_tid) => {
+                        UseItemEffect::DropSatellite(tid) => {
+                            satellite_drop = Some((tid, entry.snapshot.location, entry.snapshot.id, entry.snapshot.clan_id));
                             if let Ok(tb) = s2c_packets::thong_bao("Đã đặt vệ tinh trong khu vực!") { extra_pkts.push(tb); }
                         }
                         UseItemEffect::PromptSkhChoice => {
+                            con_meo_state().insert(entry.snapshot.id, 5551);
                             if let Ok(menu) = s2c_packets::npc_open_menu(
                                 i16::from(const_npc::CON_MEO),
                                 "Hãy chọn món trang bị Set Kích Hoạt:",
@@ -182,7 +199,7 @@ impl ServerSessionHandler {
                                 extra_pkts.push(menu);
                             }
                         }
-                        UseItemEffect::LearnedSkill(book_tid) => if let Some(pkt) = self.apply_skill_book(&mut entry.snapshot, book_tid) { extra_pkts.push(pkt); },
+                        UseItemEffect::LearnedSkill(_) => {}
                         UseItemEffect::BonusTnsm(tnsm) => {
                             entry.snapshot.stats.power = entry.snapshot.stats.power.saturating_add(tnsm);
                             entry.snapshot.stats.tiem_nang = entry.snapshot.stats.tiem_nang.saturating_add(tnsm);
@@ -244,8 +261,11 @@ impl ServerSessionHandler {
             for p in base_pkts { session.send(p).await?; }
             for p in extra_pkts { session.send(p).await?; }
         }
+        if let Some((tid, loc, pid, clan_id)) = satellite_drop && let Ok(tx) = self.shared.world_router.resolve_sender(loc.map_id, loc.zone_id) {
+            let _ = tx.send(ZoneCommand::DropItem(tid, 1, loc, Some(pid), GroundDropKind::Satellite { clan_id })).await;
+        }
         if power_gained { self.advance_task_on_power(session, sid).await?; }
-        if let Some((loc, bcasts)) = zone_bcasts { for p in bcasts { self.broadcast_to_zone_peers(loc, None, &p); } }
+        if let Some((loc, bcasts)) = zone_bcasts { for p in bcasts { self.broadcast_zone_or_self(loc, sid, &p); } }
         if let Some(msg) = err_msg { send_thong_bao(session, &msg)?; }
         if let Some((pid, loc, power)) = died_info {
             self.handle_player_death_cleanup(pid, loc, sid);
@@ -259,13 +279,15 @@ impl ServerSessionHandler {
     pub(super) async fn handle_skill_up(&self, session: &SessionHandle, sid: u64, template_id: i16, _pt: i8) -> Result<(), ProtocolError> {
         let pkts = self.shared.clients.authenticated.get_mut(&sid).map(|mut entry| {
             let mut out = Vec::new();
-            if let Some(st) = self.shared.templates.skills.iter().find(|s| i16::from(s.id) == template_id) {
+            if let Some(st) = self.shared.templates.skills.iter().find(|s| i16::from(s.id) == template_id && s.nclass_id == i8::from(entry.snapshot.gender)) {
                 let cur_pt = entry.snapshot.skills.iter().find(|sk| sk.template_id == i32::from(template_id)).map_or(0, |sk| sk.point);
                 let next_pt = (cur_pt + 1).min(st.max_point.max(1));
-                if next_pt <= cur_pt {
+                if cur_pt <= 0 {
+                    if let Ok(tb) = s2c_packets::thong_bao("Cần học sách kỹ năng trước khi nâng cấp!") { out.push(tb); }
+                } else if next_pt <= cur_pt {
                     if let Ok(tb) = s2c_packets::thong_bao("Kỹ năng đã đạt cấp tối đa!") { out.push(tb); }
                 } else if let Some(lv) = st.levels.iter().find(|l| l.point == next_pt) {
-                    let cost = i64::from(lv.price.max(0));
+                    let cost = i64::from(lv.price.max(0)).saturating_mul(1_000);
                     if entry.snapshot.stats.power < lv.power_require {
                         if let Ok(tb) = s2c_packets::thong_bao(&format!("Không đủ sức mạnh để nâng kỹ năng (cần {})!", lv.power_require)) { out.push(tb); }
                     } else if entry.snapshot.stats.tiem_nang < cost {
@@ -296,7 +318,7 @@ impl ServerSessionHandler {
         let next_pt = (cur_pt + 1).min(st.max_point.max(1));
         if next_pt <= cur_pt { return None; }
         let lv = st.levels.iter().find(|l| l.point == next_pt).or_else(|| st.levels.first())?;
-        let tn_cost = i64::from(lv.price.max(1)) * 1_000;
+        let tn_cost = i64::from(lv.price.max(0)).saturating_mul(1_000);
         if snap.stats.power < lv.power_require || snap.stats.tiem_nang < tn_cost { return None; }
         snap.stats.tiem_nang -= tn_cost;
         if let Some(sk) = snap.skills.iter_mut().find(|s| s.template_id == i32::from(st.id)) {

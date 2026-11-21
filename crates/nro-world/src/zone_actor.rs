@@ -17,7 +17,9 @@ pub use zone_mobs::ZoneMobSeed;
 use std::sync::Arc;
 
 use dashmap::DashMap;
-use nro_core::{CoreStats, EntityKey, GameRng, Location, MapId, PlayerId, TemplateId, ZoneId};
+use nro_core::{
+    CoreStats, EntityKey, GameRng, ItemOption, Location, MapId, PlayerId, TemplateId, ZoneId,
+};
 use nro_protocol::Packet;
 use slotmap::SlotMap;
 use smallvec::SmallVec;
@@ -33,6 +35,9 @@ use crate::{
 
 /// Simulation interval for every [`ZoneActor`] (`50 ms` = 20 Hz).
 pub const ZONE_TICK_MS: u64 = 50;
+
+/// Maximum concurrent ground items allowed inside a single [`ZoneActor`].
+pub(super) const MAX_GROUND_ITEMS: usize = 512;
 
 /// Mailbox commands processed sequentially by [`ZoneActor`].
 #[derive(Debug)]
@@ -55,8 +60,17 @@ pub enum ZoneCommand {
     MovePlayer(EntityKey, Location),
     /// Broadcasts zone chat (`44`).
     ChatMap(EntityKey, String),
-    /// Spawns a ground item (`68` `ITEMMAP_ADD`).
+    /// Spawns a ground item (`68` `ITEMMAP_ADD`) with empty options.
     DropItem(TemplateId, u32, Location, Option<PlayerId>, GroundDropKind),
+    /// Spawns a ground item (`68` `ITEMMAP_ADD`) preserving rolled [`ItemOption`]s.
+    DropItemWithOptions(
+        TemplateId,
+        u32,
+        Location,
+        Option<PlayerId>,
+        GroundDropKind,
+        SmallVec<[ItemOption; 4]>,
+    ),
     /// Picks up a ground item by wire `item_map_id` (`-20` / `-19`).
     PickItem(EntityKey, i16, oneshot::Sender<Result<GroundItem, WorldError>>),
     /// Restores a previously picked [`GroundItem`] back onto the zone floor (e.g. bag full).
@@ -71,6 +85,8 @@ pub enum ZoneCommand {
     ),
     /// Populates live monsters (`0..127`) for this zone.
     SeedMobs(Vec<ZoneMobSeed>),
+    /// Kills all live monsters in this zone (e.g. `GoldenFrieza` 21h entry).
+    WipeMobs,
     /// Resolves a player's attack against zone monsters, replying with `(tnsm, killed_temp_ids)`.
     AttackMobs {
         /// Attacking player's arena key.
@@ -101,6 +117,7 @@ pub struct ZoneActor {
     cfg: ZoneConfig,
     rx: mpsc::Receiver<ZoneCommand>,
     self_tx: mpsc::Sender<ZoneCommand>,
+    event_tx: Option<mpsc::Sender<ZoneEvent>>,
     router: Arc<DashMap<(MapId, ZoneId), mpsc::Sender<ZoneCommand>>>,
     arena: ZoneSoaArena,
     mobs: Vec<ZoneMob>,
@@ -128,6 +145,7 @@ impl ZoneActor {
                 cfg,
                 rx,
                 self_tx: tx.clone(),
+                event_tx: None,
                 router,
                 arena: ZoneSoaArena::default(),
                 mobs: Vec::new(),
@@ -140,6 +158,13 @@ impl ZoneActor {
             },
             tx,
         )
+    }
+
+    /// Attaches an asynchronous [`ZoneEvent`] channel for server-side HP synchronization.
+    #[must_use]
+    pub fn with_event_tx(mut self, tx: mpsc::Sender<ZoneEvent>) -> Self {
+        self.event_tx = Some(tx);
+        self
     }
 
     /// Runs the `50 ms` `tokio::time::interval` loop until `Shutdown` or channel drop.
@@ -169,6 +194,61 @@ impl ZoneActor {
                 let _ = ch.try_send(pkt.clone());
             }
         }
+    }
+
+    pub(super) fn alloc_wire_id(&mut self) -> Option<i16> {
+        for _ in 0..i16::MAX {
+            let candidate = self.next_wire_id;
+            self.next_wire_id = if candidate == i16::MAX { 1 } else { candidate + 1 };
+            if !self.ground_items.values().any(|it| it.wire_id == candidate) {
+                return Some(candidate);
+            }
+        }
+        None
+    }
+
+    pub(super) fn broadcast_ground_item_pkt(&self, pkt: &Packet, owner: Option<PlayerId>) {
+        if is_offline_map(self.cfg.id.0) {
+            if let Some(owner_pid) = owner
+                && let Some(ek) = self.arena.find_player_key(owner_pid)
+                && let Some(idx) = self.arena.dense_index(ek)
+            {
+                self.emit_for_actor(idx, pkt);
+            }
+        } else {
+            self.broadcast(pkt, None);
+        }
+    }
+
+    fn spawn_ground_item(
+        &mut self,
+        tid: TemplateId,
+        qty: u32,
+        loc: Location,
+        owner: Option<PlayerId>,
+        kind: GroundDropKind,
+        options: SmallVec<[ItemOption; 4]>,
+    ) {
+        if self.ground_items.len() >= MAX_GROUND_ITEMS {
+            return;
+        }
+        let Some(wire_id) = self.alloc_wire_id() else {
+            return;
+        };
+        self.ground_items.insert(GroundItem {
+            wire_id,
+            stack: (tid, qty),
+            loc,
+            owner,
+            times_ms: (self.now_ms, self.now_ms),
+            kind,
+            options,
+        });
+        let pkt = s2c_packets::item_map_add(
+            &GroundItemWire { item_map_id: wire_id, template_id: tid, loc, owner_id: owner },
+            self.cfg.parity,
+        );
+        self.broadcast_ground_item_pkt(&pkt, owner);
     }
 
     fn handle_command(&mut self, cmd: ZoneCommand) -> bool {
@@ -221,37 +301,10 @@ impl ZoneActor {
                 }
             }
             ZoneCommand::DropItem(tid, qty, loc, owner, kind) => {
-                let wire_id = self.next_wire_id;
-                self.next_wire_id = self.next_wire_id.wrapping_add(1).max(1);
-                self.ground_items.insert(GroundItem {
-                    wire_id,
-                    stack: (tid, qty),
-                    loc,
-                    owner,
-                    times_ms: (self.now_ms, self.now_ms),
-                    kind,
-                    options: SmallVec::new(),
-                });
-                let pkt = s2c_packets::item_map_add(
-                    &GroundItemWire {
-                        item_map_id: wire_id,
-                        template_id: tid,
-                        loc,
-                        owner_id: owner,
-                    },
-                    self.cfg.parity,
-                );
-                if offline
-                    && let Some(owner_pid) = owner
-                {
-                    if let Some(ek) = self.arena.find_player_key(owner_pid)
-                        && let Some(idx) = self.arena.dense_index(ek)
-                    {
-                        self.emit_for_actor(idx, &pkt);
-                    }
-                } else {
-                    self.broadcast(&pkt, None);
-                }
+                self.spawn_ground_item(tid, qty, loc, owner, kind, SmallVec::new());
+            }
+            ZoneCommand::DropItemWithOptions(tid, qty, loc, owner, kind, options) => {
+                self.spawn_ground_item(tid, qty, loc, owner, kind, options);
             }
             ZoneCommand::PickItem(picker, item_map_id, reply) => {
                 let _ = reply.send(self.pick_item(picker, item_map_id));
@@ -263,6 +316,7 @@ impl ZoneActor {
                 self.two_phase_change_map(key, dest, dest_loc, ship, reply);
             }
             ZoneCommand::SeedMobs(seeds) => self.seed_mobs(seeds),
+            ZoneCommand::WipeMobs => self.wipe_mobs(),
             ZoneCommand::AttackMobs { attacker, skill_paint_id, mob_ids, damage, is_crit, reply } => {
                 let res = self.attack_mobs(attacker, skill_paint_id, &mob_ids, damage, is_crit);
                 let _ = reply.send(res);

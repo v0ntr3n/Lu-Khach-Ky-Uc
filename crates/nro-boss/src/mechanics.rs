@@ -83,7 +83,7 @@ pub enum BossArchetype {
     /// Map 111 `TaoPaiPai` granting `damage * (20..=50)` TNSM to beginners (`power < 1.5M`).
     BeginnerTaoPaiPai,
     /// 23rd Martial Arts Congress (`ChanXu` stun+100% crit, `ThienXinHang` 4x `10s` clones).
-    DhvtArena { is_chan_xu: bool, spawns_clones: bool },
+    DhvtArena { is_chan_xu: bool, spawns_clones: bool, clone_lifespan_ms: Option<u32> },
     /// Võ Đài Bà Hạt Mít (`Dracula` `10%` blood drain, `NguoiVoHinh` `y=10000` stealth).
     HatMitSpec { player_hp_pct: u16, drains_blood: bool, cycles_stealth: bool },
     /// Auto-training tower master (`TauPayPay` Task `10_1` gate, `ToSuKaio` passive TNSM).
@@ -186,7 +186,7 @@ pub fn evaluate_boss_damage(
         }
         DamageRule::BabyComposite => {
             if std_dodge(rng) { return zero_hit(); }
-            dmg = (((dmg * 7 / 10) / 2) - i64::from(stats.def)).max(1);
+            dmg = (((dmg.saturating_mul(7) / 10) / 2) - i64::from(stats.def)).max(1);
             apply_shield(&mut dmg, stats.hp_max, shield_active, 4, piercing);
         }
         DamageRule::FlatSubShieldOne { flat_rand, stage1_half } => {
@@ -205,10 +205,11 @@ pub fn evaluate_boss_damage(
         }
         DamageRule::KhiGasScaled { level, is_hatchiyack } => {
             if !piercing && rng.is_true(if is_hatchiyack { level + 10 } else { level }, 1_000) { return zero_hit(); }
-            let flat_hi = ((if is_hatchiyack { 200 } else { 100 }) * level) as i32;
+            let mult = if is_hatchiyack { 200 } else { 100 };
+            let flat_hi = i32::try_from(level.saturating_mul(mult)).unwrap_or(i32::MAX);
             let dr_pct = i64::from(if is_hatchiyack { level / 5 } else { level / 10 }).min(95);
             dmg = (dmg - i64::from(rng.next_int(0, flat_hi)) - i64::from(stats.def)).max(1);
-            dmg = (dmg - dmg * dr_pct / 100).max(1);
+            dmg = (dmg - dmg.saturating_mul(dr_pct) / 100).max(1);
             apply_shield_one(&mut dmg, stats.hp_max, shield_active, piercing);
         }
         DamageRule::WhisScaled { level } => {
@@ -221,15 +222,15 @@ pub fn evaluate_boss_damage(
         }
         DamageRule::PvpMirror { armor_pct, ki_absorb_pct, giap_xen_tier } => {
             if skill.is_ki_blast() && ki_absorb_pct > 0 {
-                let heal = dmg * i64::from(ki_absorb_pct) / 100;
-                stats.hp = (stats.hp + heal).min(stats.hp_max);
+                let heal = dmg.saturating_mul(i64::from(ki_absorb_pct)) / 100;
+                stats.hp = stats.hp.saturating_add(heal).min(stats.hp_max);
                 return DamageOutcome { applied_damage: 0, healed_hp: heal, killed: false, yardrat_drop_proc: false };
             }
             if !piercing && rng.is_true(u32::from(stats.dodge.min(90)), 100) { return zero_hit(); }
-            dmg -= dmg * (if piercing { 0 } else { i64::from(armor_pct.min(86)) }) / 100;
+            dmg -= dmg.saturating_mul(if piercing { 0 } else { i64::from(armor_pct.min(86)) }) / 100;
             if !piercing {
                 dmg = (dmg - i64::from(stats.def)).max(1);
-                if giap_xen_tier == 1 { dmg /= 2; } else if giap_xen_tier >= 2 { dmg = dmg * 40 / 100; }
+                if giap_xen_tier == 1 { dmg = (dmg / 2).max(1); } else if giap_xen_tier >= 2 { dmg = (dmg.saturating_mul(40) / 100).max(1); }
                 apply_shield_one(&mut dmg, stats.hp_max, shield_active, false);
             }
         }
@@ -242,7 +243,7 @@ pub fn evaluate_boss_damage(
 
     if let Some(att) = attacker {
         if matches!(archetype, BossArchetype::BeginnerTaoPaiPai) && att.power < 1_500_000 {
-            effects.push(EngineEffect::GrantTnsm { target: att.id, amount: (dmg * i64::from(rng.next_int(20, 50))).min(9_500_000) });
+            effects.push(EngineEffect::GrantTnsm { target: att.id, amount: dmg.saturating_mul(i64::from(rng.next_int(20, 50))).min(9_500_000) });
         }
         if matches!(archetype, BossArchetype::TrainingMaster { task_10_1_gate: true, .. }) && att.active_task != (10, 1) {
             return DamageOutcome { applied_damage: 100, healed_hp: 0, killed: false, yardrat_drop_proc: false };

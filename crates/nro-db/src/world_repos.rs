@@ -12,7 +12,7 @@ use crate::codec::{
     dec_i32, decode_val, enc_history_tx_key, enc_i32, enc_i64, enc_super_rank_key, encode_val,
 };
 use crate::engine::{FjallEngine, WOMENS_DAY_EVENT_KEY};
-use crate::{DbResult, JsonStr, StrNum, UnquotedLeaderInfo, parse_lenient_json_vec};
+use crate::{DbError, DbResult, JsonStr, StrNum, UnquotedLeaderInfo, parse_lenient_json_vec};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClanMemberRecord {
@@ -35,6 +35,10 @@ pub struct ClanRepo { pool: FjallEngine }
 impl ClanRepo {
     #[must_use]
     pub const fn new(pool: FjallEngine) -> Self { Self { pool } }
+
+    pub async fn get_by_id(&self, clan_id: ClanId) -> DbResult<Option<ClanRecord>> {
+        self.pool.ks().clans.get(enc_i32(clan_id.0))?.map(|b| decode_val("clan", &b)).transpose()
+    }
 
     pub async fn load_all(&self) -> DbResult<Vec<ClanRecord>> {
         let mut out = Vec::new();
@@ -210,18 +214,21 @@ impl SuperRankRepo {
         let mut out = Vec::with_capacity(limit.min(64) as usize);
         for guard in self.pool.ks().idx_super_rank.range(lower..=upper).rev().take(limit as usize) {
             let idx_key = guard.key()?;
-            if let Some(val) = self.pool.ks().super_rank.get(&idx_key[4..12])? {
-                out.push(decode_val("super_rank", &val)?);
-            }
+            let pid_slice = idx_key.get(4..12).ok_or_else(|| DbError::InvalidColumnFormat {
+                column: "idx_super_rank.key", reason: format!("expected >= 12 bytes, got {}", idx_key.len()),
+            })?;
+            if let Some(val) = self.pool.ks().super_rank.get(pid_slice)? { out.push(decode_val("super_rank", &val)?); }
         }
         Ok(out)
     }
 
     pub async fn highest_rank(&self) -> DbResult<i32> {
-        match self.pool.ks().idx_super_rank.last_key_value() {
-            Some(guard) => dec_i32(&guard.key()?[..4]),
-            None => Ok(0),
-        }
+        let Some(guard) = self.pool.ks().idx_super_rank.last_key_value() else { return Ok(0); };
+        let key = guard.key()?;
+        let rank_slice = key.get(..4).ok_or_else(|| DbError::InvalidColumnFormat {
+            column: "idx_super_rank.key", reason: format!("expected >= 4 bytes, got {}", key.len()),
+        })?;
+        dec_i32(rank_slice)
     }
 }
 
@@ -276,6 +283,19 @@ impl GiftCodeRepo {
         self.pool.ks().giftcodes.insert(&key[..], encode_val("giftcode", &rec)?)?;
         Ok(true)
     }
+
+    pub async fn redeem_increment(&self, id: i32) -> DbResult<bool> {
+        let key = enc_i32(id);
+        let _guard = self.pool.lock_stripe(u64::from(id.cast_unsigned()));
+        let Some(bytes) = self.pool.ks().giftcodes.get(key)? else { return Ok(false); };
+        let mut rec: GiftCodeRecord = decode_val("giftcode", &bytes)?;
+        if rec.count_left == -1 {
+            return Ok(true);
+        }
+        rec.count_left = rec.count_left.saturating_add(1);
+        self.pool.ks().giftcodes.insert(&key[..], encode_val("giftcode", &rec)?)?;
+        Ok(true)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -317,15 +337,23 @@ impl HistoryTransactionRepo {
     }
 
     pub async fn delete_older_than_days(&self, now: DateTime<Utc>, days: i64) -> DbResult<u64> {
-        let cutoff_ms = (now - Duration::days(days)).timestamp_millis();
-        let upper = enc_history_tx_key(cutoff_ms, 0);
+        const CHUNK_SIZE: usize = 1_000;
+        let span = Duration::try_days(days).ok_or_else(|| DbError::InvalidColumnFormat {
+            column: "history_tx.days", reason: format!("days value {days} out of range"),
+        })?;
+        let cutoff = now.checked_sub_signed(span).ok_or_else(|| DbError::InvalidColumnFormat {
+            column: "history_tx.days", reason: format!("cutoff timestamp overflow for days={days}"),
+        })?;
+        let upper = enc_history_tx_key(cutoff.timestamp_millis(), 0);
         let mut batch = self.pool.ks().db.batch();
-        let mut count = 0_u64;
+        let (mut pending, mut count) = (0_usize, 0_u64);
         for guard in self.pool.ks().history_tx.range(..upper) {
             batch.remove(&self.pool.ks().history_tx, guard.key()?);
+            pending += 1;
             count += 1;
+            if pending >= CHUNK_SIZE { batch.commit()?; batch = self.pool.ks().db.batch(); pending = 0; }
         }
-        if count > 0 { batch.commit()?; }
+        if pending > 0 { batch.commit()?; }
         Ok(count)
     }
 }

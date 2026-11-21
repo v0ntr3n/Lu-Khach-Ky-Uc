@@ -5,7 +5,8 @@ use nro_core::{ItemInstance, ItemOption, PlayerId};
 use nro_protocol::{Packet, PacketError};
 
 use super::{
-    build_pkt, build_pkt_res, clamp_u64_to_wire_i32, pid_i32, sub_command_writer,
+    MAX_SAFE_UTF_BYTES, build_pkt, build_pkt_res, clamp_u64_to_wire_i32, pid_i32,
+    sub_command_writer, write_utf_lossy,
 };
 
 /// Single text field descriptor for [`client_input_open`] (`cmd -125`, `Controller2.cs:783-808`).
@@ -238,11 +239,11 @@ pub fn consign_tab_page(
 /// Builds opcode `-43` (`USE_ITEM`) item confirmation dialog (`Controller.cs:1310-1318`).
 #[must_use]
 pub fn use_item_confirm(item_action: i8, where_slot: i8, index: i8, prompt: &str) -> Packet {
-    build_pkt(cmd_message::USE_ITEM, 5 + prompt.len(), |w| {
+    build_pkt(cmd_message::USE_ITEM, 5 + prompt.len().min(MAX_SAFE_UTF_BYTES), |w| {
         w.write_i8(item_action);
         w.write_i8(where_slot);
         w.write_i8(index);
-        let _ = w.write_utf(prompt);
+        write_utf_lossy(w, prompt);
     })
 }
 

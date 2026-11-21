@@ -287,9 +287,21 @@ impl Inventory {
     pub fn count_template_in_bag(&self, template_id: TemplateId) -> u32 {
         self.bag.iter().flatten().filter(|i| i.template_id == template_id).map(|i| i.quantity).sum()
     }
-    /// Inserts `incoming` into `bag`, merging into option-identical stacks when `stackable`.
+    /// Inserts `incoming` into `bag` atomically, merging into option-identical stacks when `stackable`.
     pub fn add_to_bag(&mut self, mut incoming: ItemInstance, stackable: bool) -> Result<(), InventoryError> {
         if incoming.quantity == 0 { return Ok(()); }
+        let empty_slots = self.empty_bag_slots();
+        if stackable {
+            let merge_cap: u64 = self.bag.iter().flatten()
+                .filter(|s| s.template_id == incoming.template_id && s.options == incoming.options && s.quantity < MAX_STACK_QTY)
+                .map(|s| u64::from(MAX_STACK_QTY - s.quantity)).sum();
+            let empty_cap = (empty_slots as u64).saturating_mul(u64::from(MAX_STACK_QTY));
+            if merge_cap.saturating_add(empty_cap) < u64::from(incoming.quantity) {
+                return Err(InventoryError::ContainerFull(ContainerKind::Bag));
+            }
+        } else if empty_slots == 0 {
+            return Err(InventoryError::ContainerFull(ContainerKind::Bag));
+        }
         if stackable {
             for slot in self.bag.iter_mut().flatten() {
                 if slot.template_id == incoming.template_id && slot.options == incoming.options && slot.quantity < MAX_STACK_QTY {
@@ -336,6 +348,9 @@ impl Inventory {
     /// Equips `bag[bag_idx]` into `body[body_idx]`, expanding `Opt 210`/`231` and swapping any worn item.
     pub fn bag_to_body(&mut self, bag_idx: usize, body_idx: usize, rng: &mut GameRng) -> Result<(), InventoryError> {
         if body_idx >= self.body.len() { return Err(InventoryError::OutOfBounds(ContainerKind::Body, body_idx, self.body.len())); }
+        if self.body[body_idx].is_some() && self.bag_item(bag_idx)?.quantity > 1 && self.empty_bag_slots() == 0 {
+            return Err(InventoryError::ContainerFull(ContainerKind::Bag));
+        }
         let mut item = self.sub_from_bag_slot(bag_idx, 1)?;
         expand_equip_triggers(&mut item, rng);
         let prev = self.body[body_idx].take();

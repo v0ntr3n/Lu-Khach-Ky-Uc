@@ -315,3 +315,46 @@ fn seed_mobs_attack_gold_drop_sync_respawn_and_offline_isolation() {
     assert_eq!(o1_rx.try_recv().expect("self echo").cmd, cmd_message::CHAT_MAP);
     assert!(o2_rx.try_recv().is_err());
 }
+
+#[test]
+fn zone_events_satellite_pickup_proximity_and_dungeon_no_respawn() {
+    let router = Arc::new(DashMap::new());
+    let (ev_tx, mut ev_rx) = mpsc::channel(16);
+    let (mut z, _tx) = ZoneActor::new(
+        ZoneConfig { id: (MapId(135), ZoneId(0)), max_players: 5, map_width: 1200, parity: ParityMode::Fixed },
+        router,
+        vec![TrapVolume { rect: (80, 180, 50, 50), base_damage: 100 }],
+        GameRng::from_seed(42),
+    );
+    z = z.with_event_tx(ev_tx);
+    let (p_tx, mut p_rx) = mpsc::channel(32);
+    let mut ing = test_ingress(55, "Piccolo", p_tx);
+    ing.identity.1 = Some(nro_core::ClanId(7));
+    ing.stats.hp = 500;
+    ing.stats.hp_max = 1000;
+    ing.ship_type = 0;
+    let key = z.admit_player(ing).expect("admit");
+    z.handle_command(ZoneCommand::DropItem(
+        TemplateId(342), 1, Location::new(110, 200), None, GroundDropKind::Satellite { clan_id: nro_core::ClanId(7) },
+    ));
+    let sat_pkt = p_rx.try_recv().expect("sat add");
+    let sat_wid = sat_pkt.reader().read_i16().expect("sat wid");
+    assert_eq!(z.pick_item(key, sat_wid), Err(WorldError::DungeonRule("cannot pick up satellite")));
+    z.handle_command(ZoneCommand::DropItem(TemplateId(76), 100, Location::new(400, 200), None, GroundDropKind::Standard));
+    let far_pkt = p_rx.try_recv().expect("far add");
+    let far_wid = far_pkt.reader().read_i16().expect("far wid");
+    assert_eq!(z.pick_item(key, far_wid), Err(WorldError::DungeonRule("item too far")));
+    z.handle_command(ZoneCommand::SeedMobs(vec![ZoneMobSeed { temp_id: 1, level: 2, max_hp: 10, loc: Location::new(100, 200) }]));
+    let (rep_tx, _rep_rx) = oneshot::channel();
+    z.handle_command(ZoneCommand::AttackMobs { attacker: key, skill_paint_id: 1, mob_ids: vec![0], damage: 50, is_crit: false, reply: rep_tx });
+    while p_rx.try_recv().is_ok() {}
+    for _ in 0..120 { z.on_tick(); }
+    assert_eq!(z.arena.stats[z.arena.dense_index(key).expect("idx")].hp, 500);
+    let (mut saw_dmg, mut saw_heal) = (false, false);
+    while let Ok(ZoneEvent::PlayerHpDelta { player_id, delta }) = ev_rx.try_recv() {
+        assert_eq!(player_id, PlayerId(55));
+        match delta.cmp(&0) { std::cmp::Ordering::Less => saw_dmg = true, std::cmp::Ordering::Greater => saw_heal = true, std::cmp::Ordering::Equal => {} }
+    }
+    assert!(saw_dmg && saw_heal);
+    while let Ok(pkt) = p_rx.try_recv() { assert_ne!(pkt.cmd, cmd_message::NPC_LIVE); }
+}

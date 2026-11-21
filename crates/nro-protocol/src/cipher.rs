@@ -17,7 +17,7 @@ fn validate_key(slice: &[u8]) -> Result<Arc<[u8]>, ProtocolError> {
     if slice.is_empty() {
         return Err(ProtocolError::EmptySessionKey);
     }
-    if u8::try_from(slice.len()).is_err() {
+    if i8::try_from(slice.len()).is_err() {
         return Err(ProtocolError::SessionKeyTooLong { len: slice.len() });
     }
     Ok(Arc::from(slice))
@@ -128,7 +128,7 @@ impl XorWriteHalf {
     /// Writes the unencrypted `-27` handshake frame into `dst` and sets `sent_key = true`.
     pub fn write_handshake_frame(&mut self, dst: &mut BytesMut) -> Result<(), ProtocolError> {
         let payload = build_handshake_payload(&self.key)?;
-        let len_u16 = u16::try_from(payload.len()).expect("handshake payload <= 263 bytes");
+        let len_u16 = u16::try_from(payload.len()).expect("handshake payload <= 135 bytes");
         dst.reserve(3 + payload.len());
         dst.put_i8(HANDSHAKE_CMD);
         dst.put_u16(len_u16);
@@ -148,7 +148,7 @@ pub struct XorSessionCipher {
 }
 
 impl XorSessionCipher {
-    /// Constructs a bidirectional cipher using a custom non-empty session key (`1..=255` bytes).
+    /// Constructs a bidirectional cipher using a custom non-empty session key (`1..=127` bytes).
     pub fn new(key: impl AsRef<[u8]>) -> Result<Self, ProtocolError> {
         let shared = validate_key(key.as_ref())?;
         Ok(Self {
@@ -185,9 +185,9 @@ pub fn build_handshake_payload(key: &[u8]) -> Result<Bytes, ProtocolError> {
     if key.is_empty() {
         return Err(ProtocolError::EmptySessionKey);
     }
-    let len_u8 = u8::try_from(key.len()).map_err(|_| ProtocolError::SessionKeyTooLong { len: key.len() })?;
+    let len_i8 = i8::try_from(key.len()).map_err(|_| ProtocolError::SessionKeyTooLong { len: key.len() })?;
     let mut buf = BytesMut::with_capacity(1 + key.len() + 7);
-    buf.put_u8(len_u8);
+    buf.put_i8(len_i8);
     buf.put_u8(key[0]);
     for i in 1..key.len() {
         buf.put_u8(key[i] ^ key[i - 1]);
@@ -205,6 +205,9 @@ pub fn parse_handshake_payload(payload: &[u8]) -> Result<Vec<u8>, ProtocolError>
     let key_len = usize::from(payload[0]);
     if key_len == 0 {
         return Err(ProtocolError::EmptySessionKey);
+    }
+    if key_len > usize::from(i8::MAX.cast_unsigned()) {
+        return Err(ProtocolError::SessionKeyTooLong { len: key_len });
     }
     if payload.len() < 1 + key_len {
         return Err(ProtocolError::UnexpectedEof { needed: 1 + key_len, remaining: payload.len() });
@@ -228,5 +231,25 @@ mod tests {
         assert_eq!(payload.len(), 1 + DEFAULT_SESSION_KEY.len() + 7);
         assert_eq!(&payload[1 + DEFAULT_SESSION_KEY.len()..], &[0u8; 7]);
         assert_eq!(parse_handshake_payload(&payload).expect("parse handshake"), DEFAULT_SESSION_KEY);
+    }
+
+    #[test]
+    fn session_key_enforces_signed_byte_max_127() {
+        let ok_key = vec![0x5Au8; 127];
+        assert!(XorSessionCipher::new(&ok_key).is_ok());
+        assert_eq!(
+            parse_handshake_payload(&build_handshake_payload(&ok_key).expect("127-byte key")).expect("parse"),
+            ok_key
+        );
+
+        let too_long = vec![0x5Au8; 128];
+        assert_eq!(
+            XorSessionCipher::new(&too_long).expect_err("128-byte cipher key must fail"),
+            ProtocolError::SessionKeyTooLong { len: 128 }
+        );
+        assert_eq!(
+            build_handshake_payload(&too_long).expect_err("128-byte handshake key must fail"),
+            ProtocolError::SessionKeyTooLong { len: 128 }
+        );
     }
 }

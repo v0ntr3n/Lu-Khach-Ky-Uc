@@ -72,6 +72,9 @@ struct SessionShared {
     connected: AtomicBool,
     sent_key: AtomicBool,
     finish_update: AtomicBool,
+    res_streamed: AtomicBool,
+    client_type_set: AtomicBool,
+    auth_cooldown_bypass: AtomicBool,
     client_version: AtomicI32,
     zoom_level: AtomicU8,
     time_wait: AtomicU16,
@@ -108,10 +111,20 @@ impl SessionHandle {
     #[inline] #[must_use] pub fn player_id(&self) -> PlayerId { PlayerId(self.shared.player_id.load(Ordering::Acquire)) }
     /// Marks `-38` (`FINISH_UPDATE`) complete on this session.
     #[inline] pub fn set_finish_update(&self, done: bool) { self.shared.finish_update.store(done, Ordering::Release); }
+    /// Atomically claims one-shot `-74` resource streaming on this session.
+    #[inline] #[must_use] pub fn try_mark_res_streamed(&self) -> bool { !self.shared.res_streamed.swap(true, Ordering::AcqRel) }
+    /// Grants a one-shot login cooldown bypass after registration or guest creation.
+    #[inline] pub fn grant_auth_cooldown_bypass(&self) { self.shared.auth_cooldown_bypass.store(true, Ordering::Release); }
+    /// Consumes a pending one-shot login cooldown bypass on this session.
+    #[inline] #[must_use] pub fn take_auth_cooldown_bypass(&self) -> bool { self.shared.auth_cooldown_bypass.swap(false, Ordering::AcqRel) }
+    /// Returns a clone of the session's cancellation token for cooperative task shutdown.
+    #[inline] #[must_use] pub fn cancel_token(&self) -> CancellationToken { self.shared.cancel.clone() }
 
-    /// Marks the session as authenticated (`timeWait = 0`) and records `account_id` + `player_id`.
+    /// Marks the session as authenticated and records `account_id` + `player_id`.
+    /// Clears `timeWait` once in-world (`player_id != 0`), or grants a 300s grace window for char creation.
     pub fn mark_authenticated(&self, account_id: AccountId, player_id: PlayerId) {
-        self.shared.time_wait.store(0, Ordering::Release);
+        let grace_ticks = if player_id.0 == 0 { 300 } else { 0 };
+        self.shared.time_wait.store(grace_ticks, Ordering::Release);
         self.shared.account_id.store(account_id.0, Ordering::Release);
         self.shared.player_id.store(player_id.0, Ordering::Release);
     }
@@ -176,6 +189,9 @@ where
         connected: AtomicBool::new(true),
         sent_key: AtomicBool::new(false),
         finish_update: AtomicBool::new(false),
+        res_streamed: AtomicBool::new(false),
+        client_type_set: AtomicBool::new(false),
+        auth_cooldown_bypass: AtomicBool::new(false),
         client_version: AtomicI32::new(0),
         zoom_level: AtomicU8::new(2),
         time_wait: AtomicU16::new(config.login_timeout_ticks),
@@ -206,17 +222,23 @@ async fn run_reader_loop<R: AsyncRead + Unpin, H: SessionEventHandler>(
     loop {
         while let Some(raw) = decode_c2s_frame(&mut buf, &mut cipher)? {
             trace!(session_id = handle.id(), cmd = raw.cmd, len = raw.payload.len(), "c2s frame");
-            if raw.cmd == HANDSHAKE_CMD && !cipher.sent_key() {
-                cipher.set_sent_key(true);
-                handle.shared.sent_key.store(true, Ordering::Release);
-                let msg = OutboundCommand::HandshakeAndVersionRes { vs_res: config.initial_vs_res };
-                handle.outbound_tx.send(msg).await.map_err(|_| ProtocolError::SessionClosed)?;
+            if !cipher.sent_key() {
+                if raw.cmd == HANDSHAKE_CMD {
+                    cipher.set_sent_key(true);
+                    handle.shared.sent_key.store(true, Ordering::Release);
+                    let msg = OutboundCommand::HandshakeAndVersionRes { vs_res: config.initial_vs_res };
+                    handle.outbound_tx.send(msg).await.map_err(|_| ProtocolError::SessionClosed)?;
+                } else {
+                    debug!(session_id = handle.id(), cmd = raw.cmd, "dropping pre-handshake packet");
+                }
                 continue;
             }
             let pkt = ClientPacket::decode(raw.cmd, &mut raw.reader(), handle.client_version())?;
             if let ClientPacket::SetClientType(info) = &pkt {
-                handle.shared.zoom_level.store(info.zoom_level, Ordering::Release);
-                handle.shared.client_version.store(info.parsed_version, Ordering::Release);
+                if !handle.shared.client_type_set.swap(true, Ordering::AcqRel) {
+                    handle.shared.zoom_level.store(info.zoom_level, Ordering::Release);
+                    handle.shared.client_version.store(info.parsed_version, Ordering::Release);
+                }
             } else if matches!(pkt, ClientPacket::FinishUpdate) {
                 handle.set_finish_update(true);
             }
@@ -238,7 +260,7 @@ async fn run_writer_loop<W: AsyncWrite + Unpin>(
     mut writer: W, mut cipher: XorWriteHalf, mut rx: mpsc::Receiver<OutboundCommand>, cancel: CancellationToken, timeout: Duration,
 ) {
     let mut wire = BytesMut::with_capacity(4096);
-    loop {
+    'writer: loop {
         let maybe_cmd = tokio::select! {
             biased;
             () = cancel.cancelled() => break,
@@ -251,13 +273,19 @@ async fn run_writer_loop<W: AsyncWrite + Unpin>(
         }
         if let Err(err) = encode_outbound_cmd(first, &mut cipher, &mut wire) {
             warn!(error = %err, "failed encoding outbound frame");
+            cancel.cancel();
             break;
         }
         while let Ok(next) = rx.try_recv() {
             if wire.len() >= 64 * 1024 {
-                if flush_with_timeout(&mut writer, &wire, timeout).await.is_err() {
+                let flushed = tokio::select! {
+                    biased;
+                    () = cancel.cancelled() => break 'writer,
+                    res = flush_with_timeout(&mut writer, &wire, timeout) => res.is_ok(),
+                };
+                if !flushed {
                     cancel.cancel();
-                    return;
+                    break 'writer;
                 }
                 wire.clear();
                 if wire.capacity() > 64 * 1024 {
@@ -267,10 +295,15 @@ async fn run_writer_loop<W: AsyncWrite + Unpin>(
             if let Err(err) = encode_outbound_cmd(next, &mut cipher, &mut wire) {
                 warn!(error = %err, "failed encoding coalesced frame");
                 cancel.cancel();
-                return;
+                break 'writer;
             }
         }
-        if flush_with_timeout(&mut writer, &wire, timeout).await.is_err() {
+        let flushed = tokio::select! {
+            biased;
+            () = cancel.cancelled() => break,
+            res = flush_with_timeout(&mut writer, &wire, timeout) => res.is_ok(),
+        };
+        if !flushed {
             cancel.cancel();
             break;
         }
@@ -279,7 +312,7 @@ async fn run_writer_loop<W: AsyncWrite + Unpin>(
             wire = BytesMut::with_capacity(4096);
         }
     }
-    let _ = writer.shutdown().await;
+    let _ = tokio::time::timeout(Duration::from_secs(2), writer.shutdown()).await;
 }
 
 fn encode_outbound_cmd(cmd: OutboundCommand, cipher: &mut XorWriteHalf, wire: &mut BytesMut) -> Result<(), ProtocolError> {

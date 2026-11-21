@@ -186,6 +186,7 @@ impl LifecycleState {
                 self.last_rest_ms = now_ms;
                 self.pk_mode = PkMode::NonPk;
                 self.current_stage = 0;
+                self.afk_revive_at_ms = None;
             }
             BossStatus::ChatStart | BossStatus::ChatEnd => {
                 self.chat_index = 0;
@@ -213,7 +214,7 @@ impl LifecycleState {
         now_ms: u64,
         effects: &mut Vec<EngineEffect>,
     ) -> LifecycleAction {
-        let stage = &stages[self.current_stage.min(stages.len().saturating_sub(1))];
+        let Some(stage) = stages.get(self.current_stage).or_else(|| stages.last()) else { return LifecycleAction::None; };
         if players_in_zone > 0 {
             self.last_player_seen_ms = now_ms;
         }
@@ -254,7 +255,8 @@ impl LifecycleState {
                 LifecycleAction::None
             }
             BossStatus::Active => {
-                if self.should_auto_leave(flags, players_in_zone, parity, now_ms) {
+                if !can_spawn_window || self.should_auto_leave(flags, players_in_zone, parity, now_ms) {
+                    self.afk_revive_at_ms = None;
                     self.transition_to(BossStatus::LeaveMap, now_ms);
                     return LifecycleAction::None;
                 }
@@ -289,6 +291,11 @@ impl LifecycleState {
                 LifecycleAction::ExitZoneAndRest
             }
             BossStatus::Afk => {
+                if !can_spawn_window {
+                    self.afk_revive_at_ms = None;
+                    self.transition_to(BossStatus::LeaveMap, now_ms);
+                    return LifecycleAction::None;
+                }
                 if let Some(revive_at) = self.afk_revive_at_ms
                     && now_ms >= revive_at
                 {
@@ -312,6 +319,9 @@ impl LifecycleState {
         if flags.contains(BossFlags::LEGACY_UNCOND_DESPAWN) {
             let anchor = if parity == ParityMode::Legacy { self.joined_map_ms } else { self.last_player_seen_ms };
             return now_ms.saturating_sub(anchor) >= 900_000;
+        }
+        if flags.contains(BossFlags::DISPOSE_ON_LEAVE) && players == 0 && now_ms.saturating_sub(self.last_player_seen_ms) >= 300_000 {
+            return true;
         }
         flags.contains(BossFlags::EMPTY_ZONE_DESPAWN)
             && players == 0

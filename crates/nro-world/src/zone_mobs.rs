@@ -6,7 +6,7 @@ use smallvec::SmallVec;
 
 use crate::s2c_packets::{self, GroundItemWire, PlayerSpawnWire};
 
-use super::{EntityKind, GroundDropKind, GroundItem, ZoneActor};
+use super::{EntityKind, GroundDropKind, GroundItem, MAX_GROUND_ITEMS, ZoneActor};
 
 /// Initial monster spawn descriptor seeded into a [`ZoneActor`] via [`super::ZoneCommand::SeedMobs`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -107,12 +107,14 @@ impl ZoneActor {
         damage: u64,
         is_crit: bool,
     ) -> (u64, Vec<i16>) {
+        const MAX_MOB_RANGE_SQ: i64 = 690 * 690;
         let Some(attacker_idx) = self.arena.dense_index(attacker) else {
             return (0, Vec::new());
         };
         let Some(pid) = self.arena.player_ids[attacker_idx] else {
             return (0, Vec::new());
         };
+        let attacker_loc = self.arena.locations[attacker_idx];
         if !is_offline_map(self.cfg.id.0) {
             self.broadcast(
                 &s2c_packets::peer_attack_mobs(pid, skill_paint_id, mob_ids),
@@ -131,7 +133,9 @@ impl ZoneActor {
                 let Some(mob) = self.mobs.get_mut(usize::from(mob_u8)) else {
                     continue;
                 };
-                if mob.status == 0 || mob.hp == 0 {
+                let dx = i64::from(attacker_loc.x) - i64::from(mob.loc.x);
+                let dy = i64::from(attacker_loc.y) - i64::from(mob.loc.y);
+                if mob.status == 0 || mob.hp == 0 || dx * dx + dy * dy > MAX_MOB_RANGE_SQ {
                     continue;
                 }
                 let actual = damage.max(2).min(mob.hp);
@@ -143,44 +147,45 @@ impl ZoneActor {
                 (actual, mob.hp, mob.temp_id, mob.level, mob.loc)
             };
             let (actual, hp_after, temp_id, level, drop_loc) = outcome;
-            tnsm = tnsm.saturating_add(actual.saturating_mul(5).clamp(10, 250_000));
+            let mob_tnsm = if temp_id == 0 { 1 } else { actual.saturating_mul(5).clamp(10, 250_000) };
+            tnsm = tnsm.saturating_add(mob_tnsm);
             if hp_after == 0 {
                 killed_temp_ids.push(temp_id);
-                let wire_id = self.next_wire_id;
-                self.next_wire_id = self.next_wire_id.wrapping_add(1).max(1);
-                let gold_qty = (u32::from(level.max(1)) * 50).max(100);
-                self.ground_items.insert(GroundItem {
-                    wire_id,
-                    stack: (TemplateId(76), gold_qty),
-                    loc: drop_loc,
-                    owner: Some(pid),
-                    times_ms: (self.now_ms, self.now_ms),
-                    kind: GroundDropKind::Standard,
-                    options: SmallVec::new(),
-                });
-                let drops = [GroundItemWire {
-                    item_map_id: wire_id,
-                    template_id: TemplateId(76),
-                    loc: drop_loc,
-                    owner_id: Some(pid),
-                }];
-                let die_pkt = s2c_packets::mob_die(mob_u8, actual, is_crit, &drops);
-                if is_offline_map(self.cfg.id.0) {
-                    self.emit_for_actor(attacker_idx, &die_pkt);
-                    let peer_die = s2c_packets::mob_die(mob_u8, actual, is_crit, &[]);
-                    self.broadcast(&peer_die, Some(attacker_idx));
-                } else {
-                    self.broadcast(&die_pkt, None);
+                let mut drops: SmallVec<[GroundItemWire; 1]> = SmallVec::new();
+                if self.ground_items.len() < MAX_GROUND_ITEMS
+                    && let Some(wire_id) = self.alloc_wire_id()
+                {
+                    let gold_qty = (u32::from(level.max(1)) * 50).max(100);
+                    self.ground_items.insert(GroundItem {
+                        wire_id,
+                        stack: (TemplateId(76), gold_qty),
+                        loc: drop_loc,
+                        owner: Some(pid),
+                        times_ms: (self.now_ms, self.now_ms),
+                        kind: GroundDropKind::Standard,
+                        options: SmallVec::new(),
+                    });
+                    drops.push(GroundItemWire {
+                        item_map_id: wire_id,
+                        template_id: TemplateId(76),
+                        loc: drop_loc,
+                        owner_id: Some(pid),
+                    });
                 }
+                let die_pkt = s2c_packets::mob_die(mob_u8, actual, is_crit, &drops);
+                self.emit_for_actor(attacker_idx, &die_pkt);
             } else {
                 let hp_pkt = s2c_packets::mob_hp_after_hit(mob_u8, hp_after, actual, is_crit);
-                self.broadcast(&hp_pkt, None);
+                self.emit_for_actor(attacker_idx, &hp_pkt);
             }
         }
         (tnsm, killed_temp_ids)
     }
 
     pub(super) fn respawn_dead_mobs(&mut self) {
+        if matches!(self.cfg.id.0.0, 53..=62 | 135..=138 | 141..=144 | 146..=149 | 151 | 152) {
+            return;
+        }
         let mut live_pkts = Vec::new();
         for mob in &mut self.mobs {
             if mob.status == 0 && self.now_ms.saturating_sub(mob.died_at_ms) >= 5_000 {

@@ -1,7 +1,7 @@
 //! Complete `UseItem` dispatcher (`UseItem.java`), buffs, `Pet2`, chests, `MagicTree`, eggs, `LuckyRound`, and `GiftCodeService`.
 
 use crate::inventory::{ContainerKind, Inventory, InventoryError, get_opt, opt_id, set_opt};
-use crate::ItemCatalog;
+use crate::{ItemCatalog, ItemMeta};
 use nro_consts::{const_item, const_player};
 use nro_core::{CoreStats, GameRng, Gender, ItemInstance, ItemOption, TemplateId};
 use serde::{Deserialize, Serialize};
@@ -194,6 +194,7 @@ impl UseItemService {
             return Self::open_ruong_go(inv, bag_slot, ctx, rng);
         }
         if let Some(&(_, (h, b, l))) = PET2_SPRITES.iter().find(|&&(pid, _)| pid == id) {
+            Self::check_equip_prereqs(&snap, meta, ctx)?;
             inv.bag_to_body(bag_slot, 7.min(inv.body.len().saturating_sub(1)), rng)?;
             return Ok(UseItemEffect::SpawnedPet2(h, b, l));
         }
@@ -204,6 +205,7 @@ impl UseItemService {
                 return Ok(UseItemEffect::LearnedSkill(snap.template_id));
             }
             11 | 23 | 24 => {
+                Self::check_equip_prereqs(&snap, meta, ctx)?;
                 inv.bag_to_body(bag_slot, (if meta.item_type == 11 { 8 } else { 9 }).min(inv.body.len().saturating_sub(1)), rng)?;
                 return Ok(UseItemEffect::Applied);
             }
@@ -216,6 +218,7 @@ impl UseItemService {
             }
             22 => return Err(UseItemError::PreconditionFailed("Tính năng đang được phát triển!")),
             25 if id != 361 => {
+                Self::check_equip_prereqs(&snap, meta, ctx)?;
                 inv.bag_to_body(bag_slot, 4.min(inv.body.len().saturating_sub(1)), rng)?;
                 return Ok(UseItemEffect::Applied);
             }
@@ -232,15 +235,16 @@ impl UseItemService {
             342..=345 | 361 | 401..=404 | 759 | 1758..=1760 => Err(UseItemError::PreconditionFailed("Tính năng đang được phát triển!")),
             380 => {
                 if inv.empty_bag_slots() == 0 { return Err(InventoryError::ContainerFull(ContainerKind::Bag).into()); }
-                inv.sub_from_bag_slot(bag_slot, 1)?; if rng.next_range(0, 8) <= 3 { inv.add_gold_clamped(rng.next_range(5_000, 20_000) as u64); } else { inv.add_to_bag(Self::mk(rng.next_range(381, 385) as i16, 1, &[(73, 0)]), true)?; }
+                inv.sub_from_bag_slot(bag_slot, 1)?; if rng.next_range(0, 8) <= 3 { inv.add_gold_clamped(rng.next_range(5_000, 20_000) as u64); } else { inv.add_to_bag(Self::mk(rng.next_range(381, 385) as i16, 1, &[(73, 0)], ctx.now_ms), true)?; }
                 Ok(UseItemEffect::Applied)
             }
             379 | 381..=385 | 521 | 579 | 638 | 663..=667 | 764 | 880..=882 | 1045 | 1150..=1154 | 1233 | 1532 | 1614..=1616 | 1628 | 1635 => Self::apply_buff(inv, bag_slot, id, &snap, ctx),
             454 | 921 | 1819 => if !ctx.has_pet { Err(UseItemError::PreconditionFailed("pet required")) } else { let m = match id { 454 => const_player::HOP_THE_PORATA, 921 => const_player::HOP_THE_PORATA2, _ => const_player::HOP_THE_PORATA3 }; *ctx.fusion_mode = if *ctx.fusion_mode == const_player::NON_FUSION { m } else { const_player::NON_FUSION }; Ok(UseItemEffect::Applied) },
             460 => {
                 if !ctx.hungry_soi_in_zone { return Err(UseItemError::PreconditionFailed("no SoiHecQuyn")); }
+                if inv.empty_bag_slots() == 0 { return Err(InventoryError::ContainerFull(ContainerKind::Bag).into()); }
                 inv.sub_from_bag_slot(bag_slot, 1)?;
-                if rng.next_range(0, 3) < 3 { let r = rng.next_range(0, 6); inv.add_to_bag(Self::mk((441 + r) as i16, 1, &[(95 + r as u16, if r == 3 || r == 4 { 3 } else { 5 })]), true)?; } else { inv.add_to_bag(Self::mk(459, 1, &[(112, 80), (93, 90)]), true)?; }
+                if rng.next_range(0, 3) < 3 { let r = rng.next_range(0, 6); inv.add_to_bag(Self::mk((441 + r) as i16, 1, &[(95 + r as u16, if r == 3 || r == 4 { 3 } else { 5 })], ctx.now_ms), true)?; } else { inv.add_to_bag(Self::mk(459, 1, &[(112, 80), (93, 90)], ctx.now_ms), true)?; }
                 Ok(UseItemEffect::Applied)
             }
             568 => if ctx.mabu_egg.is_some() { Err(UseItemError::PreconditionFailed("egg exists")) } else { inv.sub_from_bag_slot(bag_slot, 1)?; *ctx.mabu_egg = Some(MabuEggState::plant(ctx.now_ms)); Ok(UseItemEffect::Applied) },
@@ -248,23 +252,28 @@ impl UseItemService {
             992 => Ok(UseItemEffect::TeleportMap(102)),
             1560 => {
                 if inv.count_template_in_bag(TemplateId(1561)) == 0 { return Err(UseItemError::PreconditionFailed("need key 1561")); }
+                if inv.empty_bag_slots() == 0 { return Err(InventoryError::ContainerFull(ContainerKind::Bag).into()); }
                 inv.sub_from_bag_slot(bag_slot, 1)?; inv.sub_template_from_bag(TemplateId(1561), 1)?; let r = rng.next_range(0, 100);
-                inv.add_to_bag(Self::mk(if r < 85 { rng.next_range(17, 20) as i16 } else if r < 95 { 16 } else { rng.next_range(14, 15) as i16 }, 1, &[]), true)?; Ok(UseItemEffect::Applied)
+                inv.add_to_bag(Self::mk(if r < 85 { rng.next_range(17, 20) as i16 } else if r < 95 { 16 } else { rng.next_range(14, 15) as i16 }, 1, &[], ctx.now_ms), true)?; Ok(UseItemEffect::Applied)
             }
             1575 | 1576 => { inv.sub_from_bag_slot(bag_slot, 1)?; inv.add_gold_clamped(if id == 1575 { rng.next_range(5_000, 20_000) as u64 } else { rng.next_range(500_000, 2_000_000) as u64 }); Ok(UseItemEffect::Applied) }
             1655 => Ok(UseItemEffect::PromptSkhChoice),
-            1775 => { if inv.empty_bag_slots() == 0 { return Err(InventoryError::ContainerFull(ContainerKind::Bag).into()); } inv.sub_from_bag_slot(bag_slot, 1)?; inv.add_to_bag(Self::mk([555i16, 556, 562, 563, 561, 557, 558, 564, 565, 561, 559, 560, 566, 567, 561][rng.next_range(0, 14) as usize], 1, &[(30, 1)]), false)?; Ok(UseItemEffect::Applied) }
+            1775 => { if inv.empty_bag_slots() == 0 { return Err(InventoryError::ContainerFull(ContainerKind::Bag).into()); } inv.sub_from_bag_slot(bag_slot, 1)?; inv.add_to_bag(Self::mk([555i16, 556, 562, 563, 561, 557, 558, 564, 565, 561, 559, 560, 566, 567, 561][rng.next_range(0, 14) as usize], 1, &[(30, 1)], ctx.now_ms), false)?; Ok(UseItemEffect::Applied) }
             1787 => Ok(UseItemEffect::TeleportMap(164)),
             1795 => { if !ctx.has_pet || *ctx.pet_type != 1 || ctx.pet_power < 40_000_000_000 || get_opt(&snap, opt_id::KILIS).unwrap_or(0) < 3_000 { return Err(UseItemError::PreconditionFailed("need Mabu >= 40B & 3000 Kilis")); } inv.sub_from_bag_slot(bag_slot, 1)?; *ctx.pet_type = rng.next_range(2, 4) as u8; Ok(UseItemEffect::Applied) }
-            1798..=1802 => { if inv.empty_bag_slots() == 0 || snap.quantity < 99 { return Err(UseItemError::PreconditionFailed("need 99 God food")); } inv.sub_from_bag_slot(bag_slot, 99)?; inv.add_to_bag(Self::mk(1805, 1, &[]), true)?; Ok(UseItemEffect::Applied) }
-            648 | 736 | 962 | 963 | 1170 | 1171 | 1569 | 1591 | 1592 | 1594 | 1608 | 1609 | 1757 | 1776 | 1777 | 1821..=1823 | 1840 => Self::open_box(inv, bag_slot, id, rng),
+            1798..=1802 => { if inv.empty_bag_slots() == 0 || snap.quantity < 99 { return Err(UseItemError::PreconditionFailed("need 99 God food")); } inv.sub_from_bag_slot(bag_slot, 99)?; inv.add_to_bag(Self::mk(1805, 1, &[], ctx.now_ms), true)?; Ok(UseItemEffect::Applied) }
+            648 | 736 | 962 | 963 | 1170 | 1171 | 1569 | 1591 | 1592 | 1594 | 1608 | 1609 | 1757 | 1776 | 1777 | 1821..=1823 | 1840 => Self::open_box(inv, bag_slot, id, ctx.now_ms, rng),
             _ => Err(UseItemError::PreconditionFailed("unsupported item")),
         }
     }
 
     fn apply_buff(inv: &mut Inventory, bag_slot: usize, id: i16, snap: &ItemInstance, ctx: &mut UseItemCtx<'_>) -> Result<UseItemEffect, UseItemError> {
         if (880..=882).contains(&id) && ctx.buffs.has_active(ctx.now_ms, |s| matches!(s, BuffSlot::MealTier2(_))) { return Err(UseItemError::PreconditionFailed("MealTier2 active")); }
-        if id == 521 { ctx.buffs.activate(BuffSlot::AutoTrain, ctx.now_ms, i64::from(get_opt(snap, 1).unwrap_or(60).max(1)) * 60_000); return Ok(UseItemEffect::Applied); }
+        if id == 521 {
+            inv.sub_from_bag_slot(bag_slot, 1)?;
+            ctx.buffs.activate(BuffSlot::AutoTrain, ctx.now_ms, i64::from(get_opt(snap, 1).unwrap_or(60).max(1)) * 60_000);
+            return Ok(UseItemEffect::Applied);
+        }
         let (slot, dur) = match id {
             379 => (BuffSlot::MayDoCapsule, 1_800_000), 1532 => (BuffSlot::MayDoKhoBau, 1_800_000), 381 | 1150 => (BuffSlot::CuongNo(id == 1150), 600_000),
             382 | 1152 => (BuffSlot::BoHuyet(id == 1152), 600_000), 383 | 1151 => (BuffSlot::BoKhi(id == 1151), 600_000), 384 | 1153 => (BuffSlot::GiapXen(id == 1153), 600_000),
@@ -282,11 +291,11 @@ impl UseItemService {
         inv.sub_from_bag_slot(bag_slot, 1)?; *ctx.last_wood_chest_day = ctx.current_day;
         if lv == 0 { inv.add_gold_clamped(1_000); return Ok(UseItemEffect::Applied); }
         inv.add_gold_clamped(((100 * lv * (100 + rng.next_range(-15, 15)) / 100) as u64) * 1_000); if lv >= 9 { inv.gem = inv.gem.saturating_add((100 + (lv - 9) * 20) as u32); }
-        inv.add_to_bag(Self::mk((441 + rng.next_range(0, 6)) as i16, rng.next_range(1, 3) as u32, &[]), true)?;
-        inv.add_to_bag(Self::mk((220 + rng.next_range(0, 4)) as i16, rng.next_range(1, lv * 2) as u32, &[]), true)?; Ok(UseItemEffect::Applied)
+        inv.add_to_bag(Self::mk((441 + rng.next_range(0, 6)) as i16, rng.next_range(1, 3) as u32, &[], ctx.now_ms), true)?;
+        inv.add_to_bag(Self::mk((220 + rng.next_range(0, 4)) as i16, rng.next_range(1, lv * 2) as u32, &[], ctx.now_ms), true)?; Ok(UseItemEffect::Applied)
     }
 
-    fn open_box(inv: &mut Inventory, bag_slot: usize, id: i16, rng: &mut GameRng) -> Result<UseItemEffect, UseItemError> {
+    fn open_box(inv: &mut Inventory, bag_slot: usize, id: i16, now_ms: i64, rng: &mut GameRng) -> Result<UseItemEffect, UseItemError> {
         if inv.empty_bag_slots() == 0 { return Err(InventoryError::ContainerFull(ContainerKind::Bag).into()); }
         inv.sub_from_bag_slot(bag_slot, 1)?;
         let (pool, st, hid, bps, days): (&[i16], i32, i32, u32, i32) = match id {
@@ -297,12 +306,22 @@ impl UseItemService {
             1591 | 1594 => (&[1587, 1588, 1589, 1590, 1593, 1595], 20, 2, 50, 3), 1777 => (&[1761, 1731, 1732], 25, 0, 50, 3), 1776 => (&[1772, 1773], 10, 0, 50, 3),
             _ => (&[1087, 1088, 1089, 1090, 1091], 18, 0, 200, 5),
         };
-        let mut rw = Self::mk(pool[rng.next_range(0, (pool.len() - 1) as i32) as usize], 1, &[(50, st), (77, st), (103, st)]);
+        let mut rw = Self::mk(pool[rng.next_range(0, (pool.len() - 1) as i32) as usize], 1, &[(50, st), (77, st), (103, st)], now_ms);
         if hid > 0 { set_opt(&mut rw, opt_id::HIDDEN_LINES, hid); }
         if !rng.is_true(bps, 10_000) { set_opt(&mut rw, opt_id::EXPIRY_DAYS, days); } inv.add_to_bag(rw, false)?; Ok(UseItemEffect::Applied)
     }
 
-    pub(super) fn mk(id: i16, qty: u32, opts: &[(u16, i32)]) -> ItemInstance {
-        ItemInstance { template_id: TemplateId(id), quantity: qty, options: opts.iter().map(|&(i, p)| ItemOption { id: i, param: p }).collect(), create_time_ms: 0 }
+    fn check_equip_prereqs(snap: &ItemInstance, meta: ItemMeta, ctx: &UseItemCtx<'_>) -> Result<(), UseItemError> {
+        if !meta.gender.is_none_or(|g| g == ctx.gender) {
+            return Err(UseItemError::PreconditionFailed("wrong gender"));
+        }
+        if get_opt(snap, opt_id::POWER_REQ_B).is_some_and(|b| b > 0 && ctx.stats.power < i64::from(b).saturating_mul(1_000_000_000)) {
+            return Err(UseItemError::PreconditionFailed("insufficient power"));
+        }
+        Ok(())
+    }
+
+    pub(super) fn mk(id: i16, qty: u32, opts: &[(u16, i32)], now_ms: i64) -> ItemInstance {
+        ItemInstance { template_id: TemplateId(id), quantity: qty, options: opts.iter().map(|&(i, p)| ItemOption { id: i, param: p }).collect(), create_time_ms: now_ms }
     }
 }

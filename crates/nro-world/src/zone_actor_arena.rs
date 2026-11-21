@@ -94,6 +94,18 @@ pub struct PlayerIngress {
     pub outbound_tx: Option<mpsc::Sender<Packet>>,
 }
 
+/// Asynchronous zone-to-server events emitted by [`super::ZoneActor`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ZoneEvent {
+    /// Player HP delta from satellite healing (`delta > 0`) or trap damage (`delta < 0`).
+    PlayerHpDelta {
+        /// Target player identifier.
+        player_id: PlayerId,
+        /// Signed HP delta (`> 0` heal, `< 0` damage).
+        delta: i64,
+    },
+}
+
 /// Static configuration for a [`super::ZoneActor`].
 #[derive(Clone, Copy, Debug)]
 pub struct ZoneConfig {

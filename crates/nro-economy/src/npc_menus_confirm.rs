@@ -7,6 +7,10 @@ use nro_consts::{const_item, const_npc};
 use nro_core::{Gender, ItemInstance, ItemOption, MapId, TemplateId};
 use smallvec::smallvec;
 
+const fn req_for_stage(stage: u8) -> u32 {
+    match stage { 1 => 10, 2 => 3, 3 => 5, 4 => 10, 5 => 5, 6 => 1_000, 7 => 5_000, _ => u32::MAX }
+}
+
 impl NpcMenuRouter {
     /// Dispatches `confirmMenu(player, select)` across all 66 [`NpcKind`] state machines.
     pub fn confirm_menu(
@@ -24,12 +28,15 @@ impl NpcMenuRouter {
                 (const_npc::CONFIRM_DISSOLUTION_CLAN, 0) => Ok(NpcEffect::LaunchActivity("DISSOLVE_CLAN")),
                 _ => Ok(NpcEffect::NoOp),
             },
+            NpcKind::Bulma if ctx.gender != Gender::TraiDat => Err(NpcMenuError::GuardFailed("Ta chỉ bán đồ cho người Trái Đất")),
             NpcKind::Bulma => Ok(if select == 0 { NpcEffect::OpenShop("BUNMA") } else { NpcEffect::NoOp }),
+            NpcKind::Dende if ctx.gender != Gender::Namec => Err(NpcMenuError::GuardFailed("Ta chỉ bán đồ cho người Namếc")),
             NpcKind::Dende => Ok(match select {
                 0 => NpcEffect::OpenShop("DENDE"),
                 1 => NpcEffect::LaunchActivity("SUMMON_PORUNGA"),
                 _ => NpcEffect::NoOp,
             }),
+            NpcKind::Appule if ctx.gender != Gender::Xayda => Err(NpcMenuError::GuardFailed("Ta chỉ bán đồ cho chiến binh Xayda")),
             NpcKind::Appule => Ok(if select == 0 { NpcEffect::OpenShop("APPULE") } else { NpcEffect::NoOp }),
             NpcKind::BulmaTuongLai => Ok(if select == 0 { NpcEffect::OpenShop(if map == 102 { "BUNMA_FUTURE" } else { "KARIN" }) } else { NpcEffect::NoOp }),
             NpcKind::Panchy => Ok(if select == 0 { NpcEffect::OpenShop("PANCHY") } else { NpcEffect::NoOp }),
@@ -75,9 +82,11 @@ impl NpcMenuRouter {
                 let s = ctx.inventory.find_bag_slot(TemplateId(const_item::BI_KIEP as i16)).ok_or(NpcMenuError::GuardFailed("no 590"))?;
                 let p = get_opt(ctx.inventory.bag_item(s)?, opt_id::QUANTITY_PARAM).unwrap_or(0);
                 if p < 9_999 { return Err(NpcMenuError::GuardFailed("need Opt 31 >= 9999")); }
-                if p == 9_999 { ctx.inventory.sub_from_bag_slot(s, 1)?; } else if let Some(it) = &mut ctx.inventory.bag[s] { set_opt(it, opt_id::QUANTITY_PARAM, p - 9_999); }
+                let mut staged = ctx.inventory.clone();
+                if p == 9_999 { staged.sub_from_bag_slot(s, 1)?; } else if let Some(it) = &mut staged.bag[s] { set_opt(it, opt_id::QUANTITY_PARAM, p - 9_999); }
                 let out_id = 592 + match ctx.gender { Gender::TraiDat => 0, Gender::Namec => 1, Gender::Xayda => 2 };
-                ctx.inventory.add_to_bag(ItemInstance { template_id: TemplateId(out_id), quantity: 1, options: smallvec![ItemOption { id: 30, param: 0 }], create_time_ms: 0 }, false)?;
+                staged.add_to_bag(ItemInstance { template_id: TemplateId(out_id), quantity: 1, options: smallvec![ItemOption { id: 30, param: 0 }], create_time_ms: 0 }, false)?;
+                *ctx.inventory = staged;
                 Ok(NpcEffect::Tutorial("Đã nhận võ phục Yardrat!"))
             }
             NpcKind::NgoKhong => Ok(if select == 0 { NpcEffect::Tutorial("Thu thập chữ Giải Khai Phong Ấn tại Ngũ Hành Sơn!") } else { NpcEffect::NoOp }),
@@ -151,17 +160,24 @@ impl NpcMenuRouter {
                 _ => Ok(NpcEffect::NoOp),
             },
             NpcKind::BoMong if menu_index == const_npc::BASE_MENU && select == 3 => { ctx.inventory.add_to_bag(ItemInstance { template_id: TemplateId(457), quantity: 100, options: smallvec![], create_time_ms: 0 }, true)?; ctx.inventory.gem = ctx.inventory.gem.saturating_add(10_000); Ok(NpcEffect::ClaimedDailyCheckIn) }
+            NpcKind::KyGui if !ctx.activated => Err(NpcMenuError::GuardFailed("not activated")),
             NpcKind::KyGui => Ok(if select == 1 { NpcEffect::OpenConsignShop } else { NpcEffect::Tutorial("Ký gửi bằng Thỏi vàng") }),
+            NpcKind::TruongLaoGuru if ctx.gender != Gender::Namec => Err(NpcMenuError::GuardFailed("Về hành tinh của mình đi")),
+            NpcKind::VuaVegeta if ctx.gender != Gender::Xayda => Err(NpcMenuError::GuardFailed("Về hành tinh của mình đi")),
             NpcKind::QuyLaoKame | NpcKind::TruongLaoGuru | NpcKind::VuaVegeta => {
                 if menu_index == 13 && select == 0 { return Ok(NpcEffect::CancelledSkillStudy); }
                 if npc == NpcKind::QuyLaoKame && ((menu_index == const_npc::BASE_MENU && select == 4) || (menu_index == 1 && select == 0)) {
-                    ctx.inventory.sub_template_from_bag(TemplateId(const_item::RUA_CON as i16), 1)?;
-                    ctx.inventory.add_to_bag(ItemInstance { template_id: TemplateId(457), quantity: 5, options: smallvec![], create_time_ms: 0 }, true)?;
+                    let mut staged = ctx.inventory.clone();
+                    staged.sub_template_from_bag(TemplateId(const_item::RUA_CON as i16), 1)?;
+                    staged.add_to_bag(ItemInstance { template_id: TemplateId(457), quantity: 5, options: smallvec![], create_time_ms: 0 }, true)?;
+                    *ctx.inventory = staged;
                     return Ok(NpcEffect::Tutorial("Đã nhận quà Rùa con!"));
                 }
-                if npc == NpcKind::QuyLaoKame && matches!(select, 2 | 3) {
+                if npc == NpcKind::QuyLaoKame && menu_index == const_npc::BASE_MENU && matches!(select, 2 | 3) {
+                    let stage = if select == 3 { ctx.kol_vip_stage } else { ctx.kol_stage };
+                    if ctx.kol_progress < req_for_stage(stage) { return Err(NpcMenuError::GuardFailed("Chưa đủ tiến độ nhiệm vụ KOL!")); }
                     if select == 3 && ctx.inventory.count_template_in_bag(TemplateId(1825)) == 0 { return Err(NpcMenuError::GuardFailed("need VIP ticket 1825")); }
-                    return Ok(NpcEffect::ClaimedKolStage(select == 3, if select == 3 { ctx.kol_vip_stage } else { ctx.kol_stage }));
+                    return Ok(NpcEffect::ClaimedKolStage(select == 3, stage));
                 }
                 if matches!(npc, NpcKind::TruongLaoGuru | NpcKind::VuaVegeta) {
                     return Ok(match select {
@@ -183,17 +199,42 @@ impl NpcMenuRouter {
                     ctx.stats.limit_power = (ctx.stats.limit_power + 1).min(9);
                     Ok(NpcEffect::UnlockedPowerLimit(false))
                 }
-                (const_npc::OPEN_POWER_PET, 0) => { ctx.inventory.sub_gold(50_000_000)?; Ok(NpcEffect::UnlockedPowerLimit(true)) }
+                (const_npc::OPEN_POWER_PET, 0) => {
+                    if !ctx.has_pet { return Err(NpcMenuError::GuardFailed("no pet")); }
+                    ctx.inventory.sub_gold(50_000_000)?;
+                    Ok(NpcEffect::UnlockedPowerLimit(true))
+                }
                 _ => Ok(NpcEffect::NoOp),
             },
             NpcKind::Osin => match map {
                 50 => if select == 0 { Ok(NpcEffect::ChangeMap(MapId(48), 300, 312)) } else if select == 1 { Ok(NpcEffect::ChangeMap(MapId(154), 300, 312)) } else { Ok(NpcEffect::NoOp) },
                 154 | 155 => if select == 0 { Ok(NpcEffect::ChangeMap(MapId(if map == 154 { 155 } else { 154 }), 200, 312)) } else { Ok(NpcEffect::NoOp) },
                 165 => if select == 1 { Err(NpcMenuError::GuardFailed("Tính năng đang được phát triển!")) } else if select == 0 { Ok(NpcEffect::ChangeMap(MapId(21 + i16::from(ctx.gender)), 250, 336)) } else { Ok(NpcEffect::NoOp) },
-                114..=120 => if select == 0 { Ok(NpcEffect::Tutorial("Hạ quái tích điểm xuống tầng dưới")) } else if select == 1 && !ctx.is_use_gtpt { ctx.inventory.sub_gem(1)?; Ok(NpcEffect::ApplyGtpt) } else if ctx.mabu_points >= 10 && map < 120 { Ok(NpcEffect::ChangeMap(MapId(map + 1), 250, 312)) } else { Err(NpcMenuError::GuardFailed("insufficient Mabu points")) },
+                114..=120 if ctx.c_flag != 9 => Err(NpcMenuError::GuardFailed("Khác phe!")),
+                114..=120 => match select {
+                    0 => Ok(NpcEffect::Tutorial("Hạ quái tích điểm xuống tầng dưới")),
+                    1 => if ctx.is_use_gtpt {
+                        Err(NpcMenuError::GuardFailed("Giải trừ phép thuật đang có hiệu lực!"))
+                    } else {
+                        ctx.inventory.sub_gem(1)?;
+                        Ok(NpcEffect::ApplyGtpt)
+                    },
+                    2 => {
+                        if ctx.mabu_points < 10 {
+                            return Err(NpcMenuError::GuardFailed("insufficient Mabu points"));
+                        }
+                        let next_map = match map {
+                            114 => 115, 115 => 117, 117 => 118, 118 => 119, 119 => 120,
+                            _ => return Err(NpcMenuError::GuardFailed("already at bottom floor")),
+                        };
+                        Ok(NpcEffect::ChangeMap(MapId(next_map), 250, 312))
+                    }
+                    _ => Ok(NpcEffect::NoOp),
+                },
                 127 => if select == 0 && !ctx.is_phu_ho_mabu { ctx.inventory.sub_gem(10)?; Ok(NpcEffect::ApplyMabuBlessing) } else { Ok(NpcEffect::ChangeMap(MapId(52), 200, 336)) },
                 _ => if select == 0 { Ok(NpcEffect::ChangeMap(MapId(114), 250, 312)) } else if select == 1 { Ok(NpcEffect::ChangeMap(MapId(165), 250, 312)) } else { Ok(NpcEffect::NoOp) },
             },
+            NpcKind::Babiday if ctx.c_flag != 10 => Err(NpcMenuError::GuardFailed("Khác phe!")),
             NpcKind::Babiday => if select == 1 && !ctx.is_use_gtpt { ctx.inventory.sub_gem(1)?; Ok(NpcEffect::ApplyGtpt) } else if select == 2 { Ok(NpcEffect::ChangeMap(MapId(52), 200, 336)) } else { Ok(NpcEffect::Tutorial("Chiến đấu cho Babiđây!")) },
             NpcKind::Bill => if map == 48 && menu_index == 100 && select == 0 { Ok(NpcEffect::OpenShop("BILL")) } else if select == 0 { Ok(NpcEffect::ChangeMap(MapId(50), 300, 312)) } else { Ok(NpcEffect::NoOp) },
             NpcKind::Whis => match (menu_index, select) {
@@ -217,9 +258,15 @@ impl NpcMenuRouter {
                 Err(NpcMenuError::GuardFailed("Tính năng đang được phát triển!"))
             } else { Ok(NpcEffect::ChangeMap(MapId(21 + i16::from(ctx.gender)), 250, 336)) },
             NpcKind::ToriBot => {
-                if ctx.vip_purchases >= 4 || select > 3 || ctx.vnd_balance < u32::from(select + 1) * 50_000 { return Err(NpcMenuError::GuardFailed("VIP cap or insufficient VND")); }
-                ctx.inventory.add_to_bag(ItemInstance { template_id: TemplateId(457), quantity: [200u32, 500, 700, 1_000][usize::from(select)], options: smallvec![], create_time_ms: 0 }, true)?;
-                ctx.inventory.add_to_bag(ItemInstance { template_id: TemplateId(if select == 3 { 1772 } else { 1254 }), quantity: 1, options: smallvec![], create_time_ms: 0 }, false)?;
+                if ctx.vip_purchases >= 4 || select > 3 { return Err(NpcMenuError::GuardFailed("VIP cap or insufficient VND")); }
+                let cost = u32::from(select + 1) * 50_000;
+                if ctx.vnd_balance < cost { return Err(NpcMenuError::GuardFailed("VIP cap or insufficient VND")); }
+                let mut staged = ctx.inventory.clone();
+                staged.add_to_bag(ItemInstance { template_id: TemplateId(457), quantity: [200u32, 500, 700, 1_000][usize::from(select)], options: smallvec![], create_time_ms: 0 }, true)?;
+                staged.add_to_bag(ItemInstance { template_id: TemplateId(if select == 3 { 1772 } else { 1254 }), quantity: 1, options: smallvec![], create_time_ms: 0 }, false)?;
+                *ctx.inventory = staged;
+                ctx.vnd_balance = ctx.vnd_balance.saturating_sub(cost);
+                ctx.vip_purchases = ctx.vip_purchases.saturating_add(1);
                 Ok(NpcEffect::PurchasedVip(select + 1))
             }
             NpcKind::LinhCanh | NpcKind::DocNhan | NpcKind::MrPoPo => Ok(if select == 0 { NpcEffect::LaunchActivity("NPC_INTERACTION") } else { NpcEffect::NoOp }),
@@ -268,5 +315,54 @@ mod tests {
         assert_eq!(NpcMenuRouter::confirm_menu(NpcKind::Calick, const_npc::BASE_MENU, 1, &mut ctx).unwrap(), NpcEffect::NoOp);
         assert_eq!(NpcMenuRouter::confirm_menu(NpcKind::QuyLaoKame, const_npc::BASE_MENU, 4, &mut ctx).unwrap(), NpcEffect::Tutorial("Đã nhận quà Rùa con!"));
         assert_eq!(ctx.inventory.count_template_in_bag(TemplateId(457)), 5);
+    }
+
+    #[test]
+    fn enforces_kol_progress_confirm_guards_and_toribot_vnd_deduction() {
+        let mut inv = Inventory::new(10, 10, 12);
+        inv.gold = 100_000_000;
+        let mut stats = CoreStats::default();
+        let mut ctx = NpcPlayerCtx {
+            account_id: AccountId(1), player_id: PlayerId(1),
+            location: Location { map_id: MapId(114), zone_id: ZoneId(0), x: 100, y: 100 },
+            gender: Gender::TraiDat, c_flag: 0, activated: false, has_clan: false, is_clan_leader: false,
+            clan_days: 0, has_pet: false, wearing_full_destroyer: false, is_use_gtpt: false,
+            is_phu_ho_mabu: false, mabu_points: 0, vnd_balance: 150_000, vip_purchases: 0,
+            kol_stage: 1, kol_vip_stage: 1, kol_progress: 0, stats: &mut stats, inventory: &mut inv,
+        };
+        assert!(matches!(NpcMenuRouter::confirm_menu(NpcKind::QuyLaoKame, const_npc::BASE_MENU, 2, &mut ctx), Err(NpcMenuError::GuardFailed(_))));
+        assert!(matches!(NpcMenuRouter::confirm_menu(NpcKind::KyGui, const_npc::BASE_MENU, 1, &mut ctx), Err(NpcMenuError::GuardFailed(_))));
+        assert!(matches!(NpcMenuRouter::confirm_menu(NpcKind::Dende, const_npc::BASE_MENU, 0, &mut ctx), Err(NpcMenuError::GuardFailed(_))));
+        assert!(matches!(NpcMenuRouter::confirm_menu(NpcKind::Appule, const_npc::BASE_MENU, 0, &mut ctx), Err(NpcMenuError::GuardFailed(_))));
+        assert!(matches!(NpcMenuRouter::confirm_menu(NpcKind::TruongLaoGuru, const_npc::BASE_MENU, 1, &mut ctx), Err(NpcMenuError::GuardFailed(_))));
+        assert!(matches!(NpcMenuRouter::confirm_menu(NpcKind::VuaVegeta, const_npc::BASE_MENU, 1, &mut ctx), Err(NpcMenuError::GuardFailed(_))));
+        assert!(matches!(NpcMenuRouter::confirm_menu(NpcKind::Osin, const_npc::GO_UPSTAIRS_MENU, 0, &mut ctx), Err(NpcMenuError::GuardFailed(_))));
+        assert!(matches!(NpcMenuRouter::confirm_menu(NpcKind::Babiday, const_npc::GO_UPSTAIRS_MENU, 0, &mut ctx), Err(NpcMenuError::GuardFailed(_))));
+        assert!(matches!(NpcMenuRouter::confirm_menu(NpcKind::QuocVuong, const_npc::OPEN_POWER_PET, 0, &mut ctx), Err(NpcMenuError::GuardFailed(_))));
+        ctx.kol_progress = 10;
+        assert_eq!(NpcMenuRouter::confirm_menu(NpcKind::QuyLaoKame, const_npc::BASE_MENU, 2, &mut ctx).unwrap(), NpcEffect::ClaimedKolStage(false, 1));
+        assert_eq!(NpcMenuRouter::confirm_menu(NpcKind::ToriBot, 0, 1, &mut ctx).unwrap(), NpcEffect::PurchasedVip(2));
+        assert_eq!(ctx.vnd_balance, 50_000);
+        assert_eq!(ctx.vip_purchases, 1);
+    }
+
+    #[test]
+    fn osin_mabu_descent_skips_116_and_guards_bottom_floor() {
+        let mut inv = Inventory::new(10, 10, 12);
+        let mut stats = CoreStats::default();
+        let mut ctx = NpcPlayerCtx {
+            account_id: AccountId(1), player_id: PlayerId(1),
+            location: Location { map_id: MapId(114), zone_id: ZoneId(0), x: 100, y: 100 },
+            gender: Gender::TraiDat, c_flag: 9, activated: true, has_clan: false, is_clan_leader: false,
+            clan_days: 0, has_pet: false, wearing_full_destroyer: false, is_use_gtpt: false,
+            is_phu_ho_mabu: false, mabu_points: 10, vnd_balance: 0, vip_purchases: 0,
+            kol_stage: 1, kol_vip_stage: 1, kol_progress: 0, stats: &mut stats, inventory: &mut inv,
+        };
+        for (cur, expected) in [(114, 115), (115, 117), (117, 118), (118, 119), (119, 120)] {
+            ctx.location.map_id = MapId(cur);
+            assert_eq!(NpcMenuRouter::confirm_menu(NpcKind::Osin, const_npc::BASE_MENU, 2, &mut ctx).unwrap(), NpcEffect::ChangeMap(MapId(expected), 250, 312));
+        }
+        ctx.location.map_id = MapId(120);
+        assert!(matches!(NpcMenuRouter::confirm_menu(NpcKind::Osin, const_npc::BASE_MENU, 2, &mut ctx), Err(NpcMenuError::GuardFailed(_))));
     }
 }

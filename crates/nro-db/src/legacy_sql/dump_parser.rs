@@ -41,7 +41,7 @@ impl SqlVal {
 
     #[must_use]
     pub fn i32_or(&self, default: i32) -> i32 {
-        self.i64_or(i64::from(default)) as i32
+        self.i64_or(i64::from(default)).clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
     }
 
     #[must_use]
@@ -169,7 +169,10 @@ where
                 while i < n && (bytes[i].is_ascii_whitespace() || bytes[i] == b',') {
                     i += 1;
                 }
-                if i < n && bytes[i] == b';' {
+                if i >= n {
+                    break;
+                }
+                if bytes[i] == b';' {
                     i += 1;
                     break;
                 }
@@ -182,6 +185,9 @@ where
                     while i < n && bytes[i].is_ascii_whitespace() {
                         i += 1;
                     }
+                    if i >= n {
+                        return Err(parse_err("unexpected EOF in VALUES tuple"));
+                    }
                     if bytes[i] == b'\'' {
                         i += 1;
                         let mut buf = String::new();
@@ -191,18 +197,18 @@ where
                                 b'\\' => {
                                     buf.push_str(&sql[chunk_start..i]);
                                     i += 1;
-                                    if i >= n {
+                                    let Some(ch) = sql[i..].chars().next() else {
                                         return Err(parse_err("dangling backslash escape"));
-                                    }
-                                    let esc = match bytes[i] {
-                                        b'n' => '\n',
-                                        b'r' => '\r',
-                                        b't' => '\t',
-                                        b'0' => '\0',
-                                        other => char::from(other),
+                                    };
+                                    let esc = match ch {
+                                        'n' => '\n',
+                                        'r' => '\r',
+                                        't' => '\t',
+                                        '0' => '\0',
+                                        other => other,
                                     };
                                     buf.push(esc);
-                                    i += 1;
+                                    i += ch.len_utf8();
                                     chunk_start = i;
                                 }
                                 b'\'' if i + 1 < n && bytes[i + 1] == b'\'' => {
@@ -234,11 +240,16 @@ where
                     while i < n && bytes[i].is_ascii_whitespace() {
                         i += 1;
                     }
+                    if i >= n {
+                        return Err(parse_err("unexpected EOF in VALUES tuple"));
+                    }
                     if bytes[i] == b',' {
                         i += 1;
                     } else if bytes[i] == b')' {
                         i += 1;
                         break;
+                    } else {
+                        return Err(parse_err("expected ',' or ')' in VALUES tuple"));
                     }
                 }
                 if vals.len() != ordered_cols.len() {

@@ -16,9 +16,32 @@ if [[ -f "$HOME/.cargo/env" ]]; then
     source "$HOME/.cargo/env"
 fi
 
+REBUILD=0
+HAS_CONFIG=0
+HAS_ASSETS_DIR=0
+USER_ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        --rebuild)
+            REBUILD=1
+            ;;
+        -c|--config|--config=*)
+            HAS_CONFIG=1
+            USER_ARGS+=("$arg")
+            ;;
+        --assets-dir|--assets-dir=*)
+            HAS_ASSETS_DIR=1
+            USER_ARGS+=("$arg")
+            ;;
+        *)
+            USER_ARGS+=("$arg")
+            ;;
+    esac
+done
+
 CONFIG_FILE="${NRO_CONFIG:-server.toml}"
 
-ASSETS_DIR="SRC/data"
+ASSETS_DIR=""
 if [[ -n "${NRO_ASSETS_DIR:-}" ]]; then
     ASSETS_DIR="$NRO_ASSETS_DIR"
 else
@@ -30,16 +53,16 @@ else
     done
 fi
 
-CMD_ARGS=(--config "$CONFIG_FILE" --assets-dir "$ASSETS_DIR")
-
-REBUILD=0
-for arg in "$@"; do
-    if [[ "$arg" == "--rebuild" ]]; then
-        REBUILD=1
-    else
-        CMD_ARGS+=("$arg")
-    fi
-done
+CMD_ARGS=()
+if [[ "$HAS_CONFIG" -eq 0 ]]; then
+    CMD_ARGS+=(--config "$CONFIG_FILE")
+fi
+if [[ "$HAS_ASSETS_DIR" -eq 0 && -n "$ASSETS_DIR" ]]; then
+    CMD_ARGS+=(--assets-dir "$ASSETS_DIR")
+fi
+if [[ "${#USER_ARGS[@]}" -gt 0 ]]; then
+    CMD_ARGS+=("${USER_ARGS[@]}")
+fi
 
 run_cargo_release() {
     if cargo build --release -p nro-server -p nro-db; then
@@ -72,10 +95,15 @@ else
     exit 1
 fi
 
-if [[ ! -d "${ASSETS_DIR}/update_data" && ! -d "${ASSETS_DIR}/icon" ]]; then
-    echo "[WARN] Binary client assets not found at '${ASSETS_DIR}'." >&2
-    echo "       Copy Teamobi2026 'SRC/data' into $(pwd)/SRC/data before connecting with Mod Local." >&2
+if [[ "$HAS_ASSETS_DIR" -eq 0 ]]; then
+    if [[ -z "$ASSETS_DIR" ]]; then
+        echo "[WARN] Binary client assets not auto-detected (relying on server.toml / ServerConfig::default)." >&2
+        echo "       Copy Teamobi2026 'SRC/data' into $(pwd)/SRC/data before connecting with Mod Local." >&2
+    elif [[ ! -d "${ASSETS_DIR}/update_data" && ! -d "${ASSETS_DIR}/icon" ]]; then
+        echo "[WARN] Binary client assets not found at '${ASSETS_DIR}'." >&2
+        echo "       Copy Teamobi2026 'SRC/data' into $(pwd)/SRC/data before connecting with Mod Local." >&2
+    fi
 fi
 
 echo "=== Starting Teamobi2026 nro-server (Ctrl-C or type 'baotri' to save & stop) ==="
-exec "$SERVER_BIN" "${CMD_ARGS[@]}"
+exec "$SERVER_BIN" ${CMD_ARGS[@]+"${CMD_ARGS[@]}"}

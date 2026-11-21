@@ -44,9 +44,9 @@ pub fn run_boss_combat_tick(
         }
         BossArchetype::CellAbsorb => {
             if rng.is_true(1, 100) {
-                stats.dame = stats.dame.saturating_add(pick.stats.dame * 5 / 100);
-                stats.hp_max = stats.hp_max.saturating_add(pick.stats.hp * 2 / 100);
-                stats.hp = (stats.hp + pick.stats.hp).min(stats.hp_max);
+                stats.dame = stats.dame.saturating_add(pick.stats.dame.saturating_mul(5) / 100);
+                stats.hp_max = stats.hp_max.saturating_add(pick.stats.hp.saturating_mul(2) / 100);
+                stats.hp = stats.hp.saturating_add(pick.stats.hp).min(stats.hp_max);
                 stats.crit = stats.crit.saturating_add(1).min(100);
                 *location = pick.location;
                 effects.push(EngineEffect::DamagePlayer {
@@ -86,7 +86,7 @@ pub fn run_boss_combat_tick(
         BossArchetype::DeathBeamProjectile { .. } => {
             location.x = pick.location.x;
             for pl in players {
-                if (pl.location.x - location.x).abs() < 5 {
+                if (i32::from(pl.location.x) - i32::from(location.x)).abs() < 5 {
                     effects.push(EngineEffect::DamagePlayer {
                         target: pl.id,
                         damage: 2_100_000_000,
@@ -166,7 +166,7 @@ pub fn run_boss_combat_tick(
                 });
             }
         },
-        BossArchetype::DhvtArena { is_chan_xu, spawns_clones } => {
+        BossArchetype::DhvtArena { is_chan_xu, spawns_clones, .. } => {
             if *is_chan_xu && rng.is_true(1, 5) {
                 let dur = (rng.next_int(1, 10) * 1_000) as u32;
                 stats.crit = 100;
@@ -199,7 +199,7 @@ pub fn run_boss_combat_tick(
                 });
             }
             if *cycles_stealth && rng.is_true(1, 3) {
-                location.y = 10_000;
+                location.y = if location.y == 10_000 { 360 } else { 10_000 };
             }
         }
         BossArchetype::TrainingMaster { passive_tnsm_per_10s, .. } if *passive_tnsm_per_10s > 0 => {
@@ -227,7 +227,7 @@ pub fn run_boss_combat_tick(
                     if rng.is_true(1, den) {
                         effects.push(EngineEffect::DropItem(GroundDrop {
                             item: ItemInstance::new(TemplateId(648), 1),
-                            location: Location::new(location.x + dx, location.y),
+                            location: Location { x: location.x.saturating_add(dx), ..*location },
                             owner: None,
                         }));
                     }
@@ -236,7 +236,7 @@ pub fn run_boss_combat_tick(
         }
         BossArchetype::YardratPatrol { point_a, point_b, .. } => {
             *location = if rng.is_true(1, 2) { *point_a } else { *point_b };
-            let pct_dmg = (pick.stats.hp_max * i64::from(rng.next_int(1, 3)) / 100)
+            let pct_dmg = (pick.stats.hp_max.saturating_mul(i64::from(rng.next_int(1, 3))) / 100)
                 / i64::from(rng.next_int(10, 30));
             effects.push(EngineEffect::DamagePlayer {
                 target: pick.id,

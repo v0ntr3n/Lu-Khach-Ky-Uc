@@ -149,8 +149,8 @@ pub enum ClientPacket {
     GetEffData(TemplateId),
     /// `-63`: Request clan flag bag effect (`fbid`, `short`).
     GetBagEffect(i16),
-    /// `-62`: Request clan emblem icon (`flag_id`, `CLAN_IMAGE`).
-    ClanImageChoose(i8),
+    /// `-62`: Request clan emblem icon (`flag_id` unsigned `0..=255`, `CLAN_IMAGE`).
+    ClanImageChoose(u8),
     /// `-60`: Attack one or more target players (`PLAYER_ATTACK_PLAYER`).
     AttackPlayers(Vec<PlayerId>),
     /// `-59`: Gold duel challenge `(action, pvp_type, target_id)`.

@@ -284,7 +284,7 @@ impl NPoint {
         if self.seals.has_nguyet_an() { mp_m = add_pct(mp_m, 15); }
         if bb(6) { mp_m = add_pct(mp_m, 40); }
         for (c, p) in [(ctx.sets.worldcup == 2, 10_i64), (div_porata, 20_i64)] {
-            if c { mp_m = mp_m.saturating_add((if matches!(ctx.parity, ParityMode::Fixed) { mp_m } else { prev_mp }) * p / 100); }
+            if c { mp_m = mp_m.saturating_add((if matches!(ctx.parity, ParityMode::Fixed) { mp_m } else { prev_mp }).saturating_mul(p) / 100); }
         }
         if ctx.map_env.1 && ctx.buffs.war_mults.0 > 1 { mp_m = mp_m.saturating_mul(i64::from(ctx.buffs.war_mults.0)); }
         if gogeta { mp_m = add_pct(mp_m, 10); }
@@ -337,7 +337,7 @@ impl NPoint {
     }
 
     fn apply_option(&mut self, io: &ItemOption, body: bool, flat: &mut [i64; 7], reg: &mut [i32; 4], spd: &mut i32) {
-        let (p, ps) = (i64::from(io.param), io.param as i16);
+        let (p, ps) = (i64::from(io.param), i16::try_from(io.param.clamp(i32::from(i16::MIN), i32::from(i16::MAX))).unwrap_or(0));
         self.seals.record_option(io.id);
         match io.id {
             0 => flat[2] += p, 2 => { flat[0] += p * 1000; flat[1] += p * 1000; }

@@ -135,12 +135,12 @@ impl MobState {
     /// Computes randomized outgoing mob hit matching `MobPoint.getDameAttack()`.
     pub fn roll_attack_damage(&self, rng: &mut GameRng) -> i64 {
         if self.dame > 0 {
-            let j = (self.dame / 100).max(0) as i32;
-            (self.dame + i64::from(rng.next_int(-j, j))).max(1)
+            let j = i32::try_from(self.dame / 100).unwrap_or(i32::MAX);
+            self.dame.saturating_add(i64::from(rng.next_int(-j, j))).max(1)
         } else {
             let p = i64::from(rng.next_int(i32::from(self.p_dame.saturating_sub(1)), i32::from(self.p_dame.saturating_add(1))));
             let lv_j = i32::from(self.level) * 10;
-            (self.max_hp * p / 100 + i64::from(rng.next_int(-lv_j, lv_j))).max(1)
+            (self.max_hp.saturating_mul(p) / 100 + i64::from(rng.next_int(-lv_j, lv_j))).max(1)
         }
     }
 
@@ -180,7 +180,7 @@ impl MobState {
             dmg = if parity == ParityMode::Legacy && self.max_hp > 20_000_000 {
                 0
             } else {
-                (self.max_hp / 10).max(1)
+                dmg.min((self.max_hp / 10).max(1))
             };
         }
         dmg = dmg.min(2_147_483_647).min(self.hp);
@@ -211,7 +211,11 @@ impl MobState {
         effects: &mut Vec<EngineEffect>,
     ) {
         if golden_frieza_21h {
-            self.hp = 0;
+            if self.hp > 0 {
+                self.hp = 0;
+                self.died_at_ms = now_ms;
+                self.aggro_targets.clear();
+            }
             return;
         }
         if self.hp <= 0 {
@@ -228,6 +232,7 @@ impl MobState {
             }
             return;
         }
+        self.aggro_targets.retain(|id| players.iter().any(|p| p.id == *id && p.stats.hp > 0));
         self.hp -= self.effects.tick_mafuba(self.hp, now_ms);
         if self.map_kind == MobMapKind::NormalWorld && now_ms.saturating_sub(self.last_regen_ms) >= 30_000 {
             self.last_regen_ms = now_ms;

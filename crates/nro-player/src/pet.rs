@@ -203,6 +203,7 @@ impl Pet {
 
     /// Unlocks Milestone Skills 2–5 (`150M`, `1.5B`, `20B`, `40B` power) (`Pet.updatePower`).
     pub fn check_skill_unlocks(&mut self, rng: &mut GameRng) {
+        if self.skills.len() < 5 { self.skills.resize(5, None); }
         let p = self.npoint.core.power as i64;
         if self.skills[1].is_none() && p >= 150_000_000 {
             let r = rng_range(rng, 1, 100);
@@ -231,7 +232,7 @@ impl Pet {
             return Err(PlayerError::ActionBlocked);
         }
         if next == PetStatus::Fusion {
-            if now_ms.saturating_sub(master_fusion.last_unfusion_ms) < UNFUSION_COOLDOWN_MS { return Err(PlayerError::FusionCooldownActive); }
+            if master_fusion.last_unfusion_ms > 0 && now_ms.saturating_sub(master_fusion.last_unfusion_ms) < UNFUSION_COOLDOWN_MS { return Err(PlayerError::FusionCooldownActive); }
             master_fusion.kind = if desired_fusion == FusionKind::None { FusionKind::LuongLongNhatThe } else { desired_fusion };
             master_fusion.started_at_ms = now_ms;
         }
@@ -291,8 +292,8 @@ impl Pet {
                 let nearest = candidates.iter().filter(|c| distance_2d(&self.location, &c.location) <= PET_ATTACK_RANGE_PX).min_by_key(|c| (c.is_mob, distance_2d(&self.location, &c.location)));
                 let Some(t) = nearest else { return self.follow_step(master_loc, 60); };
                 if self.npoint.core.stamina == 0 { return self.request_pea(now_ms); }
-                let idx = usize::from(distance_2d(&self.location, &t.location) > PET_MELEE_RANGE_PX && self.skills[1].is_some());
-                let Some(slot) = self.skills[idx] else { return PetAction::Idle; };
+                let idx = usize::from(distance_2d(&self.location, &t.location) > PET_MELEE_RANGE_PX && self.skills.get(1).copied().flatten().is_some());
+                let Some(slot) = self.skills.get(idx).copied().flatten() else { return PetAction::Idle; };
                 if !slot.is_off_cooldown(now_ms) { return PetAction::Idle; }
                 if slot.mana_cost(self.npoint.mp, self.npoint.mp_max).is_none() { return self.request_pea(now_ms); }
                 let move_to = if idx == 0 || (self.status == PetStatus::Attack && t.is_mob) {
@@ -306,10 +307,10 @@ impl Pet {
 
     fn try_support_skills(&self, candidates: &[PetTargetCandidate], now_ms: u64) -> Option<PetAction> {
         let ready = |s: Option<SkillSlot>| s.filter(|x| x.is_off_cooldown(now_ms) && x.mana_cost(self.npoint.mp, self.npoint.mp_max).is_some());
-        if let Some(s3) = ready(self.skills[2]) {
+        if let Some(s3) = ready(self.skills.get(2).copied().flatten()) {
             match s3.kind {
                 SkillKind::ThaiDuongHaSan => return Some(PetAction::CastSkill(s3.kind, None, false, None)),
-                SkillKind::TaiTaoNangLuong if self.npoint.curr_percent_hp() <= 20 || (self.npoint.mp * 100 / self.npoint.mp_max.max(1)) <= 20 => {
+                SkillKind::TaiTaoNangLuong if self.npoint.curr_percent_hp() <= 20 || (i64::from(self.npoint.mp) * 100 / i64::from(self.npoint.mp_max.max(1))) <= 20 => {
                     return Some(PetAction::CastSkill(s3.kind, None, false, None));
                 }
                 SkillKind::Kaioken => if let Some(t) = candidates.first() {
@@ -318,10 +319,10 @@ impl Pet {
                 _ => {}
             }
         }
-        if let Some(s4) = ready(self.skills[3]) && ((s4.kind == SkillKind::BienKhi && self.effects.monkey_level == 0) || (s4.kind == SkillKind::KhienNangLuong && self.effects.shield_until_ms == 0) || (s4.kind == SkillKind::DeTrung && self.effects.mob_me.is_none())) {
+        if let Some(s4) = ready(self.skills.get(3).copied().flatten()) && ((s4.kind == SkillKind::BienKhi && self.effects.monkey_level == 0) || (s4.kind == SkillKind::KhienNangLuong && self.effects.shield_until_ms == 0) || (s4.kind == SkillKind::DeTrung && self.effects.mob_me.is_none())) {
             return Some(PetAction::CastSkill(s4.kind, None, false, None));
         }
-        ready(self.skills[4]).zip(candidates.first()).map(|(s5, t)| PetAction::CastSkill(s5.kind, Some(t.id), t.is_mob, None))
+        ready(self.skills.get(4).copied().flatten()).zip(candidates.first()).map(|(s5, t)| PetAction::CastSkill(s5.kind, Some(t.id), t.is_mob, None))
     }
 
     fn follow_step(&mut self, master_loc: Location, leash: i32) -> PetAction {

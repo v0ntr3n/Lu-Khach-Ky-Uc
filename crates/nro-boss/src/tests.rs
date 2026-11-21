@@ -99,7 +99,7 @@ fn sequential_wave_and_call_by_another_android_trio_unlock() {
     };
     world.zone_players.insert((96, 2), 3);
 
-    for t in [601_000_u64, 602_000, 604_000, 607_000] {
+    for t in [601_000_u64, 602_000, 604_000, 607_000, 610_000] {
         mgr.tick_all(&world, &mut rng, t);
     }
 
@@ -113,7 +113,7 @@ fn sequential_wave_and_call_by_another_android_trio_unlock() {
     let pl = sample_player(99, Some(1), Location::new(300, 360));
     let mut effects = Vec::new();
     let out = mgr
-        .apply_hit(a14_id, &pl, SkillKind::Dragon, 500_000_000, true, false, &mut rng, 608_000, &mut effects)
+        .apply_hit(a14_id, &pl, SkillKind::Dragon, 500_000_000, true, false, &mut rng, 611_000, &mut effects)
         .expect("hit");
     assert!(!out.killed);
     assert_eq!(mgr.instances()[&a13_id.0].lifecycle.status, BossStatus::Respawn);
@@ -125,11 +125,15 @@ fn kid_bu_requires_spirit_bomb_and_super_bu_forwards_damage() {
     let mut mgr = BossGroupManager::with_builtin_catalog(ParityMode::Fixed, 0).expect("catalog");
     let mabu_id = mgr.spawn_wave(BossTypeId(60), None, ZoneId(3), 0).expect("mabu2h");
     let belly_id = mgr.spawn_wave(BossTypeId(61), None, ZoneId(3), 0).expect("superbu");
+    let world = WorldTickContext { mabu_14h_open: true, ..Default::default() };
+    for t in [61_000_u64, 62_000, 63_000, 64_000, 67_000] {
+        mgr.tick_all(&world, &mut rng, t);
+    }
 
     let pl = sample_player(5, Some(2), Location::new(200, 200));
     let mut effects = Vec::new();
     let hp_before = mgr.instances()[&mabu_id.0].stats.hp;
-    mgr.apply_hit(belly_id, &pl, SkillKind::Galick, 5_000_000, true, false, &mut rng, 1_000, &mut effects)
+    mgr.apply_hit(belly_id, &pl, SkillKind::Galick, 5_000_000, true, false, &mut rng, 68_000, &mut effects)
         .expect("forward");
     assert!(mgr.instances()[&mabu_id.0].stats.hp < hp_before);
 
@@ -302,4 +306,75 @@ proptest! {
             prop_assert!(!opts.is_empty() && opts.iter().all(|o| o.param >= 0));
         }
     }
+}
+
+#[test]
+fn tet_lan_con_tame_leaves_on_timeout_or_owner_exit_and_resets() {
+    let mut rng = GameRng::from_seed(11);
+    let mut mgr = BossGroupManager::with_builtin_catalog(ParityMode::Fixed, 0).expect("catalog");
+    let lc_id = mgr.instances().values().find(|b| matches!(b.archetype, BossArchetype::TetLanCon { .. })).expect("lan con").entity_id;
+    let mut world = WorldTickContext { active_seasons: [SeasonalEvent::Tet].into_iter().collect(), ..Default::default() };
+    for t in [61_000_u64, 62_000, 63_000, 64_000, 67_000] { mgr.tick_all(&world, &mut rng, t); }
+    assert_eq!(mgr.instances()[&lc_id.0].lifecycle.status, BossStatus::Active);
+    let map_key = (mgr.instances()[&lc_id.0].map_id.0 as u16, mgr.instances()[&lc_id.0].zone_id.0);
+    let mut owner = sample_player(77, None, Location::new(300, 360));
+    owner.last_chat = Some("thang".to_owned());
+    world.zone_rosters.insert(map_key, vec![owner.clone()]);
+    let mut effects = Vec::new();
+    mgr.apply_hit(lc_id, &owner, SkillKind::Dragon, 100, false, false, &mut rng, 70_000, &mut effects).expect("tame");
+    assert_eq!(mgr.instances()[&lc_id.0].lifecycle.status, BossStatus::Afk);
+    assert_eq!(mgr.instances()[&lc_id.0].lifecycle.afk_revive_at_ms, Some(370_000));
+    mgr.tick_all(&world, &mut rng, 100_000);
+    assert_eq!(mgr.instances()[&lc_id.0].lifecycle.status, BossStatus::Afk);
+    world.zone_rosters.insert(map_key, vec![]);
+    mgr.tick_all(&world, &mut rng, 101_000);
+    assert_eq!(mgr.instances()[&lc_id.0].lifecycle.status, BossStatus::LeaveMap);
+    mgr.tick_all(&world, &mut rng, 102_000);
+    assert_eq!(mgr.instances()[&lc_id.0].lifecycle.status, BossStatus::Rest);
+    for t in [163_000_u64, 164_000] { mgr.tick_all(&world, &mut rng, t); }
+    assert_eq!(mgr.instances()[&lc_id.0].archetype, BossArchetype::TetLanCon { tamed_owner: None });
+}
+
+#[test]
+fn thien_xin_hang_clones_expire_at_10s_and_clean_up_on_parent_death() {
+    let mut rng = GameRng::from_seed(22);
+    let mut mgr = BossGroupManager::with_builtin_catalog(ParityMode::Fixed, 0).expect("catalog");
+    let parent = mgr.spawn_wave(BossTypeId(95), None, ZoneId(0), 1_000).expect("txh");
+    let clone1 = mgr.spawn_wave(BossTypeId(96), None, ZoneId(0), 1_000).expect("clone1");
+    let clone2 = mgr.spawn_wave(BossTypeId(96), None, ZoneId(0), 1_000).expect("clone2");
+    let world = WorldTickContext::default();
+    for t in [6_000_u64, 7_000, 8_000, 9_000, 11_000] { mgr.tick_all(&world, &mut rng, t); }
+    assert_eq!(mgr.instances()[&clone1.0].lifecycle.status, BossStatus::Active);
+    let killer = sample_player(88, None, Location::new(300, 360));
+    let mut effects = Vec::new();
+    let out = mgr.apply_hit(parent, &killer, SkillKind::Dragon, 500_000_000, true, false, &mut rng, 12_000, &mut effects).expect("kill");
+    assert!(out.killed);
+    assert_eq!(mgr.instances()[&clone1.0].lifecycle.status, BossStatus::LeaveMap);
+    assert_eq!(mgr.instances()[&clone2.0].lifecycle.status, BossStatus::LeaveMap);
+    let clone3 = mgr.spawn_wave(BossTypeId(96), None, ZoneId(1), 20_000).expect("clone3");
+    for t in [25_000_u64, 26_000, 27_000, 28_000, 30_000] { mgr.tick_all(&world, &mut rng, t); }
+    assert_eq!(mgr.instances()[&clone3.0].lifecycle.status, BossStatus::Active);
+    mgr.tick_all(&world, &mut rng, 37_000);
+    assert_eq!(mgr.instances()[&clone3.0].lifecycle.status, BossStatus::LeaveMap);
+}
+
+#[test]
+fn damage_and_combat_tick_saturate_extreme_i64_values() {
+    let mut rng = GameRng::from_seed(33);
+    let mut effects = Vec::new();
+    let mut shield = false;
+    let mut arch = BossArchetype::Standard;
+    let mut stats = CoreStats { hp: i64::MAX, hp_max: i64::MAX, def: 0, dodge: 0, ..CoreStats::default() };
+    let rule = DamageRule::PvpMirror { armor_pct: 0, ki_absorb_pct: 0, giap_xen_tier: 2 };
+    let out = evaluate_boss_damage(PlayerId(-1), 0, &mut stats, &mut shield, &rule, &mut arch, None, SkillKind::Dragon, i64::MAX, false, false, false, ParityMode::Fixed, &mut rng, &mut effects);
+    assert!(out.applied_damage >= 1);
+    let mut pl = sample_player(1, None, Location::new(100, 100));
+    pl.stats.dame = i64::MAX;
+    pl.stats.hp = i64::MAX;
+    pl.stats.hp_max = i64::MAX;
+    let mut loc = Location::new(100, 100);
+    let mut cell = BossArchetype::CellAbsorb;
+    for _ in 0..200 { crate::combat_ai::run_boss_combat_tick(PlayerId(-2), MapId(100), ZoneId(0), &mut loc, &mut stats, &mut cell, std::slice::from_ref(&pl), ParityMode::Fixed, &mut rng, &mut effects); }
+    let mut yard = BossArchetype::YardratPatrol { point_a: loc, point_b: loc, regen_ms: 1000 };
+    crate::combat_ai::run_boss_combat_tick(PlayerId(-3), MapId(131), ZoneId(0), &mut loc, &mut stats, &mut yard, std::slice::from_ref(&pl), ParityMode::Fixed, &mut rng, &mut effects);
 }

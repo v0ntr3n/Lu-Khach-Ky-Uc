@@ -1,5 +1,9 @@
 //! Magic Tree handlers and state/packet helpers.
 
+use std::sync::OnceLock;
+
+use dashmap::DashMap;
+use nro_core::PlayerId;
 use nro_db::player_repo::PlayerSnapshot;
 use nro_economy::{InventoryError, MagicTreeState, UseItemError};
 use nro_protocol::{Packet, PacketError, ProtocolError, SessionHandle};
@@ -10,6 +14,16 @@ use super::{
     wallet_money_pkt,
 };
 use crate::runtime::unix_now_ms;
+
+static MAGIC_TREE_MENU_STATE: OnceLock<DashMap<PlayerId, bool>> = OnceLock::new();
+
+fn magic_tree_menu_state() -> &'static DashMap<PlayerId, bool> {
+    MAGIC_TREE_MENU_STATE.get_or_init(DashMap::new)
+}
+
+pub(super) fn clear_magic_tree_menu_state(pid: PlayerId) {
+    magic_tree_menu_state().remove(&pid);
+}
 
 enum MagicTreeAction {
     Harvest,
@@ -47,6 +61,14 @@ impl ServerSessionHandler {
             }
             tick_magic_tree(&mut entry.snapshot, now_ms);
             let mut mt = snapshot_to_econ_magic_tree(&entry.snapshot);
+            if let Some((_, cached_upgrading)) = magic_tree_menu_state().remove(&entry.snapshot.id)
+                && cached_upgrading != mt.is_upgrading
+            {
+                return (
+                    Vec::new(),
+                    Some("Trạng thái cây đậu đã thay đổi, vui lòng mở lại menu!".to_owned()),
+                );
+            }
             let action = resolve_magic_tree_action(&mt, menu_id);
             let Some(action) = action else {
                 return (Vec::new(), None);
@@ -203,6 +225,7 @@ fn resolve_magic_tree_action(mt: &MagicTreeState, menu_id: i8) -> Option<MagicTr
 
 pub(super) fn build_magic_tree_menu_pkt(snap: &PlayerSnapshot) -> Result<Packet, PacketError> {
     let mt = snapshot_to_econ_magic_tree(snap);
+    magic_tree_menu_state().insert(snap.id, mt.is_upgrading);
     let mut owned: Vec<String> = Vec::with_capacity(3);
     if mt.is_upgrading {
         owned.push(format!("Nâng cấp nhanh\n({} ngọc)", mt.fast_upgrade_gem_cost()));

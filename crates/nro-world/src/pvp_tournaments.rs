@@ -98,7 +98,8 @@ impl PvpSession {
     #[must_use]
     pub fn resolve(self, winner: PlayerId, w_gold: &mut u64, loser: PlayerId, l_gold: &mut u64, parity: ParityMode) -> PvpResolution {
         if let PvpMode::ThachDau { stake_gold } = self.mode {
-            *w_gold = w_gold.saturating_add(stake_gold + stake_gold * 80 / 100);
+            let bonus = u64::try_from(u128::from(stake_gold) * 80 / 100).unwrap_or(u64::MAX);
+            *w_gold = w_gold.saturating_add(stake_gold.saturating_add(bonus));
             if matches!(parity, ParityMode::Legacy) { *l_gold = l_gold.saturating_sub(stake_gold); }
         }
         PvpResolution { pair: (winner, loser), winner_gold_after: *w_gold, loser_gold_after: *l_gold }
@@ -215,12 +216,19 @@ impl DeathOrAliveSession {
     #[must_use]
     pub fn settle_bets(&mut self, player_won_all: bool) -> Vec<(PlayerId, u64)> {
         if player_won_all { self.reward_ready = true; }
-        let sp: u64 = self.votes.0.iter().map(|(_, c)| u64::from(*c)).sum();
-        let sh: u64 = self.votes.1.iter().map(|(_, c)| u64::from(*c)).sum();
-        let pool_90 = (sp + sh) * 900_000;
+        let sp: u128 = self.votes.0.iter().map(|(_, c)| u128::from(*c)).sum();
+        let sh: u128 = self.votes.1.iter().map(|(_, c)| u128::from(*c)).sum();
+        let pool_90 = (sp + sh).saturating_mul(900_000);
         let (winners, win_sum) = if player_won_all { (&self.votes.0, sp) } else { (&self.votes.1, sh) };
-        if win_sum == 0 { return Vec::new(); }
-        winners.iter().map(|&(p, v)| (p, pool_90 * u64::from(v) / win_sum)).collect()
+        if win_sum == 0 {
+            self.votes.0.clear();
+            self.votes.1.clear();
+            return Vec::new();
+        }
+        let out = winners.iter().map(|&(p, v)| (p, u64::try_from(pool_90.saturating_mul(u128::from(v)) / win_sum).unwrap_or(u64::MAX))).collect();
+        self.votes.0.clear();
+        self.votes.1.clear();
+        out
     }
 
     /// Mints the 30-day random Satellite (`342..=345`, Option `93 = 30`).
@@ -368,5 +376,17 @@ mod tests {
             prop_assert_eq!(res.loser_gold_after, l_extra);
             prop_assert_eq!(res.winner_gold_after + res.loser_gold_after + stake / 5, before);
         }
+    }
+
+    #[test]
+    fn settle_bets_clears_votes_in_both_paths() {
+        let mut s = DeathOrAliveSession::default();
+        let mut g = 2_000_000;
+        s.place_spectator_bet(PlayerId(1), &mut g, true).expect("bet");
+        assert_eq!(s.settle_bets(true), vec![(PlayerId(1), 900_000)]);
+        assert!(s.settle_bets(true).is_empty());
+        s.place_spectator_bet(PlayerId(2), &mut g, false).expect("bet2");
+        assert!(s.settle_bets(true).is_empty());
+        assert!(s.votes.0.is_empty() && s.votes.1.is_empty());
     }
 }

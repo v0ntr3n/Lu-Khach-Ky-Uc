@@ -312,6 +312,20 @@ impl Player {
                 opt.param -= 1;
             }
         }
+        let mut clear_cache = false;
+        if let Some(cached) = &mut self.inventory.train_armor {
+            if let Some(gtl) = self.inventory.items_body.get(TRAIN_ARMOR_SLOT).and_then(Option::as_ref).filter(|it| it.template_id == cached.template_id) {
+                *cached = gtl.clone();
+            } else if self.inventory.items_bag.iter().flatten().any(|it| it.template_id == cached.template_id) {
+                if let Some(opt) = cached.options.iter_mut().find(|o| o.id == 9 && o.param > 0) {
+                    opt.param -= 1;
+                }
+                clear_cache = cached.options.iter().find(|o| o.id == 9).is_none_or(|o| o.param <= 0);
+            } else {
+                clear_cache = true;
+            }
+        }
+        if clear_cache { self.inventory.train_armor = None; }
     }
 
     /// Returns the player's current caption level (`0..=19`).
