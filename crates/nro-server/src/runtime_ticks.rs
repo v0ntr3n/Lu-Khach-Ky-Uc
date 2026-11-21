@@ -172,10 +172,10 @@ fn tick_passive_regen(shared: &SharedServerState) {
 
 impl SharedServerState {
     fn resolve_entity_zone(&self, entity: nro_core::PlayerId) -> Option<(nro_core::MapId, nro_core::ZoneId)> {
-        self.bosses.lock().instances().get(&entity.0).map(|b| (b.map_id, b.zone_id)).or_else(|| {
-            let sid = self.clients.players.get(&entity).map(|s| *s.value())?;
-            self.clients.authenticated.get(&sid).map(|e| (e.snapshot.location.map_id, e.snapshot.location.zone_id))
-        })
+        let boss_zone = self.bosses.lock().instances().get(&entity.0).map(|b| (b.map_id, b.zone_id));
+        if let Some(zone) = boss_zone { return Some(zone); }
+        let sid = self.clients.players.get(&entity).map(|s| *s.value())?;
+        self.clients.authenticated.get(&sid).map(|e| (e.snapshot.location.map_id, e.snapshot.location.zone_id))
     }
 
     fn broadcast_zone_pkt(&self, map_id: nro_core::MapId, zone_id: nro_core::ZoneId, pkt: &nro_protocol::Packet) {

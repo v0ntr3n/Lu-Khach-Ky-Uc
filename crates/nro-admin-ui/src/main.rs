@@ -5,6 +5,7 @@
 
 mod app;
 mod inspector;
+mod views;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -143,16 +144,20 @@ fn main() {
             if let Err(err) = gpui_kit::open_window(window_options, cx, |window, cx| {
                 cx.new(|cx| AdminApp::new(ui_state, window, cx))
             }) {
+                error!(error = %err, "failed to open GPUI window");
                 eprintln!("[nro-server-gui] Failed to open GPUI window: {err:#}");
+                cx.quit();
             }
         });
 
-    if let Ok(guard) = boot_state.lock()
-        && let BootState::Ready(control) = &*guard
-    {
-        control.trigger_shutdown();
-    } else {
-        shutdown_token.cancel();
+    if !shutdown_token.is_cancelled() {
+        if let Ok(guard) = boot_state.lock()
+            && let BootState::Ready(control) = &*guard
+        {
+            control.trigger_shutdown();
+        } else {
+            shutdown_token.cancel();
+        }
     }
     let _ = server_thread.join();
 }
