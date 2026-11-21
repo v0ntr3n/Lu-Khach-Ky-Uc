@@ -28,10 +28,11 @@ pub struct AdminApp {
     users: Vec<AdminUserRow>,
     selected_account: Option<i32>,
     online_only: bool,
-    status_banner: SharedString,
-    audit_logs: VecDeque<String>,
+    is_refreshing: bool,
+    pub(crate) status_banner: SharedString,
+    pub(crate) audit_logs: VecDeque<String>,
     search_input: Entity<InputState>,
-    broadcast_input: Entity<InputState>,
+    pub(crate) broadcast_input: Entity<InputState>,
     pub(crate) gold_input: Entity<InputState>,
     pub(crate) gem_input: Entity<InputState>,
     pub(crate) vnd_input: Entity<InputState>,
@@ -52,8 +53,7 @@ impl AdminApp {
 
         let sub = cx.subscribe_in(&search_input, window, |this, _, event, _, cx| {
             if matches!(event, InputEvent::Change) {
-                this.refresh_data(cx);
-                cx.notify();
+                this.spawn_refresh(cx);
             }
         });
 
@@ -65,10 +65,13 @@ impl AdminApp {
 
         cx.spawn(async move |this, cx| {
             loop {
-                cx.background_executor().timer(Duration::from_millis(500)).await;
+                let is_booting = this
+                    .read_with(cx, |app, _| app.control.is_none() && app.boot_error.is_none())
+                    .unwrap_or(false);
+                let delay = if is_booting { Duration::from_millis(500) } else { Duration::from_secs(3) };
+                cx.background_executor().timer(delay).await;
                 let keep = this.update(cx, |app, cx| {
                     app.poll_boot_and_refresh(cx);
-                    cx.notify();
                 });
                 if keep.is_err() {
                     break;
@@ -85,6 +88,7 @@ impl AdminApp {
             users: Vec::new(),
             selected_account: None,
             online_only: false,
+            is_refreshing: false,
             status_banner: "Đang khởi động server...".into(),
             audit_logs,
             search_input,
@@ -100,7 +104,7 @@ impl AdminApp {
         app
     }
 
-    fn poll_boot_and_refresh(&mut self, cx: &App) {
+    fn poll_boot_and_refresh(&mut self, cx: &mut Context<Self>) {
         if self.control.is_none() && self.boot_error.is_none() {
             let next = self.boot_state.lock().ok().and_then(|guard| match &*guard {
                 BootState::Booting => None,
@@ -112,31 +116,71 @@ impl AdminApp {
                     let addr = ctrl.summary().bind_addr;
                     self.control = Some(ctrl);
                     self.push_feedback(format!("Server đã sẵn sàng tại {addr}"));
+                    cx.notify();
                 }
                 Some(Err(err)) => {
                     self.boot_error = Some(err.clone());
                     self.push_feedback(format!("Lỗi khởi động server: {err}"));
+                    cx.notify();
                 }
                 None => {}
             }
         }
-        self.refresh_data(cx);
+        self.spawn_refresh(cx);
     }
 
-    fn refresh_data(&mut self, cx: &App) {
-        let Some(control) = &self.control else {
+    pub(crate) fn spawn_refresh(&mut self, cx: &mut Context<Self>) {
+        if self.is_refreshing {
+            return;
+        }
+        let Some(control) = self.control.clone() else {
             return;
         };
+        self.is_refreshing = true;
         let query = self.search_input.read(cx).value().to_string();
-        self.summary = Some(control.summary());
-        self.users = control.list_users(&query, self.online_only);
-        if let Some(sel) = self.selected_account
-            && !self.users.iter().any(|u| u.account_id == sel)
-        {
-            self.selected_account = self.users.first().map(|u| u.account_id);
-        } else if self.selected_account.is_none() {
-            self.selected_account = self.users.first().map(|u| u.account_id);
-        }
+        let online_only = self.online_only;
+        cx.spawn(async move |this, cx| {
+            let (summary, users) = cx
+                .background_executor()
+                .spawn(async move { (control.summary(), control.list_users(&query, online_only)) })
+                .await;
+            let _ = this.update(cx, |app, cx| {
+                app.summary = Some(summary);
+                app.users = users;
+                if let Some(sel) = app.selected_account
+                    && !app.users.iter().any(|u| u.account_id == sel)
+                {
+                    app.selected_account = app.users.first().map(|u| u.account_id);
+                } else if app.selected_account.is_none() {
+                    app.selected_account = app.users.first().map(|u| u.account_id);
+                }
+                app.is_refreshing = false;
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub(crate) fn run_async_action<F>(&mut self, cx: &mut Context<Self>, work: F)
+    where
+        F: FnOnce(AdminControl) -> Result<String, String> + Send + 'static,
+    {
+        let Some(control) = self.control.clone() else {
+            self.push_feedback("Server chưa sẵn sàng.".to_owned());
+            cx.notify();
+            return;
+        };
+        cx.spawn(async move |this, cx| {
+            let res = cx.background_executor().spawn(async move { work(control) }).await;
+            let _ = this.update(cx, |app, cx| {
+                match res {
+                    Ok(msg) | Err(msg) => app.push_feedback(msg),
+                }
+                app.spawn_refresh(cx);
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     fn push_feedback(&mut self, msg: String) {
@@ -146,14 +190,6 @@ impl AdminApp {
         }
         self.audit_logs.push_front(line);
         self.status_banner = msg.into();
-    }
-
-    pub(crate) fn apply_result(&mut self, res: Result<String, String>, cx: &mut Context<Self>) {
-        match res {
-            Ok(msg) | Err(msg) => self.push_feedback(msg),
-        }
-        self.refresh_data(cx);
-        cx.notify();
     }
 
     pub(crate) fn selected_user(&self) -> Option<&AdminUserRow> {
@@ -177,11 +213,7 @@ impl AdminApp {
             ),
             None => (
                 false,
-                if self.boot_error.is_some() {
-                    "LỖI KHỞI ĐỘNG".to_owned()
-                } else {
-                    "ĐANG KHỞI ĐỘNG...".to_owned()
-                },
+                if self.boot_error.is_some() { "LỖI KHỞI ĐỘNG".to_owned() } else { "ĐANG KHỞI ĐỘNG...".to_owned() },
             ),
         };
 
@@ -214,19 +246,13 @@ impl AdminApp {
                             .icon(IconName::RefreshCw)
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.poll_boot_and_refresh(cx);
-                                cx.notify();
                             })),
                     )
                     .child(
                         Button::new("btn-maint")
                             .label(if maint { "Tắt bảo trì" } else { "Bật bảo trì" })
                             .on_click(cx.listener(move |this, _, _, cx| {
-                                if let Some(ctrl) = &this.control {
-                                    let msg = ctrl.set_maintenance(!maint);
-                                    this.push_feedback(msg);
-                                    this.refresh_data(cx);
-                                    cx.notify();
-                                }
+                                this.run_async_action(cx, move |ctrl| Ok(ctrl.set_maintenance(!maint)));
                             })),
                     )
                     .child(
@@ -244,38 +270,12 @@ impl AdminApp {
             )
     }
 
-    fn render_broadcast_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let border = cx.theme().border;
-        div()
-            .flex()
-            .flex_row()
-            .items_center()
-            .gap_2()
-            .px_4()
-            .py_2()
-            .border_b_1()
-            .border_color(border)
-            .child(div().flex_1().child(Input::new(&self.broadcast_input)))
-            .child(
-                Button::new("btn-broadcast")
-                    .primary()
-                    .label("Gửi thông báo")
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        let msg = this.broadcast_input.read(cx).value().to_string();
-                        if let Some(ctrl) = &this.control {
-                            let res = ctrl.broadcast(&msg);
-                            this.apply_result(res, cx);
-                        }
-                    })),
-            )
-    }
-
     fn render_user_list(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let (border, accent, bg) = (cx.theme().border, cx.theme().accent, cx.theme().background);
         let online_only = self.online_only;
         let mut rows_div = div().flex().flex_col().gap_1().flex_1().overflow_hidden();
 
-        for user in self.users.iter().take(100) {
+        for user in &self.users {
             let aid = user.account_id;
             let is_selected = self.selected_account == Some(aid);
             let status_txt = format!(
@@ -333,7 +333,7 @@ impl AdminApp {
                             .label(if online_only { "Đang lọc: Online" } else { "Hiển thị: Tất cả" })
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.online_only = !this.online_only;
-                                this.refresh_data(cx);
+                                this.spawn_refresh(cx);
                                 cx.notify();
                             })),
                     ),
@@ -342,23 +342,6 @@ impl AdminApp {
             .child(rows_div)
     }
 
-    fn render_footer(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let border = cx.theme().border;
-        let mut log_col = div().flex().flex_col().gap_1();
-        for entry in self.audit_logs.iter().take(5) {
-            log_col = log_col.child(Label::new(entry.clone()));
-        }
-        div()
-            .flex()
-            .flex_col()
-            .px_4()
-            .py_2()
-            .gap_1()
-            .border_t_1()
-            .border_color(border)
-            .child(Label::new(format!("Trạng thái: {}", self.status_banner)))
-            .child(log_col)
-    }
 }
 
 impl Render for AdminApp {

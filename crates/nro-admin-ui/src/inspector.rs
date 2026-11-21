@@ -44,10 +44,7 @@ impl AdminApp {
                     .gap_2()
                     .child(Button::new("btn-kick").label("Kick").on_click(cx.listener(
                         move |this, _, _, cx| {
-                            if let Some(ctrl) = &this.control {
-                                let res = ctrl.kick_user(aid);
-                                this.apply_result(res, cx);
-                            }
+                            this.run_async_action(cx, move |ctrl| ctrl.kick_user(aid));
                         },
                     )))
                     .child(
@@ -55,20 +52,14 @@ impl AdminApp {
                             .danger()
                             .label(if is_banned { "Unban" } else { "Ban" })
                             .on_click(cx.listener(move |this, _, _, cx| {
-                                if let Some(ctrl) = &this.control {
-                                    let res = ctrl.set_ban(aid, !is_banned);
-                                    this.apply_result(res, cx);
-                                }
+                                this.run_async_action(cx, move |ctrl| ctrl.set_ban(aid, !is_banned));
                             })),
                     )
                     .child(
                         Button::new("btn-active")
                             .label(if is_active { "Hủy TV" } else { "Kích hoạt TV" })
                             .on_click(cx.listener(move |this, _, _, cx| {
-                                if let Some(ctrl) = &this.control {
-                                    let res = ctrl.set_active(aid, !is_active);
-                                    this.apply_result(res, cx);
-                                }
+                                this.run_async_action(cx, move |ctrl| ctrl.set_active(aid, !is_active));
                             })),
                     ),
             )
@@ -82,10 +73,7 @@ impl AdminApp {
                     .on_click(cx.listener(move |this, _, _, cx| {
                         let gold = this.gold_input.read(cx).value().trim().parse::<i64>().unwrap_or(0);
                         let gem = this.gem_input.read(cx).value().trim().parse::<i32>().unwrap_or(0);
-                        if let Some(ctrl) = &this.control {
-                            let res = ctrl.grant_currency(aid, gold, gem, 0);
-                            this.apply_result(res, cx);
-                        }
+                        this.run_async_action(cx, move |ctrl| ctrl.grant_currency(aid, gold, gem, 0));
                     })),
             )
             .child(
@@ -97,10 +85,7 @@ impl AdminApp {
                     .child(Button::new("btn-add-vnd").label("Cập nhật VND").on_click(
                         cx.listener(move |this, _, _, cx| {
                             let delta = this.vnd_input.read(cx).value().trim().parse::<i64>().unwrap_or(0);
-                            if let Some(ctrl) = &this.control {
-                                let res = ctrl.add_vnd(aid, delta);
-                                this.apply_result(res, cx);
-                            }
+                            this.run_async_action(cx, move |ctrl| ctrl.add_vnd(aid, delta));
                         }),
                     )),
             )
@@ -120,11 +105,50 @@ impl AdminApp {
                     .on_click(cx.listener(move |this, _, _, cx| {
                         let tid = this.item_id_input.read(cx).value().trim().parse::<i16>().unwrap_or(-1);
                         let qty = this.item_qty_input.read(cx).value().trim().parse::<u32>().unwrap_or(1);
-                        if let Some(ctrl) = &this.control {
-                            let res = ctrl.give_item(aid, tid, qty);
-                            this.apply_result(res, cx);
-                        }
+                        this.run_async_action(cx, move |ctrl| ctrl.give_item(aid, tid, qty));
                     })),
             )
     }
+
+    pub(crate) fn render_footer(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let border = cx.theme().border;
+        let mut log_col = div().flex().flex_col().gap_1();
+        for entry in self.audit_logs.iter().take(5) {
+            log_col = log_col.child(Label::new(entry.clone()));
+        }
+        div()
+            .flex()
+            .flex_col()
+            .px_4()
+            .py_2()
+            .gap_1()
+            .border_t_1()
+            .border_color(border)
+            .child(Label::new(format!("Trạng thái: {}", self.status_banner)))
+            .child(log_col)
+    }
+
+    pub(crate) fn render_broadcast_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let border = cx.theme().border;
+        div()
+            .flex()
+            .flex_row()
+            .items_center()
+            .gap_2()
+            .px_4()
+            .py_2()
+            .border_b_1()
+            .border_color(border)
+            .child(div().flex_1().child(Input::new(&self.broadcast_input)))
+            .child(
+                Button::new("btn-broadcast")
+                    .primary()
+                    .label("Gửi thông báo")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        let msg = this.broadcast_input.read(cx).value().to_string();
+                        this.run_async_action(cx, move |ctrl| ctrl.broadcast(&msg));
+                    })),
+            )
+    }
+
 }

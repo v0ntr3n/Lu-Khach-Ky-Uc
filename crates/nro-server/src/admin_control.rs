@@ -14,34 +14,22 @@ use tracing::info;
 use crate::router::{self, snapshot_to_economy_inv, sync_economy_inv_to_snapshot, wallet_money_pkt};
 use crate::runtime::{SharedServerState, unix_now_ms};
 
+const MAX_LIST_ROWS: usize = 100;
+
 /// High-level runtime metrics shown in the admin control panel header.
 #[derive(Debug, Clone)]
 pub struct ServerSummary {
-    pub online_players: usize,
-    pub total_sessions: usize,
-    pub maintaining: bool,
-    pub uptime_secs: u64,
-    pub bind_addr: String,
+    pub online_players: usize, pub total_sessions: usize, pub maintaining: bool,
+    pub uptime_secs: u64, pub bind_addr: String,
 }
 
 /// Unified account + character row for the admin user table.
 #[derive(Debug, Clone)]
 pub struct AdminUserRow {
-    pub account_id: i32,
-    pub username: String,
-    pub player_id: Option<i64>,
-    pub player_name: String,
-    pub online: bool,
-    pub ban: bool,
-    pub active: bool,
-    pub is_admin: bool,
-    pub map_id: i16,
-    pub zone_id: u16,
-    pub power: i64,
-    pub gold: i64,
-    pub gem: i32,
-    pub ruby: i32,
-    pub vnd: i32,
+    pub account_id: i32, pub username: String, pub player_id: Option<i64>, pub player_name: String,
+    pub online: bool, pub ban: bool, pub active: bool, pub is_admin: bool,
+    pub map_id: i16, pub zone_id: u16, pub power: i64, pub gold: i64,
+    pub gem: i32, pub ruby: i32, pub vnd: i32,
 }
 
 /// Thread-safe handle allowing an embedded GUI to inspect and control live server state.
@@ -75,7 +63,7 @@ impl AdminControl {
         }
     }
 
-    /// Lists accounts (merged with live online state), optionally filtered by query and online status.
+    /// Lists up to [`MAX_LIST_ROWS`] accounts (online first), bounded to avoid full offline player scans.
     #[must_use]
     pub fn list_users(&self, query: &str, online_only: bool) -> Vec<AdminUserRow> {
         let needle = query.trim().to_ascii_lowercase();
@@ -85,12 +73,38 @@ impl AdminControl {
                 online_by_acc.insert(aid.0, entry.value().snapshot.clone());
             }
         }
-        let accounts = self.shared.accounts_repo.list_all().unwrap_or_default();
-        let mut rows = Vec::with_capacity(accounts.len());
+        let mut rows = Vec::with_capacity(MAX_LIST_ROWS);
+        if online_only {
+            for (aid, snap) in online_by_acc {
+                let acc = self.shared.accounts_repo.get_by_id(AccountId(aid)).ok().flatten();
+                let (username, ban, active, is_admin, vnd) = match acc {
+                    Some(a) => (a.username, a.ban, a.active != 0, a.is_admin, a.vnd),
+                    None => (format!("acc_{aid}"), false, false, false, 0),
+                };
+                if !matches_query(&needle, aid, &username, Some(snap.id.0), &snap.name) {
+                    continue;
+                }
+                rows.push(row_from_snap(aid, username, Some(snap), true, ban, active, is_admin, vnd, 0));
+            }
+            rows.sort_by_key(|r| r.account_id);
+            rows.truncate(MAX_LIST_ROWS);
+            return rows;
+        }
+
+        let mut accounts = self.shared.accounts_repo.list_all().unwrap_or_default();
+        accounts.sort_by(|a, b| {
+            let ao = online_by_acc.contains_key(&a.id);
+            let bo = online_by_acc.contains_key(&b.id);
+            bo.cmp(&ao).then_with(|| a.id.cmp(&b.id))
+        });
+
         for acc in accounts {
+            if rows.len() >= MAX_LIST_ROWS {
+                break;
+            }
             let live = online_by_acc.remove(&acc.id);
             let online = live.is_some();
-            if online_only && !online {
+            if !online && !needle.is_empty() && !matches_query(&needle, acc.id, &acc.username, None, "") {
                 continue;
             }
             let snap = live.or_else(|| {
@@ -99,47 +113,25 @@ impl AdminControl {
                     .ok()
                     .flatten()
             });
-            let (player_id, player_name, map_id, zone_id, power, gold, gem, ruby) = match snap {
-                Some(s) => (
-                    Some(s.id.0),
-                    s.name,
-                    s.location.map_id.0,
-                    s.location.zone_id.0,
-                    s.stats.power,
-                    s.wallet.gold,
-                    s.wallet.gem,
-                    s.wallet.ruby,
-                ),
-                None => (None, "(Chưa tạo NV)".to_owned(), 0, 0, 0, acc.vang, 0, 0),
+            let (pid, pname) = match &snap {
+                Some(s) => (Some(s.id.0), s.name.as_str()),
+                None => (None, ""),
             };
-            if !needle.is_empty() {
-                let matches_id = acc.id.to_string().contains(&needle)
-                    || player_id.is_some_and(|pid| pid.to_string().contains(&needle));
-                let matches_text = acc.username.to_ascii_lowercase().contains(&needle)
-                    || player_name.to_ascii_lowercase().contains(&needle);
-                if !matches_id && !matches_text {
-                    continue;
-                }
+            if !matches_query(&needle, acc.id, &acc.username, pid, pname) {
+                continue;
             }
-            rows.push(AdminUserRow {
-                account_id: acc.id,
-                username: acc.username,
-                player_id,
-                player_name,
+            rows.push(row_from_snap(
+                acc.id,
+                acc.username,
+                snap,
                 online,
-                ban: acc.ban,
-                active: acc.active != 0,
-                is_admin: acc.is_admin,
-                map_id,
-                zone_id,
-                power,
-                gold,
-                gem,
-                ruby,
-                vnd: acc.vnd,
-            });
+                acc.ban,
+                acc.active != 0,
+                acc.is_admin,
+                acc.vnd,
+                acc.vang,
+            ));
         }
-        rows.sort_by(|a, b| b.online.cmp(&a.online).then_with(|| a.account_id.cmp(&b.account_id)));
         rows
     }
 
@@ -236,7 +228,7 @@ impl AdminControl {
             return Err("Nhập ít nhất 1 giá trị Vàng / Ngọc / Hồng ngọc khác 0.".to_owned());
         }
         if let Some(sid) = self.shared.clients.accounts.get(&AccountId(account_id)).map(|v| *v.value()) {
-            let pkt = {
+            let (handle, money_pkt, notify_pkt) = {
                 let Some(mut entry) = self.shared.clients.authenticated.get_mut(&sid) else {
                     return Err("Không tìm thấy phiên người chơi.".to_owned());
                 };
@@ -244,14 +236,16 @@ impl AdminControl {
                     return Err("Người chơi đang giao dịch, vui lòng thử lại sau!".to_owned());
                 }
                 apply_wallet_deltas(&mut entry.snapshot, gold_delta, gem_delta, ruby_delta);
-                let pkt = wallet_money_pkt(&entry.snapshot.wallet);
-                let _ = entry.handle.try_send(pkt);
-                s2c_packets::thong_bao(&format!("Admin cập nhật ví: Vàng {gold_delta:+}, Ngọc {gem_delta:+}, Hồng ngọc {ruby_delta:+}"))
+                let handle = entry.handle.clone();
+                let money_pkt = wallet_money_pkt(&entry.snapshot.wallet);
+                let notify_pkt = s2c_packets::thong_bao(&format!(
+                    "Admin cập nhật ví: Vàng {gold_delta:+}, Ngọc {gem_delta:+}, Hồng ngọc {ruby_delta:+}"
+                ));
+                (handle, money_pkt, notify_pkt)
             };
-            if let Ok(notify) = pkt
-                && let Some(h) = self.shared.clients.sessions.get(&sid)
-            {
-                let _ = h.try_send(notify);
+            let _ = handle.try_send(money_pkt);
+            if let Ok(notify) = notify_pkt {
+                let _ = handle.try_send(notify);
             }
             return Ok(format!("Đã cập nhật tiền online cho tài khoản #{account_id}."));
         }
@@ -279,21 +273,27 @@ impl AdminControl {
             create_time_ms: unix_now_ms(),
         };
         if let Some(sid) = self.shared.clients.accounts.get(&AccountId(account_id)).map(|v| *v.value()) {
-            let mut entry = self
-                .shared
-                .clients
-                .authenticated
-                .get_mut(&sid)
-                .ok_or_else(|| "Không tìm thấy phiên người chơi.".to_owned())?;
-            if router::is_player_in_trade(entry.snapshot.id) {
-                return Err("Người chơi đang giao dịch, vui lòng thử lại sau!".to_owned());
-            }
-            let mut inv = snapshot_to_economy_inv(&entry.snapshot);
-            inv.add_to_bag(item, true).map_err(|err| format!("Hành trang đầy hoặc lỗi thêm đồ: {err}"))?;
-            sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
-            let _ = entry.handle.try_send(s2c_packets::inventory_bag(&entry.snapshot.items_bag));
-            if let Ok(msg) = s2c_packets::thong_bao(&format!("Admin vừa tặng bạn x{qty} vật phẩm #{template_id}!")) {
-                let _ = entry.handle.try_send(msg);
+            let (handle, bag_pkt, notify_pkt) = {
+                let mut entry = self
+                    .shared
+                    .clients
+                    .authenticated
+                    .get_mut(&sid)
+                    .ok_or_else(|| "Không tìm thấy phiên người chơi.".to_owned())?;
+                if router::is_player_in_trade(entry.snapshot.id) {
+                    return Err("Người chơi đang giao dịch, vui lòng thử lại sau!".to_owned());
+                }
+                let mut inv = snapshot_to_economy_inv(&entry.snapshot);
+                inv.add_to_bag(item, true).map_err(|err| format!("Hành trang đầy hoặc lỗi thêm đồ: {err}"))?;
+                sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
+                let handle = entry.handle.clone();
+                let bag_pkt = s2c_packets::inventory_bag(&entry.snapshot.items_bag);
+                let notify_pkt = s2c_packets::thong_bao(&format!("Admin vừa tặng bạn x{qty} vật phẩm #{template_id}!"));
+                (handle, bag_pkt, notify_pkt)
+            };
+            let _ = handle.try_send(bag_pkt);
+            if let Ok(msg) = notify_pkt {
+                let _ = handle.try_send(msg);
             }
             return Ok(format!("Đã tặng x{qty} item #{template_id} (online) cho tài khoản #{account_id}."));
         }
@@ -344,6 +344,34 @@ impl AdminControl {
             .broadcast_server_notify("Máy chủ đang tắt từ bảng điều khiển, đang lưu dữ liệu...");
         self.shutdown.cancel();
     }
+}
+
+fn matches_query(needle: &str, acc_id: i32, username: &str, pid: Option<i64>, pname: &str) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    acc_id.to_string().contains(needle)
+        || pid.is_some_and(|p| p.to_string().contains(needle))
+        || username.to_ascii_lowercase().contains(needle)
+        || pname.to_ascii_lowercase().contains(needle)
+}
+
+fn row_from_snap(
+    account_id: i32,
+    username: String,
+    snap: Option<PlayerSnapshot>,
+    online: bool,
+    ban: bool,
+    active: bool,
+    is_admin: bool,
+    vnd: i32,
+    fallback_gold: i64,
+) -> AdminUserRow {
+    let (player_id, player_name, map_id, zone_id, power, gold, gem, ruby) = match snap {
+        Some(s) => (Some(s.id.0), s.name, s.location.map_id.0, s.location.zone_id.0, s.stats.power, s.wallet.gold, s.wallet.gem, s.wallet.ruby),
+        None => (None, "(Chưa tạo NV)".to_owned(), 0, 0, 0, fallback_gold, 0, 0),
+    };
+    AdminUserRow { account_id, username, player_id, player_name, online, ban, active, is_admin, map_id, zone_id, power, gold, gem, ruby, vnd }
 }
 
 fn apply_wallet_deltas(snap: &mut PlayerSnapshot, gold_delta: i64, gem_delta: i32, ruby_delta: i32) {
