@@ -273,14 +273,6 @@ impl ServerSessionHandler {
         recalculate_snapshot_stats(&mut snap, self.shared.config.parity_mode);
         let (eff_head, eff_body, eff_leg, _, _) = effective_appearance(&self.shared.templates, &snap);
 
-        session.send(self.shared.assets.pkt_small_version_for_zoom(session.zoom_level())).await?;
-        session.send(self.shared.assets.pkt_bg_item_version_for_zoom(session.zoom_level())).await?;
-        session.send(DataGameAssets::pkt_version_game()).await?;
-        session.send(data_game_tpl::pkt_data_item_bg(&self.shared.templates)).await?;
-        if let Some(tile_pkt) = self.shared.assets.pkt_tile_set_info() {
-            session.send(tile_pkt).await?;
-        }
-
         let mut sm: SlotMap<nro_core::SessionKey, ()> = SlotMap::with_key();
         let session_key = sm.insert(());
         let (outbound_tx, mut outbound_rx) = mpsc::channel::<Packet>(256);
@@ -353,6 +345,13 @@ impl ServerSessionHandler {
             {
                 let _ = old_tx.send(ZoneCommand::LeavePlayer { player_id: ev_pid }).await;
             }
+        }
+        session.send(self.shared.assets.pkt_small_version_for_zoom(session.zoom_level())).await?;
+        session.send(self.shared.assets.pkt_bg_item_version_for_zoom(session.zoom_level())).await?;
+        session.send(DataGameAssets::pkt_version_game()).await?;
+        session.send(data_game_tpl::pkt_data_item_bg(&self.shared.templates)).await?;
+        if let Some(tile_pkt) = self.shared.assets.pkt_tile_set_info() {
+            session.send(tile_pkt).await?;
         }
         Ok(true)
     }

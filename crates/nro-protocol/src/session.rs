@@ -73,6 +73,7 @@ struct SessionShared {
     sent_key: AtomicBool,
     finish_update: AtomicBool,
     res_streamed: AtomicBool,
+    client_ok_sent: AtomicBool,
     client_type_set: AtomicBool,
     auth_cooldown_bypass: AtomicBool,
     client_version: AtomicI32,
@@ -113,6 +114,8 @@ impl SessionHandle {
     #[inline] pub fn set_finish_update(&self, done: bool) { self.shared.finish_update.store(done, Ordering::Release); }
     /// Atomically claims one-shot `-74` resource streaming on this session.
     #[inline] #[must_use] pub fn try_mark_res_streamed(&self) -> bool { !self.shared.res_streamed.swap(true, Ordering::AcqRel) }
+    /// Atomically claims one-shot in-world `ClientOk` (`-28` sub `13`) initialization on this session.
+    #[inline] #[must_use] pub fn try_mark_client_ok_sent(&self) -> bool { !self.shared.client_ok_sent.swap(true, Ordering::AcqRel) }
     /// Grants a one-shot login cooldown bypass after registration or guest creation.
     #[inline] pub fn grant_auth_cooldown_bypass(&self) { self.shared.auth_cooldown_bypass.store(true, Ordering::Release); }
     /// Consumes a pending one-shot login cooldown bypass on this session.
@@ -190,6 +193,7 @@ where
         sent_key: AtomicBool::new(false),
         finish_update: AtomicBool::new(false),
         res_streamed: AtomicBool::new(false),
+        client_ok_sent: AtomicBool::new(false),
         client_type_set: AtomicBool::new(false),
         auth_cooldown_bypass: AtomicBool::new(false),
         client_version: AtomicI32::new(0),

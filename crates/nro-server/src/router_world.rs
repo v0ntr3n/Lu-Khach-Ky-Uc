@@ -36,6 +36,10 @@ impl Drop for MapChangeGuard {
 
 impl ServerSessionHandler {
     pub(super) async fn handle_client_ok(&self, session: &SessionHandle, sid: u64) -> Result<(), ProtocolError> {
+        if !session.try_mark_client_ok_sent() {
+            tracing::debug!(sid, "ignoring duplicate ClientOk on already-admitted session");
+            return Ok(());
+        }
         let Some((snap, activated, ek)) = self
             .shared.clients.authenticated.get(&sid)
             .map(|e| (e.snapshot.clone(), e.activated, e.entity_key))
