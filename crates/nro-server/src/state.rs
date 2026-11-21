@@ -377,4 +377,8 @@ impl MaintenanceCoordinator {
     pub fn try_begin_maintenance(&self) -> bool {
         self.maintaining.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok()
     }
+    /// Explicitly toggles maintenance mode from the admin control panel.
+    pub fn set_maintaining(&self, enabled: bool) {
+        self.maintaining.store(enabled, Ordering::SeqCst);
+    }
 }

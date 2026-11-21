@@ -175,6 +175,8 @@ impl ServerRuntime {
         Ok(Self { shared, tracker, session_tracker, shutdown })
     }
 
+    /// Returns a cloned handle to the shared server state.
+    #[must_use] pub fn shared(&self) -> Arc<SharedServerState> { Arc::clone(&self.shared) }
     /// Locks new logins, broadcasts a `ServerNotify`, and cancels the root shutdown token.
     pub async fn trigger_immediate_shutdown(&self, reason: &str) {
         let _ = self.shared.maintenance.try_begin_maintenance();

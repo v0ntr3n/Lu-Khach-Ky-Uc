@@ -1,0 +1,24 @@
+[package]
+name = "nro-admin-ui"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100.0"
+description = "Embedded GPUI Kit desktop server & user control panel for Ngọc Rồng Online (Lu-Khach-Ky-Uc)"
+publish = false
+
+[[bin]]
+name = "nro-server-gui"
+path = "src/main.rs"
+
+[dependencies]
+nro-server = { path = "../nro-server" }
+nro-core = { path = "../nro-core" }
+
+gpui-kit = "0.10"
+anyhow = "1.0.104"
+chrono = "0.4.45"
+clap = { version = "4.6.7", features = ["derive", "env"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tokio-util = { version = "0.7.20", features = ["rt"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }

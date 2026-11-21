@@ -240,4 +240,42 @@ impl AccountRepo {
             password_upgraded,
         })
     }
+
+    /// Lists all accounts stored in `fjall` (for admin control panels).
+    pub fn list_all(&self) -> DbResult<Vec<AccountRow>> {
+        let mut out = Vec::new();
+        for guard in self.pool.ks().accounts.iter() {
+            let bytes = guard.value()?;
+            out.push(decode_val("account", &bytes)?);
+        }
+        Ok(out)
+    }
+
+    /// Updates `ban` flag on `account_id`, returning `true` if the account existed.
+    pub fn set_ban(&self, account_id: AccountId, ban: bool) -> DbResult<bool> {
+        let _guard = self.pool.lock_stripe(u64::from(account_id.0.cast_unsigned()));
+        let Some(mut row) = self.get_by_id(account_id)? else {
+            return Ok(false);
+        };
+        row.ban = ban;
+        self.pool
+            .ks()
+            .accounts
+            .insert(&enc_i32(account_id.0)[..], encode_val("account", &row)?)?;
+        Ok(true)
+    }
+
+    /// Updates member activation (`active`) on `account_id`, returning `true` if the account existed.
+    pub fn set_active(&self, account_id: AccountId, active: bool) -> DbResult<bool> {
+        let _guard = self.pool.lock_stripe(u64::from(account_id.0.cast_unsigned()));
+        let Some(mut row) = self.get_by_id(account_id)? else {
+            return Ok(false);
+        };
+        row.active = i32::from(active);
+        self.pool
+            .ks()
+            .accounts
+            .insert(&enc_i32(account_id.0)[..], encode_val("account", &row)?)?;
+        Ok(true)
+    }
 }

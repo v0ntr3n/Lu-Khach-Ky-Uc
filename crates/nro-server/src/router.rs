@@ -384,13 +384,14 @@ pub(super) fn send_dialog(session: &SessionHandle, text: &str) -> Result<(), Pro
 pub(super) fn send_thong_bao(session: &SessionHandle, text: &str) -> Result<(), ProtocolError> {
     let pkt = s2c_packets::thong_bao(text)?; let _ = session.try_send(pkt); Ok(())
 }
-pub(super) fn wallet_money_pkt(w: &InventoryWallet) -> Packet {
+pub(crate) fn is_player_in_trade(pid: PlayerId) -> bool { router_shop::is_in_trade(pid) }
+pub(crate) fn wallet_money_pkt(w: &InventoryWallet) -> Packet {
     s2c_packets::send_money(w.gold.max(0).cast_unsigned(), u64::from(w.gem.max(0).cast_unsigned()), u64::from(w.ruby.max(0).cast_unsigned()))
 }
-pub(super) fn snapshot_to_economy_inv(snap: &PlayerSnapshot) -> Inventory {
+pub(crate) fn snapshot_to_economy_inv(snap: &PlayerSnapshot) -> Inventory {
     Inventory { gold: snap.wallet.gold.max(0).cast_unsigned(), gem: snap.wallet.gem.max(0).cast_unsigned(), ruby: snap.wallet.ruby.max(0).cast_unsigned(), coupon: snap.wallet.coupon.max(0).cast_unsigned(), body: snap.items_body.clone(), bag: snap.items_bag.clone(), box_items: snap.items_box.clone(), lucky_round_box: snap.items_box_lucky_round.clone() }
 }
-pub(super) fn sync_economy_inv_to_snapshot(inv: &Inventory, snap: &mut PlayerSnapshot) {
+pub(crate) fn sync_economy_inv_to_snapshot(inv: &Inventory, snap: &mut PlayerSnapshot) {
     snap.wallet.gold = i64::try_from(inv.gold).unwrap_or(i64::MAX); snap.wallet.gem = i32::try_from(inv.gem).unwrap_or(i32::MAX); snap.wallet.ruby = i32::try_from(inv.ruby).unwrap_or(i32::MAX); snap.wallet.coupon = i32::try_from(inv.coupon).unwrap_or(i32::MAX);
     snap.items_body.clone_from(&inv.body); snap.items_bag.clone_from(&inv.bag); snap.items_box.clone_from(&inv.box_items); snap.items_box_lucky_round.clone_from(&inv.lucky_round_box);
 }

@@ -5,13 +5,7 @@
 //! `ServerNotify`, `Manager`, and `DataGame`) with structured Tokio supervision backed by
 //! embedded `fjall` LSM-tree storage (`nro-db`) and direct `SRC/data` binary asset streaming.
 
-pub mod config;
-pub mod data_game;
-pub mod data_game_tpl;
-pub mod pgo_bench;
-pub mod router;
-pub mod runtime;
-pub mod state;
+use nro_server::{config, data_game, pgo_bench, runtime};
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -24,8 +18,8 @@ use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
-use crate::config::ServerConfig;
-use crate::runtime::ServerRuntime;
+use config::ServerConfig;
+use runtime::ServerRuntime;
 
 /// Command-line flags for `nro-server`.
 #[derive(Debug, Clone, Parser)]
@@ -166,7 +160,7 @@ async fn main() -> anyhow::Result<()> {
 mod tests {
     use std::fs;
     use super::*;
-    use crate::data_game::DataGameAssets;
+    use super::data_game::DataGameAssets;
     use nro_core::{AccountId, Gender, MapId, PlayerId};
     use nro_db::player_repo::{NewPlayerSeed, PlayerSnapshot};
     use nro_db::templates::{GameTemplates, ItemTemplateRecord, MapTemplateRecord, SkillTemplateRecord};

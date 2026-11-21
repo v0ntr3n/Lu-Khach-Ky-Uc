@@ -6,6 +6,10 @@ rust-version.workspace = true
 description = "Ngọc Rồng Online (Teamobi2026) Safe Rust authoritative game server binary"
 publish = false
 
+[lib]
+name = "nro_server"
+path = "src/lib.rs"
+
 [[bin]]
 name = "nro-server"
 path = "src/main.rs"

@@ -10,6 +10,7 @@ members = [
     "crates/nro-world",
     "crates/nro-server",
 ]
+exclude = ["crates/nro-admin-ui"]
 resolver = "3"
 
 [workspace.package]
