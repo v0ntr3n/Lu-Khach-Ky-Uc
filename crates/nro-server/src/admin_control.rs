@@ -71,7 +71,7 @@ impl AdminControl {
             total_sessions: self.shared.clients.sessions.len(),
             maintaining: self.shared.maintenance.is_maintaining(),
             uptime_secs: self.shared.started_at.elapsed().as_secs(),
-            bind_addr: self.shared.config.network.bind_addr.to_string(),
+            bind_addr: format!("{}:{}", self.shared.config.bind_ip, self.shared.config.port),
         }
     }
 
