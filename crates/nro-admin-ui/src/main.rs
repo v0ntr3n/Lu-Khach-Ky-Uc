@@ -91,10 +91,11 @@ fn spawn_server_thread(
 
                 let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build()?;
                 let rt_handle = rt.handle().clone();
+                let ready_state = Arc::clone(&boot_state);
                 rt.block_on(async move {
                     let runtime = ServerRuntime::boot(config, bg_shutdown.clone()).await?;
                     let control = AdminControl::new(runtime.shared(), rt_handle, bg_shutdown.clone());
-                    if let Ok(mut guard) = boot_state.lock() {
+                    if let Ok(mut guard) = ready_state.lock() {
                         *guard = BootState::Ready(control);
                     }
                     bg_shutdown.cancelled().await;

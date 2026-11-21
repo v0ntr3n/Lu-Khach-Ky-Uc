@@ -10,7 +10,7 @@ use crate::app::AdminApp;
 
 impl AdminApp {
     pub(crate) fn render_inspector(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
+        let border = cx.theme().border;
         let Some(user) = self.selected_user().cloned() else {
             return div()
                 .w(px(380.0))
@@ -27,7 +27,7 @@ impl AdminApp {
             .w(px(380.0))
             .p_4()
             .gap_3()
-            .border_color(theme.border)
+            .border_color(border)
             .child(Label::new(format!("Tài khoản #{aid} — {}", user.username)))
             .child(Label::new(format!(
                 "Nhân vật: {} | SM: {} | Map {}:{}",

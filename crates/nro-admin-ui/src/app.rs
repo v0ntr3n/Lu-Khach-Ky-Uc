@@ -101,21 +101,23 @@ impl AdminApp {
     }
 
     fn poll_boot_and_refresh(&mut self, cx: &App) {
-        if self.control.is_none()
-            && self.boot_error.is_none()
-            && let Ok(guard) = self.boot_state.lock()
-        {
-            match &*guard {
-                BootState::Booting => {}
-                BootState::Ready(ctrl) => {
-                    let s = ctrl.summary();
-                    self.control = Some(ctrl.clone());
-                    self.push_feedback(format!("Server đã sẵn sàng tại {}", s.bind_addr));
+        if self.control.is_none() && self.boot_error.is_none() {
+            let next = self.boot_state.lock().ok().and_then(|guard| match &*guard {
+                BootState::Booting => None,
+                BootState::Ready(ctrl) => Some(Ok(ctrl.clone())),
+                BootState::Failed(err) => Some(Err(err.clone())),
+            });
+            match next {
+                Some(Ok(ctrl)) => {
+                    let addr = ctrl.summary().bind_addr;
+                    self.control = Some(ctrl);
+                    self.push_feedback(format!("Server đã sẵn sàng tại {addr}"));
                 }
-                BootState::Failed(err) => {
+                Some(Err(err)) => {
                     self.boot_error = Some(err.clone());
                     self.push_feedback(format!("Lỗi khởi động server: {err}"));
                 }
+                None => {}
             }
         }
         self.refresh_data(cx);
@@ -160,7 +162,7 @@ impl AdminApp {
     }
 
     fn render_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
+        let border = cx.theme().border;
         let (maint, status_line) = match &self.summary {
             Some(s) => (
                 s.maintaining,
@@ -191,7 +193,7 @@ impl AdminApp {
             .px_4()
             .py_3()
             .border_b_1()
-            .border_color(theme.border)
+            .border_color(border)
             .child(
                 div()
                     .flex()
@@ -243,7 +245,7 @@ impl AdminApp {
     }
 
     fn render_broadcast_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
+        let border = cx.theme().border;
         div()
             .flex()
             .flex_row()
@@ -252,7 +254,7 @@ impl AdminApp {
             .px_4()
             .py_2()
             .border_b_1()
-            .border_color(theme.border)
+            .border_color(border)
             .child(div().flex_1().child(Input::new(&self.broadcast_input)))
             .child(
                 Button::new("btn-broadcast")
@@ -269,7 +271,7 @@ impl AdminApp {
     }
 
     fn render_user_list(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
+        let (border, accent, bg) = (cx.theme().border, cx.theme().accent, cx.theme().background);
         let online_only = self.online_only;
         let mut rows_div = div().flex().flex_col().gap_1().flex_1().overflow_hidden();
 
@@ -282,7 +284,7 @@ impl AdminApp {
                 if user.active { " | TV" } else { "" },
                 if user.ban { " | BAN" } else { "" }
             );
-            let row_bg = if is_selected { theme.accent } else { theme.background };
+            let row_bg = if is_selected { accent } else { bg };
             rows_div = rows_div.child(
                 div()
                     .id(("user-row", aid.cast_unsigned() as usize))
@@ -294,7 +296,7 @@ impl AdminApp {
                     .py_2()
                     .rounded_md()
                     .border_1()
-                    .border_color(theme.border)
+                    .border_color(border)
                     .bg(row_bg)
                     .cursor_pointer()
                     .on_click(cx.listener(move |this, _, _, cx| {
@@ -319,7 +321,7 @@ impl AdminApp {
             .p_3()
             .gap_2()
             .border_r_1()
-            .border_color(theme.border)
+            .border_color(border)
             .child(
                 div()
                     .flex()
@@ -341,7 +343,7 @@ impl AdminApp {
     }
 
     fn render_footer(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
+        let border = cx.theme().border;
         let mut log_col = div().flex().flex_col().gap_1();
         for entry in self.audit_logs.iter().take(5) {
             log_col = log_col.child(Label::new(entry.clone()));
@@ -353,7 +355,7 @@ impl AdminApp {
             .py_2()
             .gap_1()
             .border_t_1()
-            .border_color(theme.border)
+            .border_color(border)
             .child(Label::new(format!("Trạng thái: {}", self.status_banner)))
             .child(log_col)
     }
@@ -361,7 +363,7 @@ impl AdminApp {
 
 impl Render for AdminApp {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
+        let (bg, fg) = (cx.theme().background, cx.theme().foreground);
         let body = if let Some(err) = &self.boot_error {
             div()
                 .flex()
@@ -388,8 +390,8 @@ impl Render for AdminApp {
             .flex()
             .flex_col()
             .size_full()
-            .bg(theme.background)
-            .text_color(theme.foreground)
+            .bg(bg)
+            .text_color(fg)
             .child(self.render_header(cx))
             .child(self.render_broadcast_bar(cx))
             .child(body)
