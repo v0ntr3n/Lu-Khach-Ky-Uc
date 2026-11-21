@@ -8,7 +8,7 @@ use nro_core::{Gender, ItemInstance, ItemOption, MapId, TemplateId};
 use smallvec::smallvec;
 
 const fn req_for_stage(stage: u8) -> u32 {
-    match stage { 1 => 10, 2 => 3, 3 => 5, 4 => 10, 5 => 5, 6 => 1_000, 7 => 5_000, _ => u32::MAX }
+    match stage { 1 | 4 => 10, 2 => 3, 3 | 5 => 5, 6 => 1_000, 7 => 5_000, _ => u32::MAX }
 }
 
 impl NpcMenuRouter {

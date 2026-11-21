@@ -90,7 +90,7 @@ impl AccountRepo {
                 .pool
                 .ks()
                 .idx_account_user
-                .contains_key(&canonical_lookup_key(&username))?
+                .contains_key(canonical_lookup_key(&username))?
             {
                 break (id, username);
             }
