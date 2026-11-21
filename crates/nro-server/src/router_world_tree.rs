@@ -151,7 +151,7 @@ impl ServerSessionHandler {
                             pkts.push(load_pkt);
                         }
                         pkts.push(wallet_money_pkt(&entry.snapshot.wallet));
-                        (pkts, Some(format!("Đã hủy nâng cấp Đậu thần, hoàn lại {refund} vàng!")))
+                        (pkts, Some(if refund > 0 { format!("Đã hủy nâng cấp Đậu thần, hoàn lại {refund} vàng!") } else { "Đã hủy nâng cấp Đậu thần!".to_owned() }))
                     }
                     Err(_) => (
                         Vec::new(),
@@ -233,7 +233,7 @@ pub(super) fn build_magic_tree_menu_pkt(snap: &PlayerSnapshot) -> Result<Packet,
     } else {
         owned.push("Thu hoạch".to_owned());
         if let Some(gold) = mt.upgrade_gold_cost() {
-            owned.push(format!("Nâng cấp\n({gold} vàng)"));
+            owned.push(if gold == 0 { "Nâng cấp\n(Miễn phí)".to_owned() } else { format!("Nâng cấp\n({gold} vàng)") });
         }
         if mt.curr_peas < mt.max_peas() {
             owned.push(format!("Kết hạt nhanh\n({} ngọc)", mt.fast_harvest_gem_cost()));

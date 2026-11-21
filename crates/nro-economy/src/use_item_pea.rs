@@ -47,7 +47,7 @@ pub struct MagicTreeState {
 }
 
 impl MagicTreeState {
-    const UP_GOLD: [u64; 9] = [5_000, 10_000, 100_000, 1_000_000, 10_000_000, 20_000_000, 50_000_000, 100_000_000, 300_000_000];
+    const UP_GOLD: [u64; 9] = [0; 9];
     const UP_MS: [i64; 9] = [600_000, 6_000_000, 60_000_000, 597_600_000, 1_198_800_000, 2_397_600_000, 4_798_800_000, 5_997_600_000, 9_000_000_000];
     const FAST_UP_GEM: [u32; 10] = [20, 50, 120, 300, 800, 1500, 3000, 6000, 7500, 10_000];
     const FAST_HV_GEM: [u32; 10] = [1, 2, 5, 7, 9, 12, 15, 20, 25, 30];
@@ -322,16 +322,16 @@ mod tests {
         let mut inv = Inventory::new(8, 8, 12);
         inv.gold = 20_000;
         let mut tree = MagicTreeState { level: 1, curr_peas: 5, is_upgrading: false, timer_ms: 0 };
-        assert_eq!(tree.upgrade_gold_cost(), Some(5_000));
+        assert_eq!(tree.upgrade_gold_cost(), Some(0));
         assert_eq!(tree.fast_harvest_gem_cost(), 1);
         assert_eq!(tree.fast_upgrade_gem_cost(), 20);
         assert_eq!(tree.cancel_upgrade(&mut inv, 1_000), Err(UseItemError::PreconditionFailed("tree is not upgrading")));
         tree.start_upgrade(&mut inv, 1_000).unwrap();
         assert!(tree.is_upgrading);
-        assert_eq!(inv.gold, 15_000);
-        assert_eq!(tree.cancel_upgrade(&mut inv, 5_000).unwrap(), 2_500);
+        assert_eq!(inv.gold, 20_000);
+        assert_eq!(tree.cancel_upgrade(&mut inv, 5_000).unwrap(), 0);
         assert!(!tree.is_upgrading);
-        assert_eq!(inv.gold, 17_500);
+        assert_eq!(inv.gold, 20_000);
         inv.gem = 10;
         assert_eq!(tree.fast_finish(&mut inv, 6_000), Err(UseItemError::PreconditionFailed("peas already full")));
         assert_eq!(inv.gem, 10);
