@@ -1,0 +1,69 @@
+name: Windows Admin GUI (GPUI Kit)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/nro-admin-ui/**"
+      - "crates/nro-server/src/admin_control.rs"
+      - "crates/nro-server/src/lib.rs"
+      - ".cargo/config.toml"
+      - ".github/workflows/windows-gui.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  build_windows_gui:
+    name: Build Windows nro-server-gui.exe
+    runs-on: windows-latest
+    env:
+      CARGO_TERM_COLOR: never
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.100.0
+        uses: dtolnay/rust-toolchain@1.100.0
+
+      - name: Cache Cargo registry & target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/nro-admin-ui -> target
+
+      - name: Build nro-server-gui (release)
+        id: build
+        shell: pwsh
+        run: |
+          $log = "gui-build.log"
+          cargo build --manifest-path crates/nro-admin-ui/Cargo.toml --release 2>&1 | Tee-Object -FilePath $log
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Upload nro-server-gui.exe artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nro-server-gui-windows-x64
+          path: crates/nro-admin-ui/target/release/nro-server-gui.exe
+          retention-days: 14
+
+      - name: Open issue on build failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const sha = context.sha.slice(0, 7);
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            let log = fs.existsSync('gui-build.log') ? fs.readFileSync('gui-build.log', 'utf8') : 'No build log captured.';
+            if (log.length > 55000) log = log.slice(-55000);
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `CI Failed: Windows Admin GUI (${sha})`,
+              body: `### CI Failed: \`Build Windows nro-server-gui.exe\`\n\n- **Commit:** \`${context.sha}\`\n- **Run:** ${runUrl}\n\n\`\`\`text\n${log}\n\`\`\`\n`
+            });
