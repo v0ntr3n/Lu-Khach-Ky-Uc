@@ -106,7 +106,7 @@ impl ServerSessionHandler {
                     let had_pet = entry.snapshot.pet.is_some();
                     if let Some(pet) = entry.snapshot.pet.as_mut() {
                         pet.type_pet = 1;
-                        pet.name = "$Mabư".to_owned();
+                        "$Mabư".clone_into(&mut pet.name);
                     } else {
                         let g = entry.snapshot.gender;
                         let first_sk = match g { Gender::TraiDat => 0, Gender::Namec => 2, Gender::Xayda => 4 };

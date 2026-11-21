@@ -56,6 +56,7 @@ pub(crate) fn put_utf(pw: &mut PacketWriter, text: &str) {
 
 /// Immutable serialized bulk template packets cached lazily per [`DataGameAssets`] instance.
 #[derive(Debug, Default)]
+#[allow(clippy::struct_field_names)]
 pub(crate) struct CachedTemplates {
     pub(crate) update_data: OnceLock<Packet>,
     pub(crate) update_map: OnceLock<Packet>,

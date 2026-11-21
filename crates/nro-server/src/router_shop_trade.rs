@@ -153,7 +153,7 @@ impl ServerSessionHandler {
             TradeAction::InviteOrAccept(0, Some(tpid)) if tpid != my_pid => {
                 if !my_alive { return send_thong_bao(session, "Không thể giao dịch khi đã chết!"); }
                 if is_in_trade(my_pid) || is_in_trade(tpid) { return send_thong_bao(session, "Không thể thao tác khi đang giao dịch!"); }
-                if { let pvp = super::router_combat_pvp::lock_pvp(); pvp.contains_key(&my_pid) || pvp.contains_key(&tpid) } { return send_thong_bao(session, "Không thể giao dịch khi đang trong trận PvP!"); }
+                let in_pvp = { let pvp = super::router_combat_pvp::lock_pvp(); pvp.contains_key(&my_pid) || pvp.contains_key(&tpid) }; if in_pvp { return send_thong_bao(session, "Không thể giao dịch khi đang trong trận PvP!"); }
                 let target = self.shared.clients.players.get(&tpid).and_then(|s| self.shared.clients.authenticated.get(s.value()).map(|e| ((e.snapshot.location.map_id, e.snapshot.location.zone_id), e.handle.clone(), e.snapshot.stats.hp > 0)));
                 if let Some((tz, th, target_alive)) = target && tz == my_zone {
                     if !target_alive { return send_thong_bao(session, "Không thể giao dịch khi người chơi đã chết!"); }
@@ -174,7 +174,7 @@ impl ServerSessionHandler {
                 if !my_alive { return send_thong_bao(session, "Không thể giao dịch khi đã chết!"); }
                 let (p1, p2, _) = trade_pair_key(my_pid, tpid);
                 if is_in_trade(p1) || is_in_trade(p2) { return send_thong_bao(session, "Không thể thao tác khi đang giao dịch!"); }
-                if { let pvp = super::router_combat_pvp::lock_pvp(); pvp.contains_key(&p1) || pvp.contains_key(&p2) } { return send_thong_bao(session, "Không thể giao dịch khi đang trong trận PvP!"); }
+                let in_pvp = { let pvp = super::router_combat_pvp::lock_pvp(); pvp.contains_key(&p1) || pvp.contains_key(&p2) }; if in_pvp { return send_thong_bao(session, "Không thể giao dịch khi đang trong trận PvP!"); }
                 let err_msg = {
                     let guard = trade_lifecycle_lock().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                     let msg = if pending_trade_invites().remove(&(tpid, my_pid)).is_none_or(|(_, exp)| exp < now_ms) { None }

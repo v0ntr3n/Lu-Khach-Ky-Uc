@@ -205,7 +205,7 @@ impl ServerSessionHandler {
                             return Some(Err("Không thể dịch chuyển đến khu vực này!"));
                         }
                         let my_pid = me.snapshot.id;
-                        if { let pvp = lock_pvp(); pvp.contains_key(&my_pid) || pvp.contains_key(&tpid) } {
+                        let in_pvp = { let pvp = lock_pvp(); pvp.contains_key(&my_pid) || pvp.contains_key(&tpid) }; if in_pvp {
                             return Some(Err("Không thể trả thù khi đang trong trận PvP!"));
                         }
                         let used_ruby = if me.snapshot.wallet.ruby >= 1 {

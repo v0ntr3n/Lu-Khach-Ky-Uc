@@ -384,9 +384,9 @@ mod tests {
         let mut g = 2_000_000;
         s.place_spectator_bet(PlayerId(1), &mut g, true).expect("bet");
         assert_eq!(s.settle_bets(true), vec![(PlayerId(1), 900_000)]);
-        assert!(s.settle_bets(true).is_empty());
+        assert_eq!(s.settle_bets(true), Vec::new());
         s.place_spectator_bet(PlayerId(2), &mut g, false).expect("bet2");
-        assert!(s.settle_bets(true).is_empty());
+        assert_eq!(s.settle_bets(true), Vec::new());
         assert!(s.votes.0.is_empty() && s.votes.1.is_empty());
     }
 }
