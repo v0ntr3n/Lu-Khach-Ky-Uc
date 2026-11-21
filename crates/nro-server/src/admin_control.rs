@@ -246,10 +246,7 @@ impl AdminControl {
                 apply_wallet_deltas(&mut entry.snapshot, gold_delta, gem_delta, ruby_delta);
                 let pkt = wallet_money_pkt(&entry.snapshot.wallet);
                 let _ = entry.handle.try_send(pkt);
-                s2c_packets::thong_bao(&format!(
-                    "Admin cập nhật ví: Vàng {:+}, Ngọc {:+}, Hồng ngọc {:+}",
-                    gold_delta, gem_delta, ruby_delta
-                ))
+                s2c_packets::thong_bao(&format!("Admin cập nhật ví: Vàng {gold_delta:+}, Ngọc {gem_delta:+}, Hồng ngọc {ruby_delta:+}"))
             };
             if let Ok(notify) = pkt
                 && let Some(h) = self.shared.clients.sessions.get(&sid)
