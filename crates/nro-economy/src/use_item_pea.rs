@@ -222,7 +222,7 @@ impl LuckyRoundService {
             if mode == LuckyRoundMode::VipGold { staged.sub_gold(250_000_000)?; }
             else if staged.count_template_in_bag(TemplateId(const_item::VE_QUAY_NGOC_VANG as i16)) > 0 { staged.sub_template_from_bag(TemplateId(const_item::VE_QUAY_NGOC_VANG as i16), 1)?; }
             else { staged.sub_gem(4)?; }
-            let prize = ItemInstance { template_id: TemplateId([17i16, 18, 19, 20, 220, 441, 381][rng.next_range(0, 6) as usize]), quantity: 1, options: smallvec![], create_time_ms: 0 };
+            let prize = ItemInstance { template_id: TemplateId([17i16, 18, 19, 20, 220, 441, 381][rng.next_range(0, 6) as usize]), quantity: 1, options: smallvec::smallvec![], create_time_ms: 0 };
             if let Some(empty) = staged.lucky_round_box.iter_mut().find(|slot| slot.is_none()) { *empty = Some(prize); } else { staged.lucky_round_box.push(Some(prize)); }
         }
         *inv = staged;
@@ -362,17 +362,17 @@ mod tests {
         seller.set_bag_slot(0, Some(UseItemService::mk(457, 2, &[], 1_000))).unwrap();
         seller.set_bag_slot(1, Some(UseItemService::mk(14, 1, &[(opt_id::CONSIGN_GOLD, 0)], 1_000))).unwrap();
         let mut market = ConsignShop::default();
-        let lid = market.list_item_with_catalog(&mut seller, PlayerId(1), 1, ConsignCurrency::Gold, 100_000, 1, &BuiltinCatalog).unwrap();
+        let lid = market.list_item_with_catalog(&mut seller, nro_core::PlayerId(1), 1, ConsignCurrency::Gold, 100_000, 1, &BuiltinCatalog).unwrap();
         assert!((1..=u64::from(i16::MAX.cast_unsigned())).contains(&lid));
         let mut buyer = Inventory::new(8, 8, 12);
         buyer.gold = 200_000;
-        market.buy_item_with_catalog(&mut buyer, PlayerId(2), 20_000_000_000, lid, &BuiltinCatalog).unwrap();
-        assert!(market.claim_proceeds(&mut seller, PlayerId(1), lid).is_err());
-        assert_eq!(market.seller_listings(PlayerId(1)).len(), 1);
+        market.buy_item_with_catalog(&mut buyer, nro_core::PlayerId(2), 20_000_000_000, lid, &BuiltinCatalog).unwrap();
+        assert!(market.claim_proceeds(&mut seller, nro_core::PlayerId(1), lid).is_err());
+        assert_eq!(market.seller_listings(nro_core::PlayerId(1)).len(), 1);
         seller.gold = 0;
-        assert_eq!(market.claim_proceeds(&mut seller, PlayerId(1), lid).unwrap(), 90_000);
+        assert_eq!(market.claim_proceeds(&mut seller, nro_core::PlayerId(1), lid).unwrap(), 90_000);
 
-        let listing = ShopItemListing { template_id: TemplateId(381), quantity: 1, cost: 10, currency: ShopCurrency::Gold, gender: None, options: smallvec![] };
+        let listing = ShopItemListing { template_id: TemplateId(381), quantity: 1, cost: 10, currency: ShopCurrency::Gold, gender: None, options: smallvec::smallvec![] };
         let (mut ep, mut cc) = (0, 0);
         let bought = ShopService::buy_listing(&mut buyer, ShopType::Normal, ShopTabKind::Standard, &listing, &mut ep, &mut cc, false, &BuiltinCatalog, &mut rng).unwrap().unwrap();
         assert!(bought.create_time_ms > 0);

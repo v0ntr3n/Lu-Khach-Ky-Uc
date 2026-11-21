@@ -276,7 +276,7 @@ impl FjallEngine {
         let max_wire_id = i64::from(i32::MAX);
         self.inner
             .next_player_id
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |cur| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |cur| {
                 (1..=max_wire_id).contains(&cur).then_some(cur.saturating_add(1))
             })
             .map_err(|cur| DbError::InvalidColumnFormat {
