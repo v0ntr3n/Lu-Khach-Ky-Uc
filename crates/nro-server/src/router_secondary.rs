@@ -131,10 +131,11 @@ impl ServerSessionHandler {
                     if !pet.items_body.iter().all(Option::is_none) {
                         return Err("Vui lòng tháo hết trang bị của đệ tử trước khi hợp thể vĩnh viễn!");
                     }
+                    let pet_power = pet.stats.power.max(0);
                     entry.snapshot.data_event.0[5] |= STARTER_PET_CLAIMED_FLAG;
                     let lim_idx = usize::from(entry.snapshot.stats.limit_power).min(LIMIT_TIERS.len() - 1);
                     let max_add = LIMIT_TIERS[lim_idx].0.saturating_sub(entry.snapshot.stats.power).max(0);
-                    let bonus = pet.stats.power.max(0).min(max_add);
+                    let bonus = pet_power.min(max_add);
                     entry.snapshot.stats.power = entry.snapshot.stats.power.saturating_add(bonus);
                     entry.snapshot.stats.tiem_nang = entry.snapshot.stats.tiem_nang.saturating_add(bonus);
                     entry.snapshot.pet = None;

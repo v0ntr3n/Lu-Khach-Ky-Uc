@@ -133,7 +133,7 @@ impl ServerSessionHandler {
                         && let Some(last) = flag_cooldown().get(&pid).map(|v| *v.value())
                         && now_ms.saturating_sub(last) < FLAG_CHANGE_COOLDOWN_MS
                     {
-                        let rem = (FLAG_CHANGE_COOLDOWN_MS - now_ms.saturating_sub(last)).div_ceil(1_000).max(1);
+                        let rem = ((FLAG_CHANGE_COOLDOWN_MS - now_ms.saturating_sub(last)).saturating_add(999) / 1_000).max(1);
                         return Some(Err(rem));
                     }
                     entry.c_flag = cf;

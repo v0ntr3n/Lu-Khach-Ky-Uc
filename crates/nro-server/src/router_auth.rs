@@ -326,9 +326,9 @@ impl ServerSessionHandler {
                 tokio::select! {
                     biased;
                     () = cancel.cancelled() => break,
-                    maybe = outbound_rx.recv() => match maybe {
-                        Some(pkt) if fwd_session.send(pkt).await.is_ok() => {}
-                        _ => break,
+                    maybe = outbound_rx.recv() => {
+                        let Some(pkt) = maybe else { break; };
+                        if fwd_session.send(pkt).await.is_err() { break; }
                     }
                 }
             }

@@ -98,7 +98,7 @@ impl ServerSessionHandler {
         entry.snapshot.stats.mp = new_mp; entry.snapshot.skills[sk_idx].last_time_use_ms = now_ms;
         let (skill_kind, skill_point) = (SkillKind::from_repr(sel as u8), u8::try_from(pt.clamp(1, 7)).unwrap_or(1));
         let skill_paint_id = u8::try_from(lv.id.clamp(0, 255)).unwrap_or(0);
-        let (mob_dmg, pvp_dmg, is_crit) = compute_attack_damage(entry, sid, skill_kind.unwrap_or(SkillKind::Dragon), lv.damage.max(100), skill_point, now_ms, self.shared.config.parity_mode);
+        let (mob_dmg, pvp_dmg, is_crit) = compute_attack_damage(entry, sid, skill_kind.unwrap_or(SkillKind::Dragon), i32::from(lv.damage.max(100)), skill_point, now_ms, self.shared.config.parity_mode);
         let (attacker_pen, attacker_drains) = attacker_pen_and_lifesteal(&entry.snapshot.items_body);
         Some(CastPrep { skill_kind, skill_point, skill_paint_id, mob_dmg, pvp_dmg, is_crit, new_mp, now_ms, max_fight: usize::try_from(lv.max_fight.max(1)).unwrap_or(1), max_range_px: skill_max_range_px(skill_kind, skill_point), attacker_pen, attacker_drains })
     }
