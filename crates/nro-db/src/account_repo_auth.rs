@@ -6,8 +6,8 @@ use nro_core::AccountId;
 use password_hash::{PasswordHasher, PasswordVerifier};
 use tracing::info;
 
-use super::AccountRepo;
-use crate::codec::{canonical_lookup_key, dec_i32, enc_i32, encode_val};
+use super::{AccountRepo, AccountRow};
+use crate::codec::{canonical_lookup_key, dec_i32, enc_i32, decode_val, encode_val};
 use crate::{DbError, DbResult};
 
 /// Maximum PHC password string length enforced by [`verify_or_upgrade_password`].
