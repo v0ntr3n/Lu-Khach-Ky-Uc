@@ -1,10 +1,16 @@
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 #![forbid(unsafe_code)]
 //! Embedded single-binary Windows/desktop launcher (`nro-server-gui`) running the authoritative
 //! `nro-server` Tokio runtime on a background thread and the `gpui-kit` Admin Control Panel on
 //! the main UI thread.
 
 mod app;
+mod app_ops;
 mod inspector;
+mod inspector_cards;
+mod log_buffer;
+mod log_view;
+mod server_tools;
 mod views;
 
 use std::net::SocketAddr;
@@ -23,6 +29,7 @@ use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
 use crate::app::{AdminApp, BootState};
+use crate::log_buffer::LogBuffer;
 
 /// Command-line flags for `nro-server-gui`.
 #[derive(Debug, Clone, Parser)]
@@ -53,13 +60,15 @@ pub(crate) struct GuiCliArgs {
     pub(crate) log_filter: String,
 }
 
-fn init_tracing(default_directive: &str) {
+fn init_tracing(default_directive: &str, log_buffer: &LogBuffer) {
     let env_filter = EnvFilter::try_from_default_env()
         .or_else(|_| EnvFilter::try_new(default_directive))
         .unwrap_or_else(|_| EnvFilter::new("info"));
     let _ = tracing_subscriber::fmt()
         .with_env_filter(env_filter)
         .with_target(true)
+        .with_ansi(false)
+        .with_writer(log_buffer.clone())
         .try_init();
 }
 
@@ -123,13 +132,15 @@ fn spawn_server_thread(
 
 fn main() {
     let cli = GuiCliArgs::parse();
-    init_tracing(&cli.log_filter);
+    let log_buffer = LogBuffer::new();
+    init_tracing(&cli.log_filter, &log_buffer);
 
     let boot_state = Arc::new(Mutex::new(BootState::Booting));
     let shutdown_token = CancellationToken::new();
     let server_thread = spawn_server_thread(cli, Arc::clone(&boot_state), shutdown_token.clone());
 
     let ui_state = Arc::clone(&boot_state);
+    let ui_logs = log_buffer;
     gpui_kit::application()
         .with_assets(gpui_kit::assets::Assets)
         .run(move |cx| {
@@ -142,7 +153,7 @@ fn main() {
                 ..Default::default()
             };
             if let Err(err) = gpui_kit::open_window(window_options, cx, |window, cx| {
-                cx.new(|cx| AdminApp::new(ui_state, window, cx))
+                cx.new(|cx| AdminApp::new(ui_state, ui_logs, window, cx))
             }) {
                 error!(error = %err, "failed to open GPUI window");
                 eprintln!("[nro-server-gui] Failed to open GPUI window: {err:#}");

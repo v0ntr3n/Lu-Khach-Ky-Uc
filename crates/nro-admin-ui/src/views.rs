@@ -1,4 +1,4 @@
-//! Header, broadcast bar, scrollable user list, and audit footer views for `AdminApp`.
+//! Header with KPI bar, 3-tab navigation, scrollable user list, and status footer for `AdminApp`.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Input;
@@ -6,45 +6,53 @@ use gpui_kit::component::label::Label;
 use gpui_kit::component::{ActiveTheme, IconName};
 use gpui_kit::*;
 
-use crate::app::AdminApp;
+use crate::app::{ActiveTab, AdminApp, UserFilter, format_num};
+
+fn tab_button(id: &'static str, label: String, active: bool) -> Button {
+    let btn = Button::new(id).label(label);
+    if active { btn.primary() } else { btn }
+}
+
+fn filter_button(id: &'static str, label: &'static str, active: bool) -> Button {
+    let btn = Button::new(id).label(label);
+    if active { btn.primary() } else { btn }
+}
 
 impl AdminApp {
     pub(crate) fn render_header(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
-        let (maint, status_line) = match &self.summary {
-            Some(s) => (
-                s.maintaining,
-                format!(
-                    "{} | Online: {} | Sessions: {} | Uptime: {}m{}s | {}",
-                    self.bind_addr,
-                    self.online_count,
-                    s.total_sessions,
-                    s.uptime_secs / 60,
-                    s.uptime_secs % 60,
-                    if s.maintaining {
-                        "BẢO TRÌ"
-                    } else {
-                        "ONLINE"
-                    }
-                ),
+        let status_line = match &self.summary {
+            Some(s) => format!(
+                "{} | Online: {} | Sessions: {} | Uptime: {}m{}s | {}",
+                if s.maintaining {
+                    "BẢO TRÌ"
+                } else {
+                    "ONLINE"
+                },
+                self.online_count,
+                s.total_sessions,
+                s.uptime_secs / 60,
+                s.uptime_secs % 60,
+                self.bind_addr,
             ),
-            None => (
-                false,
+            None => {
                 if self.boot_error.is_some() {
                     "LỖI KHỞI ĐỘNG".to_owned()
                 } else {
                     "ĐANG KHỞI ĐỘNG...".to_owned()
-                },
-            ),
+                }
+            }
+        };
+
+        let logs_label = if self.log_warn_err_count > 0 {
+            format!("Server Logs ({})", self.log_warn_err_count)
+        } else {
+            "Server Logs".to_owned()
         };
 
         div()
             .flex()
-            .flex_row()
-            .items_center()
-            .justify_between()
-            .px_4()
-            .py_3()
+            .flex_col()
             .border_b_1()
             .border_color(border)
             .child(
@@ -52,15 +60,19 @@ impl AdminApp {
                     .flex()
                     .flex_row()
                     .items_center()
+                    .justify_between()
+                    .px_4()
+                    .py_3()
                     .gap_3()
-                    .child(Label::new("Lữ Khách Ký Ức — Server Control Panel"))
-                    .child(Label::new(status_line)),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_row()
-                    .gap_2()
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .gap_3()
+                            .child(Label::new("Lữ Khách Ký Ức — Admin Control"))
+                            .child(Label::new(status_line)),
+                    )
                     .child(
                         Button::new("btn-refresh")
                             .label("Làm mới")
@@ -68,26 +80,45 @@ impl AdminApp {
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.poll_boot_and_refresh(cx);
                             })),
+                    ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .gap_2()
+                    .px_4()
+                    .py_2()
+                    .border_t_1()
+                    .border_color(border)
+                    .child(
+                        tab_button(
+                            "tab-users",
+                            "Người chơi".to_owned(),
+                            self.active_tab == ActiveTab::Users,
+                        )
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.active_tab = ActiveTab::Users;
+                            cx.notify();
+                        })),
                     )
                     .child(
-                        Button::new("btn-maint")
-                            .label(if maint {
-                                "Tắt bảo trì"
-                            } else {
-                                "Bật bảo trì"
-                            })
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.run_async_action(cx, move |ctrl| {
-                                    Ok(ctrl.set_maintenance(!maint))
-                                });
-                            })),
+                        tab_button(
+                            "tab-tools",
+                            "Công cụ Server".to_owned(),
+                            self.active_tab == ActiveTab::ServerTools,
+                        )
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.active_tab = ActiveTab::ServerTools;
+                            cx.notify();
+                        })),
                     )
                     .child(
-                        Button::new("btn-shutdown")
-                            .danger()
-                            .label("Dừng Server")
+                        tab_button("tab-logs", logs_label, self.active_tab == ActiveTab::Logs)
                             .on_click(cx.listener(|this, _, _, cx| {
-                                this.request_shutdown(cx);
+                                this.active_tab = ActiveTab::Logs;
+                                cx.notify();
                             })),
                     ),
             )
@@ -95,7 +126,6 @@ impl AdminApp {
 
     pub(crate) fn render_user_list(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let (border, accent, bg) = (cx.theme().border, cx.theme().accent, cx.theme().background);
-        let show_offline = self.show_offline;
         let mut rows_div = div()
             .id("user-list-scroll")
             .flex()
@@ -109,10 +139,11 @@ impl AdminApp {
             let aid = user.account_id;
             let is_selected = self.selected_account == Some(aid);
             let status_txt = format!(
-                "{}{}{}",
+                "{}{}{}{}",
                 if user.online { "ONLINE" } else { "OFF" },
                 if user.active { " | TV" } else { "" },
-                if user.ban { " | BAN" } else { "" }
+                if user.ban { " | BAN" } else { "" },
+                if user.is_admin { " | ADMIN" } else { "" },
             );
             let row_bg = if is_selected { accent } else { bg };
             rows_div = rows_div.child(
@@ -134,12 +165,14 @@ impl AdminApp {
                         cx.notify();
                     }))
                     .child(Label::new(format!(
-                        "#{aid} {} ({}) | Map {}:{}",
-                        user.username, user.player_name, user.map_id, user.zone_id
+                        "#{aid} {} ({}) | Map {}:{} ({})",
+                        user.username, user.player_name, user.map_id, user.zone_id, user.map_name
                     )))
                     .child(Label::new(format!(
-                        "Vàng: {} | Ngọc: {} | VND: {} | [{}]",
-                        user.gold, user.gem, user.vnd, status_txt
+                        "Vàng: {} | Ngọc: {} | [{}]",
+                        format_num(user.gold),
+                        format_num(i64::from(user.gem)),
+                        status_txt
                     ))),
             );
         }
@@ -160,13 +193,40 @@ impl AdminApp {
                     .gap_2()
                     .child(div().flex_1().child(Input::new(&self.search_input)))
                     .child(
-                        Button::new("btn-filter-online")
-                            .label(if show_offline { "All" } else { "Online" })
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.show_offline = !this.show_offline;
-                                this.spawn_refresh(cx);
-                                cx.notify();
-                            })),
+                        filter_button(
+                            "btn-filter-online",
+                            "Online",
+                            self.user_filter == UserFilter::Online,
+                        )
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.user_filter = UserFilter::Online;
+                            this.spawn_refresh(cx);
+                            cx.notify();
+                        })),
+                    )
+                    .child(
+                        filter_button(
+                            "btn-filter-all",
+                            "Tất cả",
+                            self.user_filter == UserFilter::All,
+                        )
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.user_filter = UserFilter::All;
+                            this.spawn_refresh(cx);
+                            cx.notify();
+                        })),
+                    )
+                    .child(
+                        filter_button(
+                            "btn-filter-banned",
+                            "Bị Ban",
+                            self.user_filter == UserFilter::Banned,
+                        )
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.user_filter = UserFilter::Banned;
+                            this.spawn_refresh(cx);
+                            cx.notify();
+                        })),
                     ),
             )
             .child(Label::new(format!(
@@ -178,49 +238,14 @@ impl AdminApp {
 
     pub(crate) fn render_footer(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
-        let mut log_col = div().flex().flex_col().gap_1();
-        for entry in self.audit_logs.iter().take(5) {
-            log_col = log_col.child(Label::new(entry.clone()));
-        }
-        div()
-            .flex()
-            .flex_col()
-            .px_4()
-            .py_2()
-            .gap_1()
-            .border_t_1()
-            .border_color(border)
-            .child(Label::new(format!("Trạng thái: {}", self.status_banner)))
-            .child(log_col)
-    }
-
-    pub(crate) fn render_broadcast_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let border = cx.theme().border;
         div()
             .flex()
             .flex_row()
             .items_center()
-            .gap_2()
             .px_4()
             .py_2()
-            .border_b_1()
+            .border_t_1()
             .border_color(border)
-            .child(div().flex_1().child(Input::new(&self.broadcast_input)))
-            .child(
-                Button::new("btn-broadcast")
-                    .primary()
-                    .label("Gửi thông báo")
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        let msg = this.broadcast_input.read(cx).value().to_string();
-                        if msg.trim().is_empty() {
-                            this.push_feedback(
-                                "Nội dung thông báo không được để trống.".to_owned(),
-                            );
-                            cx.notify();
-                            return;
-                        }
-                        this.run_async_action(cx, move |ctrl| ctrl.broadcast(&msg));
-                    })),
-            )
+            .child(Label::new(format!("Trạng thái: {}", self.status_banner)))
     }
 }

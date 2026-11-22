@@ -263,7 +263,11 @@ impl AdminControl {
             .ok_or_else(|| format!("Tài khoản #{account_id} chưa tạo nhân vật."))
     }
 
-    fn persist_snapshot(&self, account_id: i32, snap: &PlayerSnapshot) -> Result<(), String> {
+    pub(super) fn persist_snapshot(
+        &self,
+        account_id: i32,
+        snap: &PlayerSnapshot,
+    ) -> Result<(), String> {
         self.rt
             .block_on(self.shared.players_repo.save_player(
                 snap,
@@ -278,7 +282,7 @@ impl AdminControl {
     }
 }
 
-fn try_send_if_ready(handle: &SessionHandle, account_id: i32, pkt: Packet) {
+pub(super) fn try_send_if_ready(handle: &SessionHandle, account_id: i32, pkt: Packet) {
     if handle.sent_key()
         && let Err(err) = handle.try_send(pkt)
     {

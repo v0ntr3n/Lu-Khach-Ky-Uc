@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 //! Authoritative in-process admin control facade for `nro-server` and `nro-admin-ui`.
 
+#[path = "admin_control_extra.rs"]
+mod admin_control_extra;
 #[path = "admin_control_ops.rs"]
 mod admin_control_ops;
 
@@ -10,6 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use nro_core::AccountId;
 use nro_db::player_repo::PlayerSnapshot;
+use nro_db::templates::MapTemplateRecord;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
@@ -27,6 +30,14 @@ pub struct ServerSummary {
     pub bind_addr: String,
 }
 
+/// Lightweight item template summary for admin item search.
+#[derive(Debug, Clone)]
+pub struct AdminItemInfo {
+    pub id: i16,
+    pub name: String,
+    pub stackable: bool,
+}
+
 /// Unified account + character row for the admin user table.
 #[derive(Debug, Clone)]
 pub struct AdminUserRow {
@@ -39,6 +50,7 @@ pub struct AdminUserRow {
     pub active: bool,
     pub is_admin: bool,
     pub map_id: i16,
+    pub map_name: String,
     pub zone_id: u16,
     pub power: i64,
     pub gold: i64,
@@ -127,6 +139,7 @@ impl AdminControl {
                 aid.0,
                 username,
                 Some(e.snapshot.clone()),
+                &self.shared.templates.maps,
                 true,
                 false,
                 e.activated,
@@ -190,6 +203,7 @@ impl AdminControl {
                 acc.id,
                 acc.username,
                 snap,
+                &self.shared.templates.maps,
                 online,
                 acc.ban,
                 acc.active != 0,
@@ -268,6 +282,7 @@ fn row_from_snap(
     account_id: i32,
     username: String,
     snap: Option<PlayerSnapshot>,
+    maps: &[MapTemplateRecord],
     online: bool,
     ban: bool,
     active: bool,
@@ -275,32 +290,39 @@ fn row_from_snap(
     vnd: i32,
     fallback_gold: i64,
 ) -> AdminUserRow {
-    let (player_id, player_name, map_id, zone_id, power, gold, gem, ruby) = snap.map_or_else(
-        || {
-            (
-                None,
-                "(Chưa tạo NV)".to_owned(),
-                0,
-                0,
-                0,
-                fallback_gold,
-                0,
-                0,
-            )
-        },
-        |s| {
-            (
-                Some(s.id.0),
-                s.name,
-                s.location.map_id.0,
-                s.location.zone_id.0,
-                s.stats.power,
-                s.wallet.gold,
-                s.wallet.gem,
-                s.wallet.ruby,
-            )
-        },
-    );
+    let (player_id, player_name, map_id, map_name, zone_id, power, gold, gem, ruby) = snap
+        .map_or_else(
+            || {
+                (
+                    None,
+                    "(Chưa tạo NV)".to_owned(),
+                    0,
+                    "-".to_owned(),
+                    0,
+                    0,
+                    fallback_gold,
+                    0,
+                    0,
+                )
+            },
+            |s| {
+                let map_name = maps.iter().find(|m| m.id == s.location.map_id).map_or_else(
+                    || format!("Map {}", s.location.map_id.0),
+                    |m| m.name.clone(),
+                );
+                (
+                    Some(s.id.0),
+                    s.name,
+                    s.location.map_id.0,
+                    map_name,
+                    s.location.zone_id.0,
+                    s.stats.power,
+                    s.wallet.gold,
+                    s.wallet.gem,
+                    s.wallet.ruby,
+                )
+            },
+        );
     AdminUserRow {
         account_id,
         username,
@@ -311,6 +333,7 @@ fn row_from_snap(
         active,
         is_admin,
         map_id,
+        map_name,
         zone_id,
         power,
         gold,
