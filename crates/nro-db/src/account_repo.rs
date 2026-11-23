@@ -198,6 +198,8 @@ impl AccountRepo {
                 trimmed_username.clone_into(&mut row.username);
                 row.password = hashed_password;
                 row.update_time = Some(now);
+                row.last_time_login = DateTime::UNIX_EPOCH;
+                row.last_time_logout = DateTime::UNIX_EPOCH;
                 row.ip_address = Some(truncated_ip);
 
                 let pk = enc_i32(row.id);

@@ -75,10 +75,11 @@ impl ServerSessionHandler {
         if self.shared.clients.authenticated.len() >= self.shared.config.rate_limit.max_online_players {
             return send_dialog(session, "Máy chủ đã đầy, vui lòng chọn khu vực khác!");
         }
-        if !session.take_auth_cooldown_bypass() && let Err(wait) = self.shared.rate_limiter.check_login_cooldown(session.ip()) {
+        let bypass = session.take_auth_cooldown_bypass();
+        if !bypass && let Err(wait) = self.shared.rate_limiter.check_login_cooldown(session.ip()) {
             return send_dialog(session, &format!("Vui lòng thử lại sau {} giây.", wait.as_secs().max(1)));
         }
-        let (ip_str, wait_secs) = (session.ip().to_string(), self.shared.config.rate_limit.login_wait_secs);
+        let (ip_str, wait_secs) = (session.ip().to_string(), if bypass { 0 } else { self.shared.config.rate_limit.login_wait_secs });
         let auth = match self.shared.accounts_repo.login_with_type(username, password, login_type, &ip_str, wait_secs, Utc::now()).await {
             Ok(acc) => acc,
             Err(DbError::InvalidCredentials) => return send_dialog(session, "Tài khoản hoặc mật khẩu không chính xác!"),
@@ -135,22 +136,27 @@ impl ServerSessionHandler {
             session.send(s2c_packets::register_result(false, "Máy chủ đang bảo trì định kỳ, vui lòng quay lại sau!")).await?;
             return Ok(());
         }
-        if let Err(wait) = self.shared.rate_limiter.check_login_cooldown(session.ip())
-            .and_then(|()| self.shared.rate_limiter.check_account_creation_limit(session.ip()))
-        {
+        if let Err(wait) = self.shared.rate_limiter.check_account_creation_limit(session.ip()) {
             let msg = format!("Vui lòng thử lại sau {} giây.", wait.as_secs().max(1));
             session.send(s2c_packets::register_result(false, &msg)).await?;
             return Ok(());
         }
-        if let Some(guest) = guest_user {
-            let aid = session.account_id();
-            let owned = aid.0 > 0 && matches!(self.shared.accounts_repo.get_by_id(aid), Ok(Some(acc)) if acc.username.eq_ignore_ascii_case(guest.trim()));
-            if !owned {
+        let ip_str = session.ip().to_string();
+        if let Some(guest) = guest_user.map(str::trim).filter(|s| !s.is_empty())
+            && let Ok(Some(acc)) = self.shared.accounts_repo.get_by_username(guest)
+        {
+            let ip_ok = acc.ip_address.as_deref().is_none_or(|ip| ip.is_empty() || ip == ip_str);
+            if session.account_id() != AccountId(acc.id) && !ip_ok {
                 session.send(s2c_packets::register_result(false, "Phiên đăng nhập không khớp tài khoản khách!")).await?;
                 return Ok(());
             }
+            if let Some(old_sid) = self.shared.clients.accounts.get(&AccountId(acc.id)).map(|s| *s)
+                && old_sid != session.id()
+                && let Some(h) = self.shared.clients.sessions.get(&old_sid)
+            {
+                h.disconnect();
+            }
         }
-        let ip_str = session.ip().to_string();
         match self.shared.accounts_repo.register_account(username, password, guest_user, &ip_str, Utc::now()).await {
             Ok(acc) => {
                 info!(sid = session.id(), account_id = acc.id, username = %acc.username, "registered account");

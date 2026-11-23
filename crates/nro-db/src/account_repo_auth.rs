@@ -113,6 +113,15 @@ fn check_login_cooldown(
 }
 
 impl AccountRepo {
+    /// Fetches an account record by case-insensitive username lookup.
+    pub fn get_by_username(&self, username: &str) -> DbResult<Option<AccountRow>> {
+        let uname_key = canonical_lookup_key(username);
+        let Some(id_bytes) = self.pool.ks().idx_account_user.get(&uname_key)? else {
+            return Ok(None);
+        };
+        self.get_by_id(AccountId(dec_i32(&id_bytes)?))
+    }
+
     /// Authenticates `username` + `password` with default `login_type = 0`.
     ///
     /// Delegates to [`Self::login_with_type`].
