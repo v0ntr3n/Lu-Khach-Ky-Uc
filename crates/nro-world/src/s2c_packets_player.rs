@@ -18,8 +18,23 @@ const fn gender_i8(g: Gender) -> i8 {
 
 /// Builds opcode `-5` (`PLAYER_ADD` / `Zone.infoPlayer`) using v2.5.0 64-bit HP and 16-bit bag IDs.
 pub fn player_add(s: &PlayerSpawnWire<'_>, client_version: u16) -> Result<Packet, PacketError> {
+    let bag: i16 = if s.flags.0 == 0 {
+        -1_i16
+    } else if client_version >= 220 && s.flags.0 == 83 {
+        205
+    } else {
+        i16::from(s.flags.0)
+    };
+    player_add_with_bag(s, bag)
+}
+
+/// Builds opcode `-5` (`PLAYER_ADD`) with an explicit 16-bit `flag_bag` (`-1` when unequipped).
+pub fn player_add_with_bag(s: &PlayerSpawnWire<'_>, bag: i16) -> Result<Packet, PacketError> {
     build_pkt_res(cmd_message::PLAYER_ADD, 74 + s.name.len(), |w| {
-        for id in [pid_i32(s.identity.0), s.identity.1.map_or(-1, |c| i32::from(c.0))] {
+        for id in [
+            pid_i32(s.identity.0),
+            s.identity.1.map_or(-1, |c| i32::from(c.0)),
+        ] {
             w.write_i32(id);
         }
         let g = gender_i8(s.gender);
@@ -33,14 +48,7 @@ pub fn player_add(s: &PlayerSpawnWire<'_>, client_version: u16) -> Result<Packet
         for v in [s.parts.1, s.parts.2] {
             w.write_i16(v);
         }
-        let bag: i16 = if s.flags.0 == 0 {
-            -1_i16
-        } else if client_version >= 220 && s.flags.0 == 83 {
-            205
-        } else {
-            i16::from(s.flags.0)
-        };
-        w.write_i16(bag);
+        w.write_i16(if bag < 0 { -1 } else { bag });
         w.write_i8(-1);
         for v in [s.loc.x, s.loc.y, 0, 0] {
             w.write_i16(v);
@@ -57,6 +65,17 @@ pub fn player_add(s: &PlayerSpawnWire<'_>, client_version: u16) -> Result<Packet
         w.write_i16(s.parts.5);
         Ok(())
     })
+}
+
+/// Builds `-30` sub `14` (`PLAYER_LOAD_HP`) 64-bit peer/pet HP update (`Controller.cs:6126-6149`).
+#[must_use]
+pub fn player_load_hp(player_id: PlayerId, hp: i64, hp_max: i64) -> Packet {
+    let mut w = sub_command_writer(cmd_message::PLAYER_LOAD_HP, 21);
+    w.write_i32(pid_i32(player_id));
+    w.write_i64(hp.max(0));
+    w.write_i8(0);
+    w.write_i64(hp_max.max(0));
+    w.finish(cmd_message::SUB_COMMAND)
 }
 
 /// Builds opcode `-7` (`PLAYER_MOVE`).
@@ -145,16 +164,20 @@ pub fn chat_global(
     text: &str,
     parts: (i16, i16, i16, i16),
 ) -> Result<Packet, PacketError> {
-    build_pkt_res(cmd_message::CHAT_THEGIOI_SERVER, 32 + name.len() + text.len(), |w| {
-        w.write_utf(name)?;
-        w.write_utf(&format!("|5|{text}"))?;
-        w.write_i32(pid_i32(sender));
-        for v in [parts.0, -1, parts.1, parts.2, parts.3] {
-            w.write_i16(v);
-        }
-        w.write_i8(0);
-        Ok(())
-    })
+    build_pkt_res(
+        cmd_message::CHAT_THEGIOI_SERVER,
+        32 + name.len() + text.len(),
+        |w| {
+            w.write_utf(name)?;
+            w.write_utf(&format!("|5|{text}"))?;
+            w.write_i32(pid_i32(sender));
+            for v in [parts.0, -1, parts.1, parts.2, parts.3] {
+                w.write_i16(v);
+            }
+            w.write_i8(0);
+            Ok(())
+        },
+    )
 }
 
 /// Builds opcode `-25` (`SERVER_MESSAGE` / `Service.sendThongBao`).
@@ -172,30 +195,22 @@ pub fn npc_open_menu(
     avatar: Option<i16>,
 ) -> Result<Packet, PacketError> {
     let n = opts.len().min(127);
-    build_pkt_res(
-        cmd_message::OPEN_UI_CONFIRM,
-        16 + say.len() + n * 10,
-        |w| {
-            w.write_i16(npc_id);
-            w.write_utf(say)?;
-            w.write_i8(n as i8);
-            for o in &opts[..n] {
-                w.write_utf(o)?;
-            }
-            if let Some(av) = avatar {
-                w.write_i16(av);
-            }
-            Ok(())
-        },
-    )
+    build_pkt_res(cmd_message::OPEN_UI_CONFIRM, 16 + say.len() + n * 10, |w| {
+        w.write_i16(npc_id);
+        w.write_utf(say)?;
+        w.write_i8(n as i8);
+        for o in &opts[..n] {
+            w.write_utf(o)?;
+        }
+        if let Some(av) = avatar {
+            w.write_i16(av);
+        }
+        Ok(())
+    })
 }
 
 /// Builds opcode `38` (`OPEN_UI_SAY` / `Service.openMenu`).
-pub fn npc_open_say(
-    npc_id: i16,
-    say: &str,
-    avatar: Option<i16>,
-) -> Result<Packet, PacketError> {
+pub fn npc_open_say(npc_id: i16, say: &str, avatar: Option<i16>) -> Result<Packet, PacketError> {
     build_pkt_res(cmd_message::OPEN_UI_SAY, 8 + say.len(), |w| {
         w.write_i16(npc_id);
         w.write_utf(say)?;

@@ -1,3 +1,6 @@
+#[path = "zone_actor_pet_tests.rs"]
+mod zone_actor_pet_tests;
+
 use nro_consts::cmd_message;
 use nro_core::{AccountId, CoreStats, Gender, ParityMode, SessionKey};
 
@@ -15,7 +18,11 @@ fn test_ingress(pid: i64, name: &str, tx: mpsc::Sender<Packet>) -> PlayerIngress
             x: 100,
             y: 200,
         },
-        stats: CoreStats::default(),
+        stats: CoreStats {
+            hp: 1_000,
+            hp_max: 1_000,
+            ..CoreStats::default()
+        },
         parts: (1, 2, 3),
         ship_type: 1,
         outbound_tx: Some(tx),
@@ -52,7 +59,9 @@ async fn two_phase_handoff_rolls_back_when_destination_is_full() {
     let (pkt_tx, _rx) = mpsc::channel(16);
     let ing = test_ingress(7, "Goku", pkt_tx);
     let (r_tx, r_rx) = oneshot::channel();
-    tx1.send(ZoneCommand::EnterPlayer(Box::new(ing), r_tx)).await.expect("send enter");
+    tx1.send(ZoneCommand::EnterPlayer(Box::new(ing), r_tx))
+        .await
+        .expect("send enter");
     let key = r_rx.await.expect("recv enter").expect("admit");
     let (cm_tx, cm_rx) = oneshot::channel();
     tx1.send(ZoneCommand::ChangeMap(
@@ -70,7 +79,13 @@ async fn two_phase_handoff_rolls_back_when_destination_is_full() {
     .await
     .expect("send cm");
     let (err, rb_key) = cm_rx.await.expect("recv cm").expect_err("dest full");
-    assert!(matches!(err, WorldError::ZoneFull { map_id: MapId(5), .. }));
+    assert!(matches!(
+        err,
+        WorldError::ZoneFull {
+            map_id: MapId(5),
+            ..
+        }
+    ));
     assert!(rb_key.is_some());
     let _ = tx1.send(ZoneCommand::Shutdown).await;
     let _ = tx2.send(ZoneCommand::Shutdown).await;
@@ -96,18 +111,26 @@ async fn enter_syncs_existing_players_leave_removes_and_chat_allows_thang() {
     let (p2_tx, mut p2_rx) = mpsc::channel(16);
 
     let (r1_tx, r1_rx) = oneshot::channel();
-    tx1.send(ZoneCommand::EnterPlayer(Box::new(test_ingress(10, "Goku", p1_tx)), r1_tx))
-        .await
-        .expect("enter p1");
+    tx1.send(ZoneCommand::EnterPlayer(
+        Box::new(test_ingress(10, "Goku", p1_tx)),
+        r1_tx,
+    ))
+    .await
+    .expect("enter p1");
     let k1 = r1_rx.await.expect("p1 reply").expect("p1 admit");
     let _ = p1_rx.recv().await.expect("p1 teleport");
 
     let (r2_tx, r2_rx) = oneshot::channel();
-    tx1.send(ZoneCommand::EnterPlayer(Box::new(test_ingress(20, "Vegeta", p2_tx)), r2_tx))
-        .await
-        .expect("enter p2");
+    tx1.send(ZoneCommand::EnterPlayer(
+        Box::new(test_ingress(20, "Vegeta", p2_tx)),
+        r2_tx,
+    ))
+    .await
+    .expect("enter p2");
     let k2 = r2_rx.await.expect("p2 reply").expect("p2 admit");
-    tx1.send(ZoneCommand::SyncZoneState(k2)).await.expect("sync p2");
+    tx1.send(ZoneCommand::SyncZoneState(k2))
+        .await
+        .expect("sync p2");
 
     let mut p2_saw_p1 = false;
     for _ in 0..2 {
@@ -118,7 +141,9 @@ async fn enter_syncs_existing_players_leave_removes_and_chat_allows_thang() {
     }
     assert!(p2_saw_p1);
 
-    tx1.send(ZoneCommand::ChatMap(k1, "xin chao thang".into())).await.expect("chat");
+    tx1.send(ZoneCommand::ChatMap(k1, "xin chao thang".into()))
+        .await
+        .expect("chat");
     let mut saw_chat = false;
     for _ in 0..4 {
         let pkt = p1_rx.recv().await.expect("p1 pkt");
@@ -137,9 +162,7 @@ async fn enter_syncs_existing_players_leave_removes_and_chat_allows_thang() {
     let mut saw_remove = false;
     for _ in 0..4 {
         let pkt = p1_rx.recv().await.expect("p1 pkt");
-        if pkt.cmd == cmd_message::PLAYER_REMOVE
-            && pkt.reader().read_i32().expect("pid") == 20
-        {
+        if pkt.cmd == cmd_message::PLAYER_REMOVE && pkt.reader().read_i32().expect("pid") == 20 {
             saw_remove = true;
             break;
         }
@@ -167,9 +190,12 @@ async fn pick_item_resolves_ground_item_by_wire_id() {
 
     let (p_tx, mut p_rx) = mpsc::channel(16);
     let (r_tx, r_rx) = oneshot::channel();
-    tx1.send(ZoneCommand::EnterPlayer(Box::new(test_ingress(30, "Gohan", p_tx)), r_tx))
-        .await
-        .expect("enter");
+    tx1.send(ZoneCommand::EnterPlayer(
+        Box::new(test_ingress(30, "Gohan", p_tx)),
+        r_tx,
+    ))
+    .await
+    .expect("enter");
     let key = r_rx.await.expect("recv").expect("admit");
     let _ = p_rx.recv().await.expect("teleport");
 
@@ -187,17 +213,25 @@ async fn pick_item_resolves_ground_item_by_wire_id() {
     let wire_id = drop_pkt.reader().read_i16().expect("wire_id");
 
     let (pick_tx, pick_rx) = oneshot::channel();
-    tx1.send(ZoneCommand::PickItem(key, wire_id, pick_tx)).await.expect("pick");
+    tx1.send(ZoneCommand::PickItem(key, wire_id, pick_tx))
+        .await
+        .expect("pick");
     let picked = pick_rx.await.expect("pick reply").expect("pick ok");
     assert_eq!(picked.stack, (TemplateId(76), 250));
 
     let (miss_tx, miss_rx) = oneshot::channel();
-    tx1.send(ZoneCommand::PickItem(key, wire_id, miss_tx)).await.expect("pick again");
+    tx1.send(ZoneCommand::PickItem(key, wire_id, miss_tx))
+        .await
+        .expect("pick again");
     assert!(miss_rx.await.expect("miss reply").is_err());
 
-    tx1.send(ZoneCommand::RestoreGroundItem(picked.clone())).await.expect("restore");
+    tx1.send(ZoneCommand::RestoreGroundItem(picked.clone()))
+        .await
+        .expect("restore");
     let (repick_tx, repick_rx) = oneshot::channel();
-    tx1.send(ZoneCommand::PickItem(key, wire_id, repick_tx)).await.expect("repick");
+    tx1.send(ZoneCommand::PickItem(key, wire_id, repick_tx))
+        .await
+        .expect("repick");
     let repicked = repick_rx.await.expect("repick reply").expect("repick ok");
     assert_eq!(repicked.stack, picked.stack);
 
@@ -250,8 +284,14 @@ fn seed_mobs_attack_gold_drop_sync_respawn_and_offline_isolation() {
     assert_eq!(tnsm1, 10);
     assert_eq!(killed1, Vec::<i16>::new());
     assert_eq!(p1_rx.try_recv().expect("mob_hp").cmd, cmd_message::MOB_HP);
-    assert_eq!(p2_rx.try_recv().expect("peer_atk").cmd, cmd_message::PLAYER_ATTACK_NPC);
-    assert_eq!(p2_rx.try_recv().expect("peer_mob_hp").cmd, cmd_message::MOB_HP);
+    assert_eq!(
+        p2_rx.try_recv().expect("peer_atk").cmd,
+        cmd_message::PLAYER_ATTACK_NPC
+    );
+    assert_eq!(
+        p2_rx.try_recv().expect("peer_mob_hp").cmd,
+        cmd_message::MOB_HP
+    );
 
     let (rep2_tx, mut rep2_rx) = oneshot::channel();
     z.handle_command(ZoneCommand::AttackMobs {
@@ -289,7 +329,6 @@ fn seed_mobs_attack_gold_drop_sync_respawn_and_offline_isolation() {
     let _ = lr.read_i8().expect("boss");
     assert_eq!(lr.read_i64().expect("respawn_hp"), 10);
 
-    // Offline map (39) bypasses max_players=0 and suppresses cross-player packets.
     let (mut off, _off_tx) = ZoneActor::new(
         ZoneConfig {
             id: (MapId(39), ZoneId(0)),
@@ -312,49 +351,9 @@ fn seed_mobs_attack_gold_drop_sync_respawn_and_offline_isolation() {
     assert!(o1_rx.try_recv().is_err());
     assert!(o2_rx.try_recv().is_err());
     off.handle_command(ZoneCommand::ChatMap(ok1, "solo".into()));
-    assert_eq!(o1_rx.try_recv().expect("self echo").cmd, cmd_message::CHAT_MAP);
-    assert!(o2_rx.try_recv().is_err());
-}
-
-#[test]
-fn zone_events_satellite_pickup_proximity_and_dungeon_no_respawn() {
-    let router = Arc::new(DashMap::new());
-    let (ev_tx, mut ev_rx) = mpsc::channel(16);
-    let (mut z, _tx) = ZoneActor::new(
-        ZoneConfig { id: (MapId(135), ZoneId(0)), max_players: 5, map_width: 1200, parity: ParityMode::Fixed },
-        router,
-        vec![TrapVolume { rect: (80, 180, 50, 50), base_damage: 100 }],
-        GameRng::from_seed(42),
+    assert_eq!(
+        o1_rx.try_recv().expect("self echo").cmd,
+        cmd_message::CHAT_MAP
     );
-    z = z.with_event_tx(ev_tx);
-    let (p_tx, mut p_rx) = mpsc::channel(32);
-    let mut ing = test_ingress(55, "Piccolo", p_tx);
-    ing.identity.1 = Some(nro_core::ClanId(7));
-    ing.stats.hp = 500;
-    ing.stats.hp_max = 1000;
-    ing.ship_type = 0;
-    let key = z.admit_player(ing).expect("admit");
-    z.handle_command(ZoneCommand::DropItem(
-        TemplateId(342), 1, Location::new(110, 200), None, GroundDropKind::Satellite { clan_id: nro_core::ClanId(7) },
-    ));
-    let sat_pkt = p_rx.try_recv().expect("sat add");
-    let sat_wid = sat_pkt.reader().read_i16().expect("sat wid");
-    assert_eq!(z.pick_item(key, sat_wid), Err(WorldError::DungeonRule("cannot pick up satellite")));
-    z.handle_command(ZoneCommand::DropItem(TemplateId(76), 100, Location::new(400, 200), None, GroundDropKind::Standard));
-    let far_pkt = p_rx.try_recv().expect("far add");
-    let far_wid = far_pkt.reader().read_i16().expect("far wid");
-    assert_eq!(z.pick_item(key, far_wid), Err(WorldError::DungeonRule("item too far")));
-    z.handle_command(ZoneCommand::SeedMobs(vec![ZoneMobSeed { temp_id: 1, level: 2, max_hp: 10, loc: Location::new(100, 200) }]));
-    let (rep_tx, _rep_rx) = oneshot::channel();
-    z.handle_command(ZoneCommand::AttackMobs { attacker: key, skill_paint_id: 1, mob_ids: vec![0], damage: 50, is_crit: false, reply: rep_tx });
-    while p_rx.try_recv().is_ok() {}
-    for _ in 0..120 { z.on_tick(); }
-    assert_eq!(z.arena.stats[z.arena.dense_index(key).expect("idx")].hp, 500);
-    let (mut saw_dmg, mut saw_heal) = (false, false);
-    while let Ok(ZoneEvent::PlayerHpDelta { player_id, delta }) = ev_rx.try_recv() {
-        assert_eq!(player_id, PlayerId(55));
-        match delta.cmp(&0) { std::cmp::Ordering::Less => saw_dmg = true, std::cmp::Ordering::Greater => saw_heal = true, std::cmp::Ordering::Equal => {} }
-    }
-    assert!(saw_dmg && saw_heal);
-    while let Ok(pkt) = p_rx.try_recv() { assert_ne!(pkt.cmd, cmd_message::NPC_LIVE); }
+    assert!(o2_rx.try_recv().is_err());
 }

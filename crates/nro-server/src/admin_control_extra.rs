@@ -1,13 +1,15 @@
-//! Extended item-search, player heal/notify, and bulk online operations for [`AdminControl`].
+//! Extended item-search, player heal/notify, bulk online operations, and row projection for [`AdminControl`].
 
 use nro_core::AccountId;
 use nro_db::player_repo::PlayerSnapshot;
+use nro_db::templates::MapTemplateRecord;
 use nro_protocol::SessionHandle;
 use nro_world::s2c_packets;
 use tracing::info;
 
 use super::admin_control_ops::try_send_if_ready;
-use super::{AdminControl, AdminItemInfo};
+use super::admin_control_pet::pet_summary;
+use super::{AdminControl, AdminItemInfo, AdminUserRow};
 
 impl AdminControl {
     /// Searches item templates by ID or case-insensitive name, prioritizing exact ID matches.
@@ -188,5 +190,91 @@ impl AdminControl {
         }
         info!(count, "admin UI disconnected all online players");
         Ok(format!("Đã ngắt kết nối {count} người chơi online."))
+    }
+}
+
+pub(super) fn matches_query(
+    needle: &str,
+    acc_id: i32,
+    username: &str,
+    pid: Option<i64>,
+    pname: &str,
+) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    acc_id.to_string().contains(needle)
+        || pid.is_some_and(|p| p.to_string().contains(needle))
+        || username.to_ascii_lowercase().contains(needle)
+        || pname.to_ascii_lowercase().contains(needle)
+}
+
+pub(super) fn row_from_snap(
+    account_id: i32,
+    username: String,
+    snap: Option<PlayerSnapshot>,
+    maps: &[MapTemplateRecord],
+    online: bool,
+    ban: bool,
+    active: bool,
+    is_admin: bool,
+    vnd: i32,
+    fallback_gold: i64,
+) -> AdminUserRow {
+    let (has_pet, pet_name, pet_type, pet_power) = pet_summary(snap.as_ref());
+    let (player_id, player_name, map_id, map_name, zone_id, power, gold, gem, ruby) = snap
+        .map_or_else(
+            || {
+                (
+                    None,
+                    "(Chưa tạo NV)".to_owned(),
+                    0,
+                    "-".to_owned(),
+                    0,
+                    0,
+                    fallback_gold,
+                    0,
+                    0,
+                )
+            },
+            |s| {
+                let map_name = maps.iter().find(|m| m.id == s.location.map_id).map_or_else(
+                    || format!("Map {}", s.location.map_id.0),
+                    |m| m.name.clone(),
+                );
+                (
+                    Some(s.id.0),
+                    s.name,
+                    s.location.map_id.0,
+                    map_name,
+                    s.location.zone_id.0,
+                    s.stats.power,
+                    s.wallet.gold,
+                    s.wallet.gem,
+                    s.wallet.ruby,
+                )
+            },
+        );
+    AdminUserRow {
+        account_id,
+        username,
+        player_id,
+        player_name,
+        online,
+        ban,
+        active,
+        is_admin,
+        map_id,
+        map_name,
+        zone_id,
+        power,
+        gold,
+        gem,
+        ruby,
+        vnd,
+        has_pet,
+        pet_name,
+        pet_type,
+        pet_power,
     }
 }

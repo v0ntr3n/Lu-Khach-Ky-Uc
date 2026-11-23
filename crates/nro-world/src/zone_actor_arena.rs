@@ -104,6 +104,15 @@ pub enum ZoneEvent {
         /// Signed HP delta (`> 0` heal, `< 0` damage).
         delta: i64,
     },
+    /// Pet combat reward generated when an active pet hits or kills a zone monster.
+    PetCombatReward {
+        /// Owning master's player identifier.
+        player_id: PlayerId,
+        /// Base TNSM earned from the pet's hit.
+        earned_tnsm: u64,
+        /// Monster template ID if the hit killed the monster.
+        killed_mob_temp_id: Option<i16>,
+    },
 }
 
 /// Static configuration for a [`super::ZoneActor`].
@@ -195,13 +204,10 @@ impl ZoneSoaArena {
     /// Resolves a connected human player's [`EntityKey`] by [`PlayerId`].
     #[must_use]
     pub fn find_player_key(&self, player_id: PlayerId) -> Option<EntityKey> {
-        self.player_ids
-            .iter()
-            .enumerate()
-            .find_map(|(i, &pid)| {
-                (self.kinds[i] == EntityKind::Player && pid == Some(player_id))
-                    .then_some(self.dense_keys[i])
-            })
+        self.player_ids.iter().enumerate().find_map(|(i, &pid)| {
+            (self.kinds[i] == EntityKind::Player && pid == Some(player_id))
+                .then_some(self.dense_keys[i])
+        })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -260,7 +266,18 @@ impl ZoneSoaArena {
         loc: Location,
         stats: CoreStats,
     ) -> EntityKey {
-        self.push_row(kind, id, None, None, Gender::TraiDat, name, loc, stats, (0, 0, 0), None)
+        self.push_row(
+            kind,
+            id,
+            None,
+            None,
+            Gender::TraiDat,
+            name,
+            loc,
+            stats,
+            (0, 0, 0),
+            None,
+        )
     }
 
     /// Removes `key` in `O(1)` via swap-remove across all SoA slices, returning [`PlayerIngress`] for players.

@@ -50,8 +50,8 @@ pub use shenron_events::{
     IceShenronWish, NamekPorungaWish, SeasonalCrafter, ShenronEffect, VuaHungGiftKind,
 };
 pub use zone_actor::{
-    EntityKind, GroundDropKind, GroundItem, PlayerIngress, TrapVolume, ZoneActor, ZoneCommand,
-    ZoneConfig, ZoneEvent, ZoneMobSeed, ZoneSoaArena,
+    EntityKind, GroundDropKind, GroundItem, PetCompanion, PlayerIngress, TrapVolume, ZoneActor,
+    ZoneCommand, ZoneConfig, ZoneEvent, ZoneMobSeed, ZoneSoaArena,
 };
 
 /// Domain errors across map routing, zone actors, dungeons, PvP arenas, Shenron, and events.

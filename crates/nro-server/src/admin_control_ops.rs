@@ -252,7 +252,7 @@ impl AdminControl {
         ))
     }
 
-    fn load_offline_snapshot(&self, account_id: i32) -> Result<PlayerSnapshot, String> {
+    pub(super) fn load_offline_snapshot(&self, account_id: i32) -> Result<PlayerSnapshot, String> {
         self.rt
             .block_on(
                 self.shared

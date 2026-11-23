@@ -45,10 +45,38 @@ fn leaderboard_metrics(p: &PlayerSnapshot) -> [(LeaderboardIndexKind, u64, i64);
     let sk2 = i64::from(p.point_sukien2.max(0));
     [
         (LeaderboardIndexKind::Power, power_u64, p.stats.power),
-        (LeaderboardIndexKind::Task, task_sort, i64::from(p.main_task.task_id.max(0))),
+        (
+            LeaderboardIndexKind::Task,
+            task_sort,
+            i64::from(p.main_task.task_id.max(0)),
+        ),
         (LeaderboardIndexKind::SuKien1, sk1.cast_unsigned(), sk1),
         (LeaderboardIndexKind::SuKien2, sk2.cast_unsigned(), sk2),
     ]
+}
+
+fn encode_leaderboard_rows(
+    snap: &PlayerSnapshot,
+    lb: [(LeaderboardIndexKind, u64, i64); 4],
+) -> DbResult<[([u8; 17], Vec<u8>); 4]> {
+    let [a, b, c, d] = lb;
+    let encode_one = |(kind, sort_score, score): (LeaderboardIndexKind, u64, i64)| {
+        let rec = LeaderboardEntryRecord {
+            player_id: snap.id,
+            player_name: snap.name.clone(),
+            score,
+        };
+        Ok((
+            enc_leaderboard_key(kind as u8, sort_score, snap.id.0),
+            encode_val("idx_leaderboard", &rec)?,
+        ))
+    };
+    Ok([
+        encode_one(a)?,
+        encode_one(b)?,
+        encode_one(c)?,
+        encode_one(d)?,
+    ])
 }
 
 /// Repository managing `players` lifecycle, secondary indexes, and atomic cross-keyspace saves.
@@ -66,23 +94,19 @@ impl PlayerRepo {
     /// Inserts an imported [`PlayerSnapshot`] alongside its account, name, and leaderboard indexes.
     pub fn upsert_imported_player(&self, snap: &PlayerSnapshot) -> DbResult<()> {
         let pid_key = enc_i64(snap.id.0);
-        let mut batch = self.pool.ks().db.batch();
-        batch.insert(&self.pool.ks().players, &pid_key[..], encode_val("player", snap)?);
+        let ks = self.pool.ks();
+        let mut batch = ks.db.batch();
+        batch.insert(&ks.players, &pid_key[..], encode_val("player", snap)?);
         if let Some(acc) = snap.account_id {
-            batch.insert(&self.pool.ks().idx_player_account, &enc_i32(acc.0)[..], &pid_key[..]);
+            batch.insert(&ks.idx_player_account, &enc_i32(acc.0)[..], &pid_key[..]);
         }
-        batch.insert(&self.pool.ks().idx_player_name, canonical_lookup_key(&snap.name), &pid_key[..]);
-        for (kind, sort_score, display_score) in leaderboard_metrics(snap) {
-            let rec = LeaderboardEntryRecord {
-                player_id: snap.id,
-                player_name: snap.name.clone(),
-                score: display_score,
-            };
-            batch.insert(
-                &self.pool.ks().idx_leaderboard,
-                &enc_leaderboard_key(kind as u8, sort_score, snap.id.0)[..],
-                encode_val("idx_leaderboard", &rec)?,
-            );
+        batch.insert(
+            &ks.idx_player_name,
+            canonical_lookup_key(&snap.name),
+            &pid_key[..],
+        );
+        for (k, v) in encode_leaderboard_rows(snap, leaderboard_metrics(snap))? {
+            batch.insert(&ks.idx_leaderboard, &k[..], v);
         }
         batch.commit()?;
         Ok(())
@@ -93,7 +117,12 @@ impl PlayerRepo {
         account_id: AccountId,
         mode: ParityMode,
     ) -> DbResult<Option<PlayerSnapshot>> {
-        let Some(pid_bytes) = self.pool.ks().idx_player_account.get(enc_i32(account_id.0))? else {
+        let Some(pid_bytes) = self
+            .pool
+            .ks()
+            .idx_player_account
+            .get(enc_i32(account_id.0))?
+        else {
             return Ok(None);
         };
         let pid = PlayerId(dec_i64(&pid_bytes)?);
@@ -141,13 +170,14 @@ impl PlayerRepo {
         let name_key = canonical_lookup_key(&seed.name);
         let acc_key = enc_i32(seed.account_id.0);
         let _guard = self.pool.lock_stripe(0);
-        if self.pool.ks().idx_player_name.contains_key(&name_key)? {
+        let ks = self.pool.ks();
+        if ks.idx_player_name.contains_key(&name_key)? {
             return Err(DbError::DuplicateKey {
                 entity: "player.name",
                 key: seed.name.clone(),
             });
         }
-        if self.pool.ks().idx_player_account.contains_key(acc_key)? {
+        if ks.idx_player_account.contains_key(acc_key)? {
             return Err(DbError::DuplicateKey {
                 entity: "player.account_id",
                 key: seed.account_id.to_string(),
@@ -165,21 +195,12 @@ impl PlayerRepo {
         let snap = PlayerSnapshot::from_seed(pid, seed);
         let pid_key = enc_i64(pid.0);
 
-        let mut batch = self.pool.ks().db.batch();
-        batch.insert(&self.pool.ks().players, &pid_key[..], encode_val("player", &snap)?);
-        batch.insert(&self.pool.ks().idx_player_account, &acc_key[..], &pid_key[..]);
-        batch.insert(&self.pool.ks().idx_player_name, name_key, &pid_key[..]);
-        for (kind, sort_score, display_score) in leaderboard_metrics(&snap) {
-            let rec = LeaderboardEntryRecord {
-                player_id: pid,
-                player_name: snap.name.clone(),
-                score: display_score,
-            };
-            batch.insert(
-                &self.pool.ks().idx_leaderboard,
-                &enc_leaderboard_key(kind as u8, sort_score, pid.0)[..],
-                encode_val("idx_leaderboard", &rec)?,
-            );
+        let mut batch = ks.db.batch();
+        batch.insert(&ks.players, &pid_key[..], encode_val("player", &snap)?);
+        batch.insert(&ks.idx_player_account, &acc_key[..], &pid_key[..]);
+        batch.insert(&ks.idx_player_name, name_key, &pid_key[..]);
+        for (k, v) in encode_leaderboard_rows(&snap, leaderboard_metrics(&snap))? {
+            batch.insert(&ks.idx_leaderboard, &k[..], v);
         }
         batch.commit()?;
         Ok(pid)
@@ -204,6 +225,12 @@ impl PlayerRepo {
             normalized.stats.hp = 1;
             normalized.stats.mp = 1;
         }
+        if let Some(pet) = normalized.pet.as_mut()
+            && pet.stats.hp <= 0
+        {
+            pet.stats.hp = 1;
+            pet.stats.mp = 1;
+        }
         if is_legacy_parity(mode) {
             for slot in &mut normalized.item_event_counters[6..] {
                 *slot = 0;
@@ -226,7 +253,9 @@ impl PlayerRepo {
                 .map(|b| decode_val("player", &b))
                 .transpose()?;
             if !need_global_lock
-                && prev_snap.as_ref().is_some_and(|prev| prev.name != normalized.name)
+                && prev_snap
+                    .as_ref()
+                    .is_some_and(|prev| prev.name != normalized.name)
             {
                 need_global_lock = true;
                 continue;
@@ -234,36 +263,41 @@ impl PlayerRepo {
             break (global_guard, pid_guard, prev_snap);
         };
 
-        if prev_snap.as_ref().is_some_and(|prev| prev.training.last_time_offline_ms > now_ms) {
-            debug!(player_id = normalized.id.0, now_ms, "skipping stale player snapshot write");
+        if prev_snap
+            .as_ref()
+            .is_some_and(|prev| prev.training.last_time_offline_ms > now_ms)
+        {
+            debug!(
+                player_id = normalized.id.0,
+                now_ms, "skipping stale player snapshot write"
+            );
             return Ok(());
         }
 
+        let ks = self.pool.ks();
         let rename_keys = if let Some(prev) = &prev_snap
             && prev.name != normalized.name
         {
-            let old_name_key = canonical_lookup_key(&prev.name);
-            let new_name_key = canonical_lookup_key(&normalized.name);
-            if old_name_key != new_name_key {
-                let taken_by_other = self
-                    .pool
-                    .ks()
+            let (old_k, new_k) = (
+                canonical_lookup_key(&prev.name),
+                canonical_lookup_key(&normalized.name),
+            );
+            if old_k != new_k {
+                if ks
                     .idx_player_name
-                    .get(&new_name_key)?
-                    .is_some_and(|b| b.as_ref() != &pid_key[..]);
-                if taken_by_other {
+                    .get(&new_k)?
+                    .is_some_and(|b| b.as_ref() != &pid_key[..])
+                {
                     return Err(DbError::DuplicateKey {
                         entity: "player.name",
                         key: normalized.name,
                     });
                 }
-                let remove_old = self
-                    .pool
-                    .ks()
+                let rm_old = ks
                     .idx_player_name
-                    .get(&old_name_key)?
+                    .get(&old_k)?
                     .is_some_and(|b| b.as_ref() == &pid_key[..]);
-                Some((remove_old.then_some(old_name_key), new_name_key))
+                Some((rm_old.then_some(old_k), new_k))
             } else {
                 None
             }
@@ -271,13 +305,17 @@ impl PlayerRepo {
             None
         };
 
-        let mut batch = self.pool.ks().db.batch();
-        batch.insert(&self.pool.ks().players, &pid_key[..], encode_val("player", &normalized)?);
+        let mut batch = ks.db.batch();
+        batch.insert(
+            &ks.players,
+            &pid_key[..],
+            encode_val("player", &normalized)?,
+        );
         if let Some((old_opt, new_name_key)) = rename_keys {
             if let Some(old_name_key) = old_opt {
-                batch.remove(&self.pool.ks().idx_player_name, old_name_key);
+                batch.remove(&ks.idx_player_name, old_name_key);
             }
-            batch.insert(&self.pool.ks().idx_player_name, new_name_key, &pid_key[..]);
+            batch.insert(&ks.idx_player_name, new_name_key, &pid_key[..]);
         }
 
         let new_lb = leaderboard_metrics(&normalized);
@@ -287,38 +325,32 @@ impl PlayerRepo {
             {
                 if old_sort != new_sort || prev.name != normalized.name {
                     batch.remove(
-                        &self.pool.ks().idx_leaderboard,
+                        &ks.idx_leaderboard,
                         &enc_leaderboard_key(kind as u8, old_sort, normalized.id.0)[..],
                     );
                 }
             }
         }
-        for (kind, sort_score, display_score) in new_lb {
-            let rec = LeaderboardEntryRecord {
-                player_id: normalized.id,
-                player_name: normalized.name.clone(),
-                score: display_score,
-            };
-            batch.insert(
-                &self.pool.ks().idx_leaderboard,
-                &enc_leaderboard_key(kind as u8, sort_score, normalized.id.0)[..],
-                encode_val("idx_leaderboard", &rec)?,
-            );
+        for (k, v) in encode_leaderboard_rows(&normalized, new_lb)? {
+            batch.insert(&ks.idx_leaderboard, &k[..], v);
         }
 
         if let Some(sr) = super_rank {
             let (sr_pk, sr_bytes, old_idx, new_idx) =
                 SuperRankRepo::prepare_upsert_ops(&self.pool, sr)?;
             if let Some(old_k) = old_idx {
-                batch.remove(&self.pool.ks().idx_super_rank, &old_k[..]);
+                batch.remove(&ks.idx_super_rank, &old_k[..]);
             }
-            batch.insert(&self.pool.ks().super_rank, &sr_pk[..], sr_bytes);
+            batch.insert(&ks.super_rank, &sr_pk[..], sr_bytes);
             if let Some(new_k) = new_idx {
-                batch.insert(&self.pool.ks().idx_super_rank, &new_k[..], &[][..]);
+                batch.insert(&ks.idx_super_rank, &new_k[..], &[][..]);
             }
         }
         batch.commit()?;
-        debug!(player_id = normalized.id.0, "saved player snapshot atomically to fjall");
+        debug!(
+            player_id = normalized.id.0,
+            "saved player snapshot atomically to fjall"
+        );
         Ok(())
     }
 
@@ -332,7 +364,10 @@ impl PlayerRepo {
         if let Some(raw) = self.pool.ks().players.get(pid_key)? {
             let mut snap: PlayerSnapshot = decode_val("player", &raw)?;
             snap.training = *training;
-            self.pool.ks().players.insert(&pid_key[..], encode_val("player", &snap)?)?;
+            self.pool
+                .ks()
+                .players
+                .insert(&pid_key[..], encode_val("player", &snap)?)?;
         }
         Ok(())
     }
@@ -344,7 +379,13 @@ impl PlayerRepo {
         limit: usize,
     ) -> DbResult<Vec<LeaderboardEntryRecord>> {
         let mut out = Vec::with_capacity(limit.min(128));
-        for guard in self.pool.ks().idx_leaderboard.prefix([kind as u8]).take(limit) {
+        for guard in self
+            .pool
+            .ks()
+            .idx_leaderboard
+            .prefix([kind as u8])
+            .take(limit)
+        {
             let bytes = guard.value()?;
             out.push(decode_val("idx_leaderboard", &bytes)?);
         }

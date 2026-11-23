@@ -8,26 +8,41 @@ pub mod data_game;
 pub mod data_game_tpl;
 pub mod pgo_bench;
 pub mod router;
+pub(crate) mod router_pet;
 pub mod runtime;
 pub mod state;
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use std::path::PathBuf;
     use crate::config::ServerConfig;
     use crate::data_game::DataGameAssets;
     use crate::data_game_tpl;
     use nro_core::{AccountId, Gender, MapId, PlayerId};
     use nro_db::player_repo::{NewPlayerSeed, PlayerSnapshot};
-    use nro_db::templates::{GameTemplates, ItemTemplateRecord, MapTemplateRecord, SkillTemplateRecord};
+    use nro_db::templates::{
+        GameTemplates, ItemTemplateRecord, MapTemplateRecord, SkillTemplateRecord,
+    };
     use nro_protocol::is_extended_s2c_cmd;
+    use std::fs;
+    use std::path::PathBuf;
 
     #[test]
     fn data_game_streams_all_asset_and_template_opcodes_cleanly() -> anyhow::Result<()> {
         let tmp = std::env::temp_dir().join(format!("nro_assets_test_{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
-        for sub in ["update_data", "res/x2", "icon/x2", "effdata", "effect/x2", "img_by_name/x2", "item_bg_temp/x2", "mob/x2", "map/tile_map_data", "map/item_bg_map_data", "map/eff_map"] {
+        for sub in [
+            "update_data",
+            "res/x2",
+            "icon/x2",
+            "effdata",
+            "effect/x2",
+            "img_by_name/x2",
+            "item_bg_temp/x2",
+            "mob/x2",
+            "map/tile_map_data",
+            "map/item_bg_map_data",
+            "map/eff_map",
+        ] {
             fs::create_dir_all(tmp.join(sub))?;
         }
         for part in ["dart", "arrow", "effect", "image", "part", "skill"] {
@@ -48,21 +63,51 @@ mod tests {
         let assets = DataGameAssets::open(&tmp);
         let mut tpl = GameTemplates::default();
         tpl.images_by_name.insert("mount_12_0".to_owned(), 4);
-        tpl.flag_bags.push((1, "Cờ Đỏ".to_owned(), 1000, 0, 2001, vec![2002, 2003]));
+        tpl.flag_bags
+            .push((1, "Cờ Đỏ".to_owned(), 1000, 0, 2001, vec![2002, 2003]));
         tpl.skills.push(SkillTemplateRecord {
-            nclass_id: 0, id: 0, name: "Đấm Dragon".to_owned(), max_point: 7,
-            mana_use_type: 0, skill_type: 1, icon_id: 539, dam_info: "100%".to_owned(), slot: 0, levels: Vec::new(),
+            nclass_id: 0,
+            id: 0,
+            name: "Đấm Dragon".to_owned(),
+            max_point: 7,
+            mana_use_type: 0,
+            skill_type: 1,
+            icon_id: 539,
+            dam_info: "100%".to_owned(),
+            slot: 0,
+            levels: Vec::new(),
         });
         tpl.maps.push(MapTemplateRecord {
-            id: MapId(21), name: "Nhà Gôhan".to_owned(), zones: 1, max_player: 15,
-            map_type: 0, planet_id: 0, bg_type: 0, tile_id: 1, bg_id: 0,
-            waypoints: Vec::new(), mobs: Vec::new(), npcs: Vec::new(),
+            id: MapId(21),
+            name: "Nhà Gôhan".to_owned(),
+            zones: 1,
+            max_player: 15,
+            map_type: 0,
+            planet_id: 0,
+            bg_type: 0,
+            tile_id: 1,
+            bg_id: 0,
+            waypoints: Vec::new(),
+            mobs: Vec::new(),
+            npcs: Vec::new(),
         });
         for idx in 0..900_i32 {
             tpl.items.push(ItemTemplateRecord {
-                id: idx, item_type: 0, gender: 0, name: format!("Item {idx}"),
-                description: Some("Mô tả".to_owned()), level: 1, icon_id: 390, part: 1,
-                is_up_to_up: false, power_require: 100, gold: 0, gem: 0, head: -1, body: -1, leg: -1,
+                id: idx,
+                item_type: 0,
+                gender: 0,
+                name: format!("Item {idx}"),
+                description: Some("Mô tả".to_owned()),
+                level: 1,
+                icon_id: 390,
+                part: 1,
+                is_up_to_up: false,
+                power_require: 100,
+                gold: 0,
+                gem: 0,
+                head: -1,
+                body: -1,
+                leg: -1,
             });
         }
 
@@ -72,27 +117,60 @@ mod tests {
         assert!(is_extended_s2c_cmd(res_pack[0].cmd));
         assert_eq!(assets.pkt_update_data().expect("-87").cmd, -87);
         assert_eq!(assets.pkt_icon(2, 4028).expect("-67").cmd, -67);
-        assert_eq!(assets.pkt_effect_template(2, 231, 60, 60).expect("-66").cmd, -66);
+        assert_eq!(
+            assets.pkt_effect_template(2, 231, 60, 60).expect("-66").cmd,
+            -66
+        );
         assert_eq!(assets.pkt_img_by_name(&tpl, 2, "mount_12_0").cmd, 66);
-        assert_eq!(assets.pkt_img_by_name(&tpl, 2, "../etc/passwd").reader().remaining(), 2 + 13 + 1 + 4);
+        assert_eq!(
+            assets
+                .pkt_img_by_name(&tpl, 2, "../etc/passwd")
+                .reader()
+                .remaining(),
+            2 + 13 + 1 + 4
+        );
         assert_eq!(assets.pkt_item_bg_template(2, 5).expect("-32").cmd, -32);
         assert_eq!(assets.pkt_mob_template(2, 1).expect("11").cmd, 11);
         assert_eq!(assets.pkt_tile_set_info().expect("-82").cmd, -82);
         assert_eq!(assets.pkt_map_temp(21).expect("-28:10").cmd, -28);
-        assert_eq!(DataGameAssets::pkt_link_ip("NRO", "127.0.0.1", 14445).cmd, -29);
+        assert_eq!(
+            DataGameAssets::pkt_link_ip("NRO", "127.0.0.1", 14445).cmd,
+            -29
+        );
         let item_pkts = data_game_tpl::pkts_update_item(&tpl);
         assert_eq!(item_pkts.len(), 3);
         assert_eq!(item_pkts[2].cmd, 12);
         assert!(is_extended_s2c_cmd(item_pkts[2].cmd));
-        assert_eq!(data_game_tpl::pkt_flag_bag(&tpl, 1, true).expect("-62").cmd, -62);
-        assert_eq!(data_game_tpl::pkt_flag_bag(&tpl, 1, false).expect("-63").cmd, -63);
+        assert_eq!(
+            data_game_tpl::pkt_flag_bag(&tpl, 1, true).expect("-62").cmd,
+            -62
+        );
+        assert_eq!(
+            data_game_tpl::pkt_flag_bag(&tpl, 1, false)
+                .expect("-63")
+                .cmd,
+            -63
+        );
 
-        let snap = PlayerSnapshot::from_seed(PlayerId(1), &NewPlayerSeed {
-            account_id: AccountId(1), name: "goku01".to_owned(), gender: Gender::TraiDat, hair: 0, test_mode: false, now_ms: 0,
-        });
+        let snap = PlayerSnapshot::from_seed(
+            PlayerId(1),
+            &NewPlayerSeed {
+                account_id: AccountId(1),
+                name: "goku01".to_owned(),
+                gender: Gender::TraiDat,
+                hair: 0,
+                test_mode: false,
+                now_ms: 0,
+            },
+        );
         let world_pkts = data_game_tpl::pkts_client_ok(&assets, &tpl, &snap);
         assert_eq!(
-            [world_pkts[0].cmd, world_pkts[1].cmd, world_pkts[2].cmd, world_pkts[3].cmd],
+            [
+                world_pkts[0].cmd,
+                world_pkts[1].cmd,
+                world_pkts[2].cmd,
+                world_pkts[3].cmd
+            ],
             [-30, -64, 40, -24]
         );
 
@@ -114,8 +192,14 @@ mod tests {
             .await
             .expect_err("empty store without SQL should return clear hint");
         let msg = format!("{err:#}");
-        assert!(msg.contains("is empty and no SQL seed dump was found"), "unexpected error: {msg}");
-        assert!(!msg.contains("achievement_template"), "raw table list leaked: {msg}");
+        assert!(
+            msg.contains("is empty and no SQL seed dump was found"),
+            "unexpected error: {msg}"
+        );
+        assert!(
+            !msg.contains("achievement_template"),
+            "raw table list leaked: {msg}"
+        );
 
         let nested_zip = tmp.join("teamobi2026_databases (1)");
         fs::create_dir_all(&nested_zip)?;

@@ -148,7 +148,11 @@ pub fn pkts_client_ok(
         .items_body
         .get(8)
         .and_then(Option::as_ref)
-        .and_then(|it| tpl.items.iter().find(|t| t.id == i32::from(it.template_id.0)))
+        .and_then(|it| {
+            tpl.items
+                .iter()
+                .find(|t| t.id == i32::from(it.template_id.0))
+        })
         .map_or(-1, |t| t.part as i16);
     let mut fb = PacketWriter::with_capacity(6);
     fb.write_i32(snap.id.0 as i32);
@@ -234,7 +238,11 @@ pub fn pkt_map_info_with_ship(
         mobs: Vec::new(),
         npcs: Vec::new(),
     };
-    let map = tpl.maps.iter().find(|m| m.id == snap.location.map_id).unwrap_or(&fallback);
+    let map = tpl
+        .maps
+        .iter()
+        .find(|m| m.id == snap.location.map_id)
+        .unwrap_or(&fallback);
     let mid = map.id.0;
     let mut m = PacketWriter::with_capacity(1_024);
     m.write_i8(mid as i8);
@@ -283,14 +291,30 @@ pub fn pkt_map_info_with_ship(
         m.write_bool((73..=77).contains(&mob_tid));
     }
     m.write_i8(0);
-    m.write_u8(map.npcs.len().min(127) as u8);
-    for &(nid, nx, ny) in map.npcs.iter().take(127) {
+    let mut npcs = map.npcs.clone();
+    if matches!(mid, 21..=23) {
+        if snap.mabu_egg.is_some() && !npcs.iter().any(|&(nid, _, _)| nid == 50) {
+            npcs.push((50, 340, 288));
+        }
+        if snap.dua_hau_egg.is_some() && !npcs.iter().any(|&(nid, _, _)| nid == 51) {
+            npcs.push((51, 380, 288));
+        }
+    }
+    m.write_u8(npcs.len().min(127) as u8);
+    for &(nid, nx, ny) in npcs.iter().take(127) {
+        let default_av = if nid == 50 {
+            50
+        } else if nid == 51 {
+            51
+        } else {
+            0
+        };
         let avatar = tpl
             .npcs
             .iter()
             .find(|n| n.id == i32::from(nid))
             .and_then(|n| n.avatar)
-            .unwrap_or(0);
+            .unwrap_or(default_av);
         m.write_i8(1);
         m.write_i16(nx);
         m.write_i16(ny);

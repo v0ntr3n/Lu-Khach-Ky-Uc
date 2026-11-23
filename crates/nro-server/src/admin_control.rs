@@ -5,14 +5,18 @@
 mod admin_control_extra;
 #[path = "admin_control_ops.rs"]
 mod admin_control_ops;
+#[path = "admin_control_pet.rs"]
+mod admin_control_pet;
+
+pub use admin_control_pet::pet_type_label;
 
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use admin_control_extra::{matches_query, row_from_snap};
 use nro_core::AccountId;
 use nro_db::player_repo::PlayerSnapshot;
-use nro_db::templates::MapTemplateRecord;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
@@ -57,6 +61,10 @@ pub struct AdminUserRow {
     pub gem: i32,
     pub ruby: i32,
     pub vnd: i32,
+    pub has_pet: bool,
+    pub pet_name: String,
+    pub pet_type: i8,
+    pub pet_power: i64,
 }
 
 /// Thread-safe handle allowing an embedded GUI to inspect and control live server state.
@@ -265,80 +273,5 @@ impl AdminControl {
             .clients
             .broadcast_server_notify("Máy chủ đang tắt từ bảng điều khiển, đang lưu dữ liệu...");
         self.shutdown.cancel();
-    }
-}
-
-fn matches_query(needle: &str, acc_id: i32, username: &str, pid: Option<i64>, pname: &str) -> bool {
-    if needle.is_empty() {
-        return true;
-    }
-    acc_id.to_string().contains(needle)
-        || pid.is_some_and(|p| p.to_string().contains(needle))
-        || username.to_ascii_lowercase().contains(needle)
-        || pname.to_ascii_lowercase().contains(needle)
-}
-
-fn row_from_snap(
-    account_id: i32,
-    username: String,
-    snap: Option<PlayerSnapshot>,
-    maps: &[MapTemplateRecord],
-    online: bool,
-    ban: bool,
-    active: bool,
-    is_admin: bool,
-    vnd: i32,
-    fallback_gold: i64,
-) -> AdminUserRow {
-    let (player_id, player_name, map_id, map_name, zone_id, power, gold, gem, ruby) = snap
-        .map_or_else(
-            || {
-                (
-                    None,
-                    "(Chưa tạo NV)".to_owned(),
-                    0,
-                    "-".to_owned(),
-                    0,
-                    0,
-                    fallback_gold,
-                    0,
-                    0,
-                )
-            },
-            |s| {
-                let map_name = maps.iter().find(|m| m.id == s.location.map_id).map_or_else(
-                    || format!("Map {}", s.location.map_id.0),
-                    |m| m.name.clone(),
-                );
-                (
-                    Some(s.id.0),
-                    s.name,
-                    s.location.map_id.0,
-                    map_name,
-                    s.location.zone_id.0,
-                    s.stats.power,
-                    s.wallet.gold,
-                    s.wallet.gem,
-                    s.wallet.ruby,
-                )
-            },
-        );
-    AdminUserRow {
-        account_id,
-        username,
-        player_id,
-        player_name,
-        online,
-        ban,
-        active,
-        is_admin,
-        map_id,
-        map_name,
-        zone_id,
-        power,
-        gold,
-        gem,
-        ruby,
-        vnd,
     }
 }

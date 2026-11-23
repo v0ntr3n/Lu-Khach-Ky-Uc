@@ -1,19 +1,23 @@
 //! Single-threaded `50 ms` [`ZoneActor`] combining `slotmap::SlotMap` generational handles with
 //! Struct-of-Arrays (SoA) slices and deadlock-free two-phase `ChangeMap` handoffs.
 
+#[cfg(test)]
+#[path = "zone_actor_tests.rs"]
+mod tests;
 #[path = "zone_actor_arena.rs"]
 mod zone_actor_arena;
 #[path = "zone_actor_ops.rs"]
 mod zone_actor_ops;
 #[path = "zone_mobs.rs"]
 mod zone_mobs;
-#[cfg(test)]
-#[path = "zone_actor_tests.rs"]
-mod tests;
+#[path = "zone_pets.rs"]
+mod zone_pets;
 
 pub use zone_actor_arena::*;
 pub use zone_mobs::ZoneMobSeed;
+pub use zone_pets::PetCompanion;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use dashmap::DashMap;
@@ -43,7 +47,10 @@ pub(super) const MAX_GROUND_ITEMS: usize = 512;
 #[derive(Debug)]
 pub enum ZoneCommand {
     /// Admits an entering player (`Box<PlayerIngress>` + `EntityKey` reply).
-    EnterPlayer(Box<PlayerIngress>, oneshot::Sender<Result<EntityKey, WorldError>>),
+    EnterPlayer(
+        Box<PlayerIngress>,
+        oneshot::Sender<Result<EntityKey, WorldError>>,
+    ),
     /// Re-admits a player after a failed `ChangeMap`, bypassing the zone player cap.
     RollbackPlayer {
         /// Restored player ingress payload.
@@ -72,7 +79,11 @@ pub enum ZoneCommand {
         SmallVec<[ItemOption; 4]>,
     ),
     /// Picks up a ground item by wire `item_map_id` (`-20` / `-19`).
-    PickItem(EntityKey, i16, oneshot::Sender<Result<GroundItem, WorldError>>),
+    PickItem(
+        EntityKey,
+        i16,
+        oneshot::Sender<Result<GroundItem, WorldError>>,
+    ),
     /// Restores a previously picked [`GroundItem`] back onto the zone floor (e.g. bag full).
     RestoreGroundItem(GroundItem),
     /// Performs a non-blocking two-phase `ChangeMap` handoff via `DashMap` with automatic rollback.
@@ -104,6 +115,13 @@ pub enum ZoneCommand {
     },
     /// Sends existing peers, ground drops, and non-full mob HP states to `EntityKey`.
     SyncZoneState(EntityKey),
+    /// Synchronizes a connected player's companion pet inside this zone.
+    SyncPlayerPet {
+        /// Owning master's player ID.
+        player_id: PlayerId,
+        /// Companion pet state (`None` when player has no pet or is fused).
+        pet: Option<PetCompanion>,
+    },
     /// Updates a player's live [`CoreStats`] in the zone arena.
     UpdatePlayerStats(EntityKey, CoreStats),
     /// Updates a player's live `(head, body, leg)` sprite parts in the zone arena.
@@ -120,6 +138,7 @@ pub struct ZoneActor {
     event_tx: Option<mpsc::Sender<ZoneEvent>>,
     router: Arc<DashMap<(MapId, ZoneId), mpsc::Sender<ZoneCommand>>>,
     arena: ZoneSoaArena,
+    pets: HashMap<PlayerId, PetCompanion>,
     mobs: Vec<ZoneMob>,
     ground_items: SlotMap<EntityKey, GroundItem>,
     traps: Vec<TrapVolume>,
@@ -148,6 +167,7 @@ impl ZoneActor {
                 event_tx: None,
                 router,
                 arena: ZoneSoaArena::default(),
+                pets: HashMap::new(),
                 mobs: Vec::new(),
                 ground_items: SlotMap::with_key(),
                 traps,
@@ -199,7 +219,11 @@ impl ZoneActor {
     pub(super) fn alloc_wire_id(&mut self) -> Option<i16> {
         for _ in 0..i16::MAX {
             let candidate = self.next_wire_id;
-            self.next_wire_id = if candidate == i16::MAX { 1 } else { candidate + 1 };
+            self.next_wire_id = if candidate == i16::MAX {
+                1
+            } else {
+                candidate + 1
+            };
             if !self.ground_items.values().any(|it| it.wire_id == candidate) {
                 return Some(candidate);
             }
@@ -245,7 +269,12 @@ impl ZoneActor {
             options,
         });
         let pkt = s2c_packets::item_map_add(
-            &GroundItemWire { item_map_id: wire_id, template_id: tid, loc, owner_id: owner },
+            &GroundItemWire {
+                item_map_id: wire_id,
+                template_id: tid,
+                loc,
+                owner_id: owner,
+            },
             self.cfg.parity,
         );
         self.broadcast_ground_item_pkt(&pkt, owner);
@@ -261,6 +290,7 @@ impl ZoneActor {
                 let _ = reply.send(self.admit_player_inner(*ingress, true));
             }
             ZoneCommand::LeavePlayer { player_id } => {
+                self.remove_pet_on_leave(player_id);
                 if let Some(key) = self.arena.find_player_key(player_id) {
                     let _ = self.arena.swap_remove(key);
                     if !offline {
@@ -277,18 +307,18 @@ impl ZoneActor {
                             let _ = tx.try_send(s2c_packets::reset_point(self.arena.locations[i]));
                         }
                     } else {
+                        let prev_x = self.arena.locations[i].x;
                         self.arena.locations[i] = Location {
                             x: to.x.clamp(0, self.cfg.map_width.max(4_095)),
                             ..to
                         };
-                        if !offline
-                            && let Some(pid) = self.arena.player_ids[i]
-                        {
+                        if !offline && let Some(pid) = self.arena.player_ids[i] {
                             self.broadcast(
                                 &s2c_packets::player_move(pid, self.arena.locations[i]),
                                 Some(i),
                             );
                         }
+                        self.move_following_pet(i, prev_x);
                     }
                 }
             }
@@ -317,11 +347,19 @@ impl ZoneActor {
             }
             ZoneCommand::SeedMobs(seeds) => self.seed_mobs(seeds),
             ZoneCommand::WipeMobs => self.wipe_mobs(),
-            ZoneCommand::AttackMobs { attacker, skill_paint_id, mob_ids, damage, is_crit, reply } => {
+            ZoneCommand::AttackMobs {
+                attacker,
+                skill_paint_id,
+                mob_ids,
+                damage,
+                is_crit,
+                reply,
+            } => {
                 let res = self.attack_mobs(attacker, skill_paint_id, &mob_ids, damage, is_crit);
                 let _ = reply.send(res);
             }
             ZoneCommand::SyncZoneState(ek) => self.sync_zone_state(ek),
+            ZoneCommand::SyncPlayerPet { player_id, pet } => self.sync_player_pet(player_id, pet),
             ZoneCommand::UpdatePlayerStats(ek, stats) => {
                 if let Some(i) = self.arena.dense_index(ek) {
                     self.arena.stats[i] = stats;

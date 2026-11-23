@@ -33,6 +33,7 @@ impl AdminApp {
             .p_3()
             .gap_3()
             .child(self.render_card_profile(&user, cx))
+            .child(self.render_card_pet(&user, cx))
             .child(self.render_card_notify(user.account_id, cx))
             .child(self.render_card_currency(user.account_id, cx))
             .child(self.render_card_items(user.account_id, cx))

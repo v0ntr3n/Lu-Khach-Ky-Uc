@@ -58,6 +58,7 @@ impl ZoneActor {
 
     fn step_1hz(&mut self) {
         self.respawn_dead_mobs();
+        self.tick_zone_pets();
         for trap in &self.traps {
             for i in 0..self.arena.len() {
                 let l = self.arena.locations[i];
@@ -68,8 +69,10 @@ impl ZoneActor {
                     && l.y >= trap.rect.1
                     && l.y <= trap.rect.1.saturating_add(trap.rect.3)
                 {
-                    let dmg =
-                        trap.base_damage.saturating_mul(90 + (self.rng.next_u64() % 21)) / 100;
+                    let dmg = trap
+                        .base_damage
+                        .saturating_mul(90 + (self.rng.next_u64() % 21))
+                        / 100;
                     let dmg_i64 = i64::try_from(dmg).unwrap_or(i64::MAX);
                     if let Some(tx) = &self.event_tx {
                         if let Some(player_id) = self.arena.player_ids[i]
@@ -103,7 +106,10 @@ impl ZoneActor {
         for (k, it) in &mut self.ground_items {
             let age = self.now_ms.saturating_sub(it.times_ms.0);
             if !offline
-                && matches!(it.kind, GroundDropKind::Standard | GroundDropKind::EarthDragonBall)
+                && matches!(
+                    it.kind,
+                    GroundDropKind::Standard | GroundDropKind::EarthDragonBall
+                )
                 && age >= 45_000
             {
                 it.owner = None;
@@ -116,7 +122,9 @@ impl ZoneActor {
                 GroundDropKind::Satellite { .. } if age >= 1_800_000 => {
                     dead.push((k, it.wire_id, it.owner));
                 }
-                GroundDropKind::BlackBall if self.now_ms.saturating_sub(it.times_ms.1) >= 10_000 => {
+                GroundDropKind::BlackBall
+                    if self.now_ms.saturating_sub(it.times_ms.1) >= 10_000 =>
+                {
                     it.times_ms.1 = self.now_ms;
                     if let Some(px) = p0_x {
                         let delta = (i32::from(px) - i32::from(it.loc.x)).clamp(-50, 50) as i16;
@@ -136,7 +144,12 @@ impl ZoneActor {
         }
         for (wid, tid, loc, owner) in hopped {
             self.broadcast_ground_item_pkt(&s2c_packets::item_map_remove(wid), owner);
-            let wire = GroundItemWire { item_map_id: wid, template_id: tid, loc, owner_id: owner };
+            let wire = GroundItemWire {
+                item_map_id: wid,
+                template_id: tid,
+                loc,
+                owner_id: owner,
+            };
             let add_pkt = s2c_packets::item_map_add(&wire, self.cfg.parity);
             self.broadcast_ground_item_pkt(&add_pkt, owner);
         }
@@ -218,14 +231,20 @@ impl ZoneActor {
         picker: EntityKey,
         item_map_id: i16,
     ) -> Result<GroundItem, WorldError> {
-        let idx = self.arena.dense_index(picker).ok_or(WorldError::EntityNotFound(picker))?;
+        let idx = self
+            .arena
+            .dense_index(picker)
+            .ok_or(WorldError::EntityNotFound(picker))?;
         let pid = self.arena.player_ids[idx].ok_or(WorldError::EntityNotFound(picker))?;
         let item_key = self
             .ground_items
             .iter()
             .find_map(|(k, it)| (it.wire_id == item_map_id).then_some(k))
             .ok_or(WorldError::DungeonRule("ground item not found"))?;
-        let it = self.ground_items.get(item_key).ok_or(WorldError::EntityNotFound(item_key))?;
+        let it = self
+            .ground_items
+            .get(item_key)
+            .ok_or(WorldError::EntityNotFound(item_key))?;
         if matches!(it.kind, GroundDropKind::Satellite { .. }) {
             return Err(WorldError::DungeonRule("cannot pick up satellite"));
         }
@@ -240,7 +259,9 @@ impl ZoneActor {
         {
             return Err(WorldError::DungeonRule("item too far"));
         }
-        self.ground_items.remove(item_key).ok_or(WorldError::EntityNotFound(item_key))
+        self.ground_items
+            .remove(item_key)
+            .ok_or(WorldError::EntityNotFound(item_key))
     }
 
     pub(super) fn restore_ground_item(&mut self, mut item: GroundItem) {
@@ -248,7 +269,11 @@ impl ZoneActor {
             self.broadcast_ground_item_pkt(&s2c_packets::item_map_remove(item.wire_id), item.owner);
             return;
         }
-        if self.ground_items.values().any(|it| it.wire_id == item.wire_id) {
+        if self
+            .ground_items
+            .values()
+            .any(|it| it.wire_id == item.wire_id)
+        {
             let Some(new_id) = self.alloc_wire_id() else {
                 return;
             };
@@ -278,7 +303,10 @@ impl ZoneActor {
     ) {
         let Some(dest_tx) = self.router.get(&dest).map(|e| e.value().clone()) else {
             let _ = reply.send(Err((
-                WorldError::ZoneNotFound { map_id: dest.0, zone_id: dest.1 },
+                WorldError::ZoneNotFound {
+                    map_id: dest.0,
+                    zone_id: dest.1,
+                },
                 Some(key),
             )));
             return;
@@ -287,28 +315,40 @@ impl ZoneActor {
             let _ = reply.send(Err((WorldError::EntityNotFound(key), None)));
             return;
         };
+        let pid = p.identity.0;
+        self.remove_pet_on_leave(pid);
         if !is_offline_map(self.cfg.id.0) {
-            self.broadcast(&s2c_packets::player_remove(p.identity.0), None);
+            self.broadcast(&s2c_packets::player_remove(pid), None);
         }
         let (prev_loc, rb_tx) = (p.loc, self.self_tx.clone());
-        let pid = p.identity.0;
         p.loc = dest_loc;
         p.ship_type = ship_type;
         tokio::spawn(async move {
             let mut backup = p.clone();
             let (ack_tx, ack_rx) = oneshot::channel();
-            let err = match dest_tx.send(ZoneCommand::EnterPlayer(Box::new(p), ack_tx)).await {
+            let err = match dest_tx
+                .send(ZoneCommand::EnterPlayer(Box::new(p), ack_tx))
+                .await
+            {
                 Ok(()) => match ack_rx.await {
                     Ok(Ok(new_key)) => {
                         if reply.send(Ok(new_key)).is_err() {
-                            let _ = dest_tx.send(ZoneCommand::LeavePlayer { player_id: pid }).await;
+                            let _ = dest_tx
+                                .send(ZoneCommand::LeavePlayer { player_id: pid })
+                                .await;
                         }
                         return;
                     }
                     Ok(Err(e)) => e,
-                    Err(_) => WorldError::ZoneNotFound { map_id: dest.0, zone_id: dest.1 },
+                    Err(_) => WorldError::ZoneNotFound {
+                        map_id: dest.0,
+                        zone_id: dest.1,
+                    },
                 },
-                Err(_) => WorldError::ZoneNotFound { map_id: dest.0, zone_id: dest.1 },
+                Err(_) => WorldError::ZoneNotFound {
+                    map_id: dest.0,
+                    zone_id: dest.1,
+                },
             };
             warn!(?dest, %err, "ChangeMap rejected; rolling back to source zone");
             backup.loc = prev_loc;
@@ -328,7 +368,9 @@ impl ZoneActor {
             };
             let has_rollback = rollback_key.is_some();
             if reply.send(Err((err, rollback_key))).is_err() && has_rollback {
-                let _ = rb_tx.send(ZoneCommand::LeavePlayer { player_id: pid }).await;
+                let _ = rb_tx
+                    .send(ZoneCommand::LeavePlayer { player_id: pid })
+                    .await;
             }
         });
     }

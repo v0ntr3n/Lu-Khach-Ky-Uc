@@ -8,6 +8,7 @@ mod app;
 mod app_ops;
 mod inspector;
 mod inspector_cards;
+mod inspector_pet;
 mod log_buffer;
 mod log_view;
 mod server_tools;
