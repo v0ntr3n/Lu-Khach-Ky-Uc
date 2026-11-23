@@ -60,7 +60,7 @@ fn encode_leaderboard_rows(
     lb: [(LeaderboardIndexKind, u64, i64); 4],
 ) -> DbResult<[([u8; 17], Vec<u8>); 4]> {
     let [a, b, c, d] = lb;
-    let encode_one = |(kind, sort_score, score): (LeaderboardIndexKind, u64, i64)| {
+    let encode_one = |(kind, sort_score, score): (LeaderboardIndexKind, u64, i64)| -> DbResult<([u8; 17], Vec<u8>)> {
         let rec = LeaderboardEntryRecord {
             player_id: snap.id,
             player_name: snap.name.clone(),
