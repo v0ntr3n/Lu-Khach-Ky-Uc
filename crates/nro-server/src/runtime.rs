@@ -122,7 +122,12 @@ impl ServerRuntime {
                 .max()
                 .unwrap_or(1_200);
             let map_width = assets.map_pixel_width(map.id.0).max(wp_w);
-            for z in 0..u16::from(map.zones.max(1)) {
+            let zone_cnt = if ServerSessionHandler::is_offline_map_id(map.id) || map.map_type == 1 {
+                u16::from(map.zones.max(1))
+            } else {
+                u16::from(map.zones.max(2))
+            };
+            for z in 0..zone_cnt {
                 let (zone_id, seed) = (
                     ZoneId(z),
                     (u64::from(map.id.0.cast_unsigned()) << 16) | u64::from(z),

@@ -28,7 +28,15 @@ impl ServerSessionHandler {
             .iter()
             .find(|m| m.id == cur_map)
             .map_or((15_usize, 15_u8), |m| {
-                (usize::from(m.zones.clamp(1, 20)), m.max_player.clamp(1, 30))
+                let zmin = if Self::is_offline_map_id(m.id) || m.map_type == 1 {
+                    1
+                } else {
+                    2
+                };
+                (
+                    usize::from(m.zones.clamp(zmin, 20)),
+                    m.max_player.clamp(1, 30),
+                )
             });
         let mut counts = vec![0_u8; zone_count];
         for entry in &self.shared.clients.authenticated {

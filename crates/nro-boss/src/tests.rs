@@ -378,3 +378,20 @@ fn damage_and_combat_tick_saturate_extreme_i64_values() {
     let mut yard = BossArchetype::YardratPatrol { point_a: loc, point_b: loc, regen_ms: 1000 };
     crate::combat_ai::run_boss_combat_tick(PlayerId(-3), MapId(131), ZoneId(0), &mut loc, &mut stats, &mut yard, std::slice::from_ref(&pl), ParityMode::Fixed, &mut rng, &mut effects);
 }
+
+#[test]
+fn bosses_never_spawn_in_zone_zero() {
+    let mut rng = GameRng::from_seed(2026);
+    let mut mgr = BossGroupManager::with_builtin_catalog(ParityMode::Fixed, 0).expect("catalog");
+    assert!(mgr.instances().values().all(|b| b.zone_id.0 >= 1));
+    let mut world = WorldTickContext { ict_hour: 21, mabu_12h_open: true, mabu_14h_open: true, ..Default::default() };
+    for m in 0..=200_u16 {
+        world.map_zones.insert(m, 15);
+    }
+    for step in 1..=30_u64 {
+        mgr.tick_all(&world, &mut rng, step * 65_000);
+        assert!(mgr.instances().values().all(|b| b.zone_id.0 >= 1));
+    }
+    let d_pid = mgr.spawn_dungeon_boss(BossTypeId(117), DungeonKind::RedRibbon { mult_pct: 100 }, DungeonParams { level: 1, clan_total_dame: 10_000, clan_total_hp: 100_000 }, ZoneId(0), 1_000).expect("dungeon");
+    assert!(mgr.instances()[&d_pid.0].zone_id.0 >= 1);
+}

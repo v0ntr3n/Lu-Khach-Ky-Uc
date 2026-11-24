@@ -69,7 +69,12 @@ impl ServerSessionHandler {
             send_thong_bao(session, "Bản đồ này chưa mở hoặc không tồn tại!")?;
             return Ok(false);
         };
-        let max_zones = u16::from(dest_tpl.zones.max(1));
+        let max_zones =
+            if super::super::router_combat::is_offline_map(target_map) || dest_tpl.map_type == 1 {
+                u16::from(dest_tpl.zones.max(1))
+            } else {
+                u16::from(dest_tpl.zones.max(2))
+            };
         let safe_zone = if super::super::router_combat::is_offline_map(target_map)
             || dest_tpl.map_type == 1
             || dest_zone.0 >= max_zones

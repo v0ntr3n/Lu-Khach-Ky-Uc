@@ -244,7 +244,7 @@ fn push_yardrat_18(out: &mut Vec<BossDefinition>, mut bt: u16) {
 
 fn push_minis_arenas_dungeons_events(out: &mut Vec<BossDefinition>, mut bt: u16) {
     // 6 Mini-bosses (80..=85)
-    out.push(def_one(bt, -365, "Ăn trộm", [201, 202, 203], 1, 100, 600, &[0, 7, 14], ManagerGroup::WorldBoss, BossFlags::ZONE_ZERO_ONLY, DamageRule::FixedHit { fixed: 1, counter_blind: true }, BossArchetype::ThiefAnTrom { stolen_gold: 0 }, BossLootProfile::MiniBoss { variant: 1 }));
+    out.push(def_one(bt, -365, "Ăn trộm", [201, 202, 203], 1, 100, 600, &[0, 7, 14], ManagerGroup::WorldBoss, BossFlags::empty(), DamageRule::FixedHit { fixed: 1, counter_blind: true }, BossArchetype::ThiefAnTrom { stolen_gold: 0 }, BossLootProfile::MiniBoss { variant: 1 }));
     out.push(def_one(bt + 1, -799, "Mặt Trời", [600, 601, 602], 1, 100, 600, &[5, 13, 20], ManagerGroup::WorldBoss, BossFlags::empty(), DamageRule::FixedHit { fixed: 1, counter_blind: false }, BossArchetype::MiniHazard { variant: 0 }, BossLootProfile::MiniBoss { variant: 0 }));
     out.push(def_one(bt + 2, -79, "Virut", [603, 604, 605], 1, 100, 600, &[5, 13, 20], ManagerGroup::WorldBoss, BossFlags::empty(), DamageRule::FixedHit { fixed: 1, counter_blind: false }, BossArchetype::MiniHazard { variant: 1 }, BossLootProfile::MiniBoss { variant: 1 }));
     out.push(def_one(bt + 3, -78, "Ở Dơ", [400, 401, 402], 1, 500_000, 600, &[5, 13, 20], ManagerGroup::WorldBoss, BossFlags::empty(), DamageRule::FixedHit { fixed: 50_000, counter_blind: false }, BossArchetype::MiniHazard { variant: 2 }, BossLootProfile::MiniBoss { variant: 1 }));

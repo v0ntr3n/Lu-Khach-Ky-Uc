@@ -140,7 +140,13 @@ impl ServerSessionHandler {
                         .maps
                         .iter()
                         .find(|m| m.id == loc.map_id)
-                        .map_or(1, |m| u16::from(m.zones.max(1)));
+                        .map_or(1, |m| {
+                            if Self::is_offline_map_id(m.id) || m.map_type == 1 {
+                                u16::from(m.zones.max(1))
+                            } else {
+                                u16::from(m.zones.max(2))
+                            }
+                        });
                     if max_z > 1 {
                         self.switch_player_zone(
                             session,

@@ -162,6 +162,20 @@ pub(super) fn spawn_background_ticks(
         for iv in [&mut boss_iv, &mut lb_iv, &mut lot_iv, &mut regen_iv] {
             iv.set_missed_tick_behavior(MissedTickBehavior::Skip);
         }
+        let map_zones: BTreeMap<u16, u16> = shared
+            .templates
+            .maps
+            .iter()
+            .filter(|m| m.id.0 >= 0)
+            .map(|m| {
+                let zc = if ServerSessionHandler::is_offline_map_id(m.id) || m.map_type == 1 {
+                    u16::from(m.zones.max(1))
+                } else {
+                    u16::from(m.zones.max(2))
+                };
+                (m.id.0.cast_unsigned(), zc)
+            })
+            .collect();
         let mut rng = GameRng::from_seed(0x2026_B055);
         loop {
             tokio::select! {
@@ -198,6 +212,7 @@ pub(super) fn spawn_background_ticks(
                         active_seasons,
                         zone_players,
                         zone_rosters,
+                        map_zones: map_zones.clone(),
                     };
                     let effects = shared.bosses.lock().tick_all(&ctx, &mut rng, unix_now_ms() as u64);
                     if !effects.is_empty() {
