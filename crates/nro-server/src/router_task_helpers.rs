@@ -23,6 +23,15 @@ pub(super) const fn home_elder_npc(gender_idx: usize) -> i16 {
 }
 
 #[inline]
+pub(super) fn is_auto_skip_clan_subtask(task_id: i8, sub_name: &str) -> bool {
+    if task_id == 13 {
+        return true;
+    }
+    let s = sub_name.trim().to_lowercase();
+    s.contains("2 thành viên") || s.contains("hai thành viên") || s.contains("gia nhập bang")
+}
+
+#[inline]
 pub(super) const fn power_milestone_for(task_id: i8, sub_idx: usize) -> Option<i64> {
     match (task_id, sub_idx) {
         (7, 0) => Some(16_000),
@@ -211,6 +220,44 @@ impl ServerSessionHandler {
         }
     }
 
+    pub(super) fn advance_auto_skip_tasks(
+        &self,
+        e: &mut ActivePlayerEntry,
+        gender_idx: usize,
+        out_pkts: &mut Vec<Packet>,
+    ) {
+        for _ in 0..4 {
+            let tid = e.snapshot.main_task.task_id;
+            if tid == 13 {
+                out_pkts.extend(self.complete_main_task_inner(e, 13, gender_idx));
+                continue;
+            }
+            let sub_idx = usize::from(e.snapshot.main_task.sub_index.max(0).cast_unsigned());
+            let Some(sub_len) = self
+                .shared
+                .templates
+                .tasks
+                .iter()
+                .find(|t| t.id == i32::from(tid))
+                .and_then(|t| {
+                    let sub = t.sub_tasks.get(sub_idx)?;
+                    is_auto_skip_clan_subtask(tid, &sub.name).then_some(t.sub_tasks.len().min(127))
+                })
+            else {
+                break;
+            };
+            if sub_idx + 1 < sub_len {
+                e.snapshot.main_task.sub_index = (sub_idx + 1) as i8;
+                e.snapshot.main_task.count = 0;
+                e.snapshot.main_task.last_time_ms = unix_now_ms();
+                self.shared.leaderboards.mark_dirty(LeaderboardSlot::Task);
+                out_pkts.push(s2c_packets::task_next());
+            } else {
+                out_pkts.extend(self.complete_main_task_inner(e, tid, gender_idx));
+            }
+        }
+    }
+
     pub(super) fn apply_subtask_delta(
         &self,
         e: &mut ActivePlayerEntry,
@@ -229,13 +276,26 @@ impl ServerSessionHandler {
             e.snapshot.main_task.sub_index = (sub_idx + 1) as i8;
             e.snapshot.main_task.count = 0;
             self.shared.leaderboards.mark_dirty(LeaderboardSlot::Task);
-            return vec![s2c_packets::task_next()];
+            let mut pkts = vec![s2c_packets::task_next()];
+            self.advance_auto_skip_tasks(e, gender_idx, &mut pkts);
+            return pkts;
         }
         let done_id = e.snapshot.main_task.task_id;
         self.complete_main_task(e, done_id, gender_idx)
     }
 
     pub(super) fn complete_main_task(
+        &self,
+        e: &mut ActivePlayerEntry,
+        done_id: i8,
+        gender_idx: usize,
+    ) -> Vec<Packet> {
+        let mut pkts = self.complete_main_task_inner(e, done_id, gender_idx);
+        self.advance_auto_skip_tasks(e, gender_idx, &mut pkts);
+        pkts
+    }
+
+    fn complete_main_task_inner(
         &self,
         e: &mut ActivePlayerEntry,
         done_id: i8,

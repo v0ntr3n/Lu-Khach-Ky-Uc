@@ -68,12 +68,12 @@ impl ServerSessionHandler {
                     _ => {}
                 }
             } else {
+                self.advance_auto_skip_tasks(&mut e, g, &mut out_pkts);
                 let tid = i32::from(e.snapshot.main_task.task_id);
                 let sub_idx = usize::from(e.snapshot.main_task.sub_index.max(0).cast_unsigned());
                 if let Some(t_tpl) = self.shared.templates.tasks.iter().find(|t| t.id == tid)
                     && let Some(sub) = t_tpl.sub_tasks.get(sub_idx)
                     && power_milestone_for(tid as i8, sub_idx).is_none()
-                    && (!(tid == 13 && sub_idx == 0) || e.snapshot.clan_id.0 >= 0)
                 {
                     let (req_npc, req_map) =
                         if tid == 11 && sub_idx == 3 && (sub.npc_id == 105 || sub.map_id.0 == 42) {
@@ -96,8 +96,9 @@ impl ServerSessionHandler {
                         } else {
                             note
                         });
-                        out_pkts =
-                            self.apply_subtask_delta(&mut e, sub_idx, sub_len, req_max, req_max, g);
+                        out_pkts.extend(
+                            self.apply_subtask_delta(&mut e, sub_idx, sub_len, req_max, req_max, g),
+                        );
                     }
                 }
             }

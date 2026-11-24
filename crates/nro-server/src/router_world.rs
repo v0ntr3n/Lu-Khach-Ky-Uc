@@ -60,6 +60,7 @@ impl ServerSessionHandler {
             );
             return Ok(());
         }
+        self.sanitize_login_main_task(sid);
         let now_ms = unix_now_ms();
         let Some((snap, activated, ek)) =
             self.shared

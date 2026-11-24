@@ -67,7 +67,8 @@ impl ServerSessionHandler {
         sid: u64,
         is_offline: bool,
     ) -> Result<(), ProtocolError> {
-        const WP_MARGIN: i32 = 120;
+        const WP_MARGIN_X: i32 = 168;
+        const WP_MARGIN_Y: i32 = 264;
         let Some(loc) = self
             .shared
             .clients
@@ -98,10 +99,10 @@ impl ServerSessionHandler {
                 }
                 let (min_x, max_x) = (i32::from(wp.1.min(wp.3)), i32::from(wp.1.max(wp.3)));
                 let (min_y, max_y) = (i32::from(wp.2.min(wp.4)), i32::from(wp.2.max(wp.4)));
-                if px < min_x - WP_MARGIN
-                    || px > max_x + WP_MARGIN
-                    || py < min_y - WP_MARGIN
-                    || py > max_y + WP_MARGIN
+                if px < min_x - WP_MARGIN_X
+                    || px > max_x + WP_MARGIN_X
+                    || py < min_y - WP_MARGIN_Y
+                    || py > max_y + WP_MARGIN_Y
                 {
                     continue;
                 }
@@ -123,9 +124,16 @@ impl ServerSessionHandler {
                 }
             }
         }
-        if let Some((target_map, tx, ty)) = best_wp.or(air_drop) {
+        if let Some((target_map, tx, raw_ty)) = best_wp.or(air_drop) {
+            let safe_ty = if raw_ty <= 0 { 336 } else { raw_ty };
             return self
-                .switch_player_zone(session, sid, Some(target_map), loc.zone_id, Some((tx, ty)))
+                .switch_player_zone(
+                    session,
+                    sid,
+                    Some(target_map),
+                    loc.zone_id,
+                    Some((tx, safe_ty)),
+                )
                 .await;
         }
         session.send(s2c_packets::reset_point(loc)).await?;

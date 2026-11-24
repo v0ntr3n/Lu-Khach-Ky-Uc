@@ -90,7 +90,7 @@ impl ServerSessionHandler {
                     )
                 {
                     let delta = if matches!(task_id, 14 | 15) {
-                        coop_delta.unwrap_or(0)
+                        coop_delta.unwrap_or(1).max(1)
                     } else {
                         1
                     };
@@ -136,6 +136,7 @@ impl ServerSessionHandler {
                 }
             } else if e.snapshot.main_task.task_id >= 1 {
                 let g = usize::from(u8::from(e.snapshot.gender)).min(2);
+                self.advance_auto_skip_tasks(&mut e, g, &mut out_pkts);
                 self.check_map_visit_subtask(&mut e, map_id, g, &mut out_pkts);
             }
         }
@@ -168,6 +169,7 @@ impl ServerSessionHandler {
                     });
                 }
             } else {
+                self.advance_auto_skip_tasks(&mut e, g, &mut out_pkts);
                 self.check_map_visit_subtask(&mut e, map_id, g, &mut out_pkts);
             }
         }
@@ -302,6 +304,16 @@ impl ServerSessionHandler {
             session.send(p).await?;
         }
         Ok(())
+    }
+
+    pub(super) fn sanitize_login_main_task(&self, sid: u64) {
+        if let Some(mut e) = self.shared.clients.authenticated.get_mut(&sid)
+            && e.snapshot.main_task.task_id >= 1
+        {
+            let g = usize::from(u8::from(e.snapshot.gender)).min(2);
+            let mut discarded = Vec::new();
+            self.advance_auto_skip_tasks(&mut e, g, &mut discarded);
+        }
     }
 
     pub(super) async fn advance_task_on_mob_kill(
