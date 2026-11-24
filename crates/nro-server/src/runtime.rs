@@ -122,7 +122,9 @@ impl ServerRuntime {
                 .max()
                 .unwrap_or(1_200);
             let map_width = assets.map_pixel_width(map.id.0).max(wp_w);
-            let zone_cnt = if ServerSessionHandler::is_offline_map_id(map.id) || map.map_type == 1 {
+            let zone_cnt = if crate::router::ServerSessionHandler::is_offline_map_id(map.id)
+                || map.map_type == 1
+            {
                 u16::from(map.zones.max(1))
             } else {
                 u16::from(map.zones.max(2))
