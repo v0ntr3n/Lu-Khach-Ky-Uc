@@ -30,6 +30,8 @@ pub enum EntityKind {
 pub enum GroundDropKind {
     /// `45s` exclusive owner -> `15s` public -> `60s` despawn.
     Standard,
+    /// Player-discarded item (`45s` owner -> `15s` public -> `60s` despawn; skipped by owner's magnet sweep).
+    PlayerDiscarded,
     /// Earth Dragon Ball `14..=20` (`45s` owner -> `300s` despawn).
     EarthDragonBall,
     /// Clan satellite `342..=345` (`1,800s` lifetime, `3s` pulse within `200 px`).

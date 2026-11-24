@@ -108,14 +108,18 @@ impl ZoneActor {
             if !offline
                 && matches!(
                     it.kind,
-                    GroundDropKind::Standard | GroundDropKind::EarthDragonBall
+                    GroundDropKind::Standard
+                        | GroundDropKind::PlayerDiscarded
+                        | GroundDropKind::EarthDragonBall
                 )
                 && age >= 45_000
             {
                 it.owner = None;
             }
             match it.kind {
-                GroundDropKind::Standard if age >= 60_000 => dead.push((k, it.wire_id, it.owner)),
+                GroundDropKind::Standard | GroundDropKind::PlayerDiscarded if age >= 60_000 => {
+                    dead.push((k, it.wire_id, it.owner));
+                }
                 GroundDropKind::EarthDragonBall if age >= 300_000 => {
                     dead.push((k, it.wire_id, it.owner));
                 }

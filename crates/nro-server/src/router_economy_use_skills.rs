@@ -163,7 +163,7 @@ impl ServerSessionHandler {
                         dropped.quantity,
                         loc,
                         Some(pid),
-                        GroundDropKind::Standard,
+                        GroundDropKind::PlayerDiscarded,
                         dropped.options,
                     ))
                     .await;

@@ -281,3 +281,70 @@ fn pet_companion_spawns_on_home_map_follows_refreshes_and_fights_mobs() {
         }
     ));
 }
+
+#[test]
+fn bua_thu_hut_magnet_picks_distant_own_and_nearby_public_items() {
+    let router = Arc::new(DashMap::new());
+    let (mut z, _tx) = ZoneActor::new(
+        ZoneConfig {
+            id: (MapId(5), ZoneId(1)),
+            max_players: 5,
+            map_width: 1600,
+            parity: ParityMode::Fixed,
+        },
+        router,
+        vec![],
+        GameRng::from_seed(77),
+    );
+    let (p_tx, _p_rx) = mpsc::channel(32);
+    let mut ing = test_ingress(501, "GokuMagnet", p_tx);
+    ing.loc = Location::new(100, 300);
+    ing.ship_type = 0;
+    let key = z.admit_player(ing).expect("admit");
+
+    z.handle_command(ZoneCommand::DropItem(
+        TemplateId(76),
+        500,
+        Location::new(900, 300),
+        Some(PlayerId(501)),
+        GroundDropKind::Standard,
+    ));
+    z.handle_command(ZoneCommand::DropItem(
+        TemplateId(14),
+        1,
+        Location::new(450, 300),
+        None,
+        GroundDropKind::EarthDragonBall,
+    ));
+    z.handle_command(ZoneCommand::DropItem(
+        TemplateId(15),
+        1,
+        Location::new(950, 300),
+        None,
+        GroundDropKind::EarthDragonBall,
+    ));
+    z.handle_command(ZoneCommand::DropItem(
+        TemplateId(0),
+        1,
+        Location::new(100, 300),
+        Some(PlayerId(501)),
+        GroundDropKind::PlayerDiscarded,
+    ));
+
+    for _ in 0..6 {
+        z.on_tick();
+    }
+    let (m_tx, mut m_rx) = oneshot::channel();
+    z.handle_command(ZoneCommand::MagnetPickItems {
+        picker: key,
+        specific_wire_id: None,
+        has_empty_bag_slot: false,
+        stackable_bag_tids: smallvec::smallvec![TemplateId(14)],
+        reply: m_tx,
+    });
+    let picked = m_rx.try_recv().expect("magnet reply");
+    assert_eq!(picked.len(), 2);
+    assert!(picked.iter().any(|i| i.stack == (TemplateId(76), 500)));
+    assert!(picked.iter().any(|i| i.stack == (TemplateId(14), 1)));
+    assert_eq!(z.ground_items.len(), 2);
+}

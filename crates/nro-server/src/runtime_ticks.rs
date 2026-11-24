@@ -159,7 +159,14 @@ pub(super) fn spawn_background_ticks(
             LOTTERY_TICK_MS.max(TOURNAMENT_TICK_MS),
         ));
         let mut regen_iv = tokio::time::interval(Duration::from_secs(30));
-        for iv in [&mut boss_iv, &mut lb_iv, &mut lot_iv, &mut regen_iv] {
+        let mut magnet_iv = tokio::time::interval(Duration::from_millis(500));
+        for iv in [
+            &mut boss_iv,
+            &mut lb_iv,
+            &mut lot_iv,
+            &mut regen_iv,
+            &mut magnet_iv,
+        ] {
             iv.set_missed_tick_behavior(MissedTickBehavior::Skip);
         }
         let map_zones: BTreeMap<u16, u16> = shared
@@ -180,6 +187,11 @@ pub(super) fn spawn_background_ticks(
         loop {
             tokio::select! {
                 () = shutdown.cancelled() => break,
+                _ = magnet_iv.tick() => {
+                    ServerSessionHandler::new(Arc::clone(&shared))
+                        .sweep_magnet_pickups()
+                        .await;
+                }
                 _ = boss_iv.tick() => {
                     let mut zone_players: BTreeMap<(u16, u16), usize> = BTreeMap::new();
                     let mut zone_rosters: BTreeMap<(u16, u16), Vec<PlayerView>> = BTreeMap::new();

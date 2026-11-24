@@ -8,6 +8,8 @@ mod tests;
 mod zone_actor_arena;
 #[path = "zone_actor_ops.rs"]
 mod zone_actor_ops;
+#[path = "zone_magnet.rs"]
+mod zone_magnet;
 #[path = "zone_mobs.rs"]
 mod zone_mobs;
 #[path = "zone_pets.rs"]
@@ -32,10 +34,7 @@ use tokio::time::{self, Duration, MissedTickBehavior};
 use tracing::{debug, info, instrument};
 use zone_mobs::{ZoneMob, is_offline_map};
 
-use crate::{
-    WorldError,
-    s2c_packets::{self, GroundItemWire},
-};
+use crate::{WorldError, s2c_packets};
 
 /// Simulation interval for every [`ZoneActor`] (`50 ms` = 20 Hz).
 pub const ZONE_TICK_MS: u64 = 50;
@@ -86,6 +85,19 @@ pub enum ZoneCommand {
         i16,
         oneshot::Sender<Result<GroundItem, WorldError>>,
     ),
+    /// Pulls eligible ground items for a player with active `Bùa Thu Hút` (`td_thu_hut_ms`).
+    MagnetPickItems {
+        /// Picker's arena entity key.
+        picker: EntityKey,
+        /// Optional target `wire_id` (`Some(id)` for manual C2S `-20`, `None` for periodic sweep).
+        specific_wire_id: Option<i16>,
+        /// Whether bag has at least one empty slot for non-currency items.
+        has_empty_bag_slot: bool,
+        /// Stackable `TemplateId`s currently in the player's bag with `< 99` quantity.
+        stackable_bag_tids: SmallVec<[TemplateId; 16]>,
+        /// Reply channel returning up to 8 picked [`GroundItem`]s.
+        reply: oneshot::Sender<SmallVec<[GroundItem; 8]>>,
+    },
     /// Restores a previously picked [`GroundItem`] back onto the zone floor (e.g. bag full).
     RestoreGroundItem(GroundItem),
     /// Performs a non-blocking two-phase `ChangeMap` handoff via `DashMap` with automatic rollback.
@@ -249,42 +261,6 @@ impl ZoneActor {
         }
     }
 
-    fn spawn_ground_item(
-        &mut self,
-        tid: TemplateId,
-        qty: u32,
-        loc: Location,
-        owner: Option<PlayerId>,
-        kind: GroundDropKind,
-        options: SmallVec<[ItemOption; 4]>,
-    ) {
-        if self.ground_items.len() >= MAX_GROUND_ITEMS {
-            return;
-        }
-        let Some(wire_id) = self.alloc_wire_id() else {
-            return;
-        };
-        self.ground_items.insert(GroundItem {
-            wire_id,
-            stack: (tid, qty),
-            loc,
-            owner,
-            times_ms: (self.now_ms, self.now_ms),
-            kind,
-            options,
-        });
-        let pkt = s2c_packets::item_map_add(
-            &GroundItemWire {
-                item_map_id: wire_id,
-                template_id: tid,
-                loc,
-                owner_id: owner,
-            },
-            self.cfg.parity,
-        );
-        self.broadcast_ground_item_pkt(&pkt, owner);
-    }
-
     fn handle_command(&mut self, cmd: ZoneCommand) -> bool {
         let offline = is_offline_map(self.cfg.id.0);
         match cmd {
@@ -355,6 +331,21 @@ impl ZoneActor {
             }
             ZoneCommand::PickItem(picker, item_map_id, reply) => {
                 let _ = reply.send(self.pick_item(picker, item_map_id));
+            }
+            ZoneCommand::MagnetPickItems {
+                picker,
+                specific_wire_id,
+                has_empty_bag_slot,
+                stackable_bag_tids,
+                reply,
+            } => {
+                let picked = self.magnet_pick_items(
+                    picker,
+                    specific_wire_id,
+                    has_empty_bag_slot,
+                    &stackable_bag_tids,
+                );
+                let _ = reply.send(picked);
             }
             ZoneCommand::RestoreGroundItem(item) => {
                 self.restore_ground_item(item);
