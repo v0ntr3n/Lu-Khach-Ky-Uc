@@ -109,14 +109,15 @@ fn spawn_server_thread(
                     .build()?;
                 let rt_handle = rt.handle().clone();
                 let ready_state = Arc::clone(&boot_state);
+                let inner_shutdown = bg_shutdown.clone();
                 rt.block_on(async move {
-                    let runtime = ServerRuntime::boot(config, bg_shutdown.clone()).await?;
+                    let runtime = ServerRuntime::boot(config, inner_shutdown.clone()).await?;
                     let control =
-                        AdminControl::new(runtime.shared(), rt_handle, bg_shutdown.clone());
+                        AdminControl::new(runtime.shared(), rt_handle, inner_shutdown.clone());
                     if let Ok(mut guard) = ready_state.lock() {
                         *guard = BootState::Ready(control);
                     }
-                    bg_shutdown.cancelled().await;
+                    inner_shutdown.cancelled().await;
                     info!("GUI requested shutdown; flushing online player snapshots to fjall");
                     if let Err(err) = runtime.shutdown_and_flush().await {
                         error!(error = %err, "error during server shutdown flush");
