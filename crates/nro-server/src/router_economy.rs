@@ -14,8 +14,9 @@ use nro_protocol::{ProtocolError, SessionHandle};
 use nro_world::{ZoneCommand, s2c_packets};
 
 use super::{
-    DbItemCatalog, ServerSessionHandler, effective_appearance, send_thong_bao,
-    snapshot_to_economy_inv, sync_economy_inv_to_snapshot,
+    DbItemCatalog, ServerSessionHandler, effective_appearance, pkt_fusion, send_thong_bao,
+    snapshot_to_economy_inv, sprite_restore_packets, sync_economy_inv_to_snapshot,
+    unfuse_if_missing_porata,
 };
 use crate::runtime::unix_now_ms;
 
@@ -104,7 +105,8 @@ impl ServerSessionHandler {
                 while inv.body.len() < 11 {
                     inv.body.push(None);
                 }
-                let mut rng = GameRng::from_seed(unix_now_ms().cast_unsigned() ^ sid);
+                let now_ms = unix_now_ms();
+                let mut rng = GameRng::from_seed(now_ms.cast_unsigned() ^ sid);
                 let (mut body_changed, mut pet_changed) = (false, false);
                 let moved = match move_type {
                     0 => inv
@@ -285,18 +287,25 @@ impl ServerSessionHandler {
                     return None;
                 }
                 sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
-                if pet_changed {
-                    crate::router_pet::recalculate_pet_in_snapshot(
-                        &self.shared,
-                        &mut entry.snapshot,
-                    );
-                }
-                if body_changed {
-                    super::recalculate_session_stats(
-                        sid,
-                        &mut entry.snapshot,
-                        self.shared.config.parity_mode,
-                    );
+                let unfused = (move_type == 1)
+                    && unfuse_if_missing_porata(&self.shared, sid, &mut entry.snapshot, now_ms);
+                if unfused {
+                    body_changed = true;
+                    pet_changed = true;
+                } else {
+                    if pet_changed {
+                        crate::router_pet::recalculate_pet_in_snapshot(
+                            &self.shared,
+                            &mut entry.snapshot,
+                        );
+                    }
+                    if body_changed {
+                        super::recalculate_session_stats(
+                            sid,
+                            &mut entry.snapshot,
+                            self.shared.config.parity_mode,
+                        );
+                    }
                 }
                 let (eh, eb, el, ebag, is_disg) =
                     effective_appearance(&self.shared.templates, &entry.snapshot);
@@ -323,7 +332,8 @@ impl ServerSessionHandler {
                     body_changed.then(|| {
                         (
                             s2c_packets::me_load_point(&entry.snapshot.stats),
-                            s2c_packets::update_body(pid, is_disg.then_some((eh, eb, el, 0))),
+                            unfused.then(|| pkt_fusion(pid, 1)),
+                            sprite_restore_packets(pid, eh, eb, el, is_disg),
                             s2c_packets::send_flag_bag(pid, ebag),
                             loc,
                         )
@@ -346,9 +356,14 @@ impl ServerSessionHandler {
             for p in inv_pkts {
                 session.send(p).await?;
             }
-            if let Some((pt_pkt, upd_body, flag_bag, loc)) = body_bcast {
+            if let Some((pt_pkt, f_pkt, upd_bodies, flag_bag, loc)) = body_bcast {
                 session.send(pt_pkt).await?;
-                self.broadcast_zone_or_self(loc, sid, &upd_body);
+                if let Some(fp) = f_pkt {
+                    self.broadcast_zone_or_self(loc, sid, &fp);
+                }
+                for p in upd_bodies.into_iter().flatten() {
+                    self.broadcast_zone_or_self(loc, sid, &p);
+                }
                 self.broadcast_zone_or_self(loc, sid, &flag_bag);
             }
             if let Some(pp) = pet_pkt {

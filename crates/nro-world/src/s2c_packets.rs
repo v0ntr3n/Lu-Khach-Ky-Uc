@@ -1,7 +1,11 @@
 //! Complete server-to-client (`S2C`) binary [`Packet`] builders for `Service.java`,
 //! `ChangeMapService.java`, `Zone.java`, `Mob.java`, `ChatGlobalService.java`, and `NpcService.java`.
 
-#![allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::missing_errors_doc)]
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::missing_errors_doc
+)]
 
 #[path = "s2c_packets_combat.rs"]
 mod s2c_packets_combat;
@@ -123,7 +127,7 @@ pub struct GroundItemWire {
     pub template_id: TemplateId,
     /// Ground coordinate.
     pub loc: Location,
-    /// Exclusive loot owner (`None` -> `-1`).
+    /// Exclusive loot owner (`None` or `Some(PlayerId(-2))` -> `-1`).
     pub owner_id: Option<PlayerId>,
 }
 
@@ -183,10 +187,19 @@ pub struct ZoneUiRow {
 }
 
 fn put_ground(w: &mut PacketWriter, d: &GroundItemWire, ov: Option<i32>) {
-    for v in [d.item_map_id, i32::from(d.template_id.0) as i16, d.loc.x, d.loc.y] {
+    for v in [
+        d.item_map_id,
+        i32::from(d.template_id.0) as i16,
+        d.loc.x,
+        d.loc.y,
+    ] {
         w.write_i16(v);
     }
-    w.write_i32(ov.unwrap_or_else(|| d.owner_id.map_or(-1, pid_i32)));
+    let owner = match d.owner_id {
+        None | Some(PlayerId(-2)) => -1,
+        Some(id) => pid_i32(id),
+    };
+    w.write_i32(ov.unwrap_or(owner));
 }
 
 fn put_layer(w: &mut PacketWriter, b: &Bytes) {
@@ -206,7 +219,13 @@ pub fn map_info(s: &MapInfoSnapshot<'_>) -> Result<Packet, PacketError> {
         192 + s.raw_layers.0.len() + s.raw_layers.1.len(),
         |w| {
             let raw_map = i32::from(s.zone.0.0);
-            for b in [raw_map as i8, s.header.0, s.header.1, s.header.2, s.header.3] {
+            for b in [
+                raw_map as i8,
+                s.header.0,
+                s.header.1,
+                s.header.2,
+                s.header.3,
+            ] {
                 w.write_i8(b);
             }
             w.write_utf(s.map_name)?;

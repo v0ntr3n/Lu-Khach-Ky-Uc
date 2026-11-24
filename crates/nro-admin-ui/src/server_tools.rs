@@ -17,14 +17,7 @@ impl AdminApp {
         let border = cx.theme().border;
         let maint = self.summary.as_ref().is_some_and(|s| s.maintaining);
 
-        let mut audit_list = div()
-            .id("audit-history-scroll")
-            .flex()
-            .flex_col()
-            .gap_1()
-            .flex_1()
-            .min_h_0()
-            .overflow_y_scroll();
+        let mut audit_list = div().flex().flex_col().gap_1();
 
         if self.audit_log.is_empty() {
             audit_list = audit_list.child(Label::new("Chưa có thao tác admin nào."));
@@ -169,8 +162,6 @@ impl AdminApp {
                 div()
                     .flex()
                     .flex_col()
-                    .flex_1()
-                    .min_h_0()
                     .p_4()
                     .gap_2()
                     .rounded_md()

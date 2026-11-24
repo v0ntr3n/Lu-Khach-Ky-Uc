@@ -51,49 +51,35 @@ pub fn item_sale_confirm(
 /// Shop item entry serialized inside [`shop_open`] (`cmd -44`, `Controller.cs:2398-2471`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ShopItemWire<'a> {
-    /// Item template ID (`-1` emits an empty slot marker).
     pub template_id: i16,
-    /// Gold cost (`buyCoin`).
     pub buy_coin_gold: i32,
-    /// Green gem / ruby cost (`buyGold`).
     pub buy_gold_gem: i32,
-    /// Required power for skill/special shops (`type_shop == 1`).
     pub power_require: i64,
-    /// Exchange currency icon ID (`type_shop == 3`).
     pub icon_spec: i16,
-    /// Exchange currency amount (`type_shop == 3`).
     pub buy_spec: i32,
-    /// Unlock/purchase reason string (`type_shop == 4`).
     pub reason: &'a str,
-    /// Stack quantity (`type_shop == 2 | 8`).
     pub quantity: i32,
-    /// Consignment metadata `(item_or_listing_id, buy_type, is_me, seller_name)` for `type_shop == 2`.
     pub consign: Option<(i16, i8, i8, &'a str)>,
-    /// Attached item options (falls back to `[(73, 0)]` when empty).
     pub options: &'a [ItemOption],
-    /// `"Mới"` badge flag (`newItem`).
     pub is_new: bool,
-    /// Optional costume preview parts `(head, body, leg, bag)`.
     pub part_temp: Option<(i16, i16, i16, i16)>,
 }
 
 /// Shop tab serialized inside [`shop_open`] (`cmd -44`, `Controller.cs:2375-2472`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ShopTabWire<'a> {
-    /// Tab caption (`"\n"` splits into two header lines on client).
     pub name: &'a str,
-    /// Total page count for consignment tabs (`type_shop == 2`).
     pub max_page: u8,
-    /// Items listed in this tab.
     pub items: &'a [ShopItemWire<'a>],
 }
 
 /// Builds opcode `-44` (`SHOP`) matching v2.5.0 `Controller.cs:2351-2518` byte-for-byte.
 pub fn shop_open(type_shop: i8, tabs: &[ShopTabWire<'_>]) -> Result<Packet, PacketError> {
     let tab_n = tabs.len().min(u8::MAX as usize);
-    build_pkt_res(cmd_message::SHOP, 32 + tab_n * 64, |w| {
+    let emit_n = if type_shop == 2 { tab_n.max(4) } else { tab_n };
+    build_pkt_res(cmd_message::SHOP, 32 + emit_n * 64, |w| {
         w.write_i8(type_shop);
-        w.write_u8(tab_n as u8);
+        w.write_u8(emit_n as u8);
         let fallback = [ItemOption::new(73, 0)];
         for tab in &tabs[..tab_n] {
             w.write_utf(tab.name)?;
@@ -120,8 +106,7 @@ pub fn shop_open(type_shop: i8, tabs: &[ShopTabWire<'_>]) -> Result<Packet, Pack
                     }
                     1 => w.write_i64(it.power_require),
                     2 => {
-                        let (listing_id, buy_type, is_me, _) =
-                            it.consign.unwrap_or((0, 0, 0, ""));
+                        let (listing_id, buy_type, is_me, _) = it.consign.unwrap_or((0, 0, 0, ""));
                         w.write_i16(listing_id);
                         w.write_i32(it.buy_coin_gold);
                         w.write_i32(it.buy_gold_gem);
@@ -161,6 +146,11 @@ pub fn shop_open(type_shop: i8, tabs: &[ShopTabWire<'_>]) -> Result<Packet, Pack
                 }
             }
         }
+        for _ in tab_n..emit_n {
+            w.write_utf("")?;
+            w.write_u8(1);
+            w.write_u8(0);
+        }
         Ok(())
     })
 }
@@ -168,25 +158,15 @@ pub fn shop_open(type_shop: i8, tabs: &[ShopTabWire<'_>]) -> Result<Packet, Pack
 /// Consignment listing entry serialized inside [`consign_tab_page`] (`cmd -100`, `Controller2.cs:971-1027`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ConsignItemWire<'a> {
-    /// Item template ID (`-1` emits an empty slot marker).
     pub template_id: i16,
-    /// Consignment listing ID (`itemId`).
     pub listing_id: i16,
-    /// Gold price (`buyCoin`).
     pub buy_coin_gold: i32,
-    /// Gem / ruby price (`buyGold`).
     pub buy_gold_gem: i32,
-    /// Listing status / buy mode byte (`buyType`).
     pub buy_type: i8,
-    /// Stack quantity.
     pub quantity: i32,
-    /// `1` if owned by the viewing player (`isMe`), else `0`.
     pub is_me: i8,
-    /// Attached item options (falls back to `[(73, 0)]` when empty).
     pub options: &'a [ItemOption],
-    /// Optional costume preview parts `(head, body, leg, bag)`.
     pub part_temp: Option<(i16, i16, i16, i16)>,
-    /// Seller character name (`nameNguoiKyGui`, client `intVERSION >= 237`).
     pub seller_name: &'a str,
 }
 
@@ -215,7 +195,11 @@ pub fn consign_tab_page(
             w.write_i8(it.buy_type);
             w.write_i32(it.quantity);
             w.write_i8(it.is_me);
-            let opts: &[ItemOption] = if it.options.is_empty() { &fallback } else { it.options };
+            let opts: &[ItemOption] = if it.options.is_empty() {
+                &fallback
+            } else {
+                it.options
+            };
             let opt_n = opts.len().min(i8::MAX as usize);
             w.write_i8(opt_n as i8);
             for o in &opts[..opt_n] {
@@ -239,12 +223,16 @@ pub fn consign_tab_page(
 /// Builds opcode `-43` (`USE_ITEM`) item confirmation dialog (`Controller.cs:1310-1318`).
 #[must_use]
 pub fn use_item_confirm(item_action: i8, where_slot: i8, index: i8, prompt: &str) -> Packet {
-    build_pkt(cmd_message::USE_ITEM, 5 + prompt.len().min(MAX_SAFE_UTF_BYTES), |w| {
-        w.write_i8(item_action);
-        w.write_i8(where_slot);
-        w.write_i8(index);
-        write_utf_lossy(w, prompt);
-    })
+    build_pkt(
+        cmd_message::USE_ITEM,
+        5 + prompt.len().min(MAX_SAFE_UTF_BYTES),
+        |w| {
+            w.write_i8(item_action);
+            w.write_i8(where_slot);
+            w.write_i8(index);
+            write_utf_lossy(w, prompt);
+        },
+    )
 }
 
 /// Builds `-30` sub `5` (`ME_LOAD_HP`) 64-bit self HP update.

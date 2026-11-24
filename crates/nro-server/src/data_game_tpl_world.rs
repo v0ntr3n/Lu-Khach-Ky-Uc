@@ -8,6 +8,7 @@ use nro_db::templates::{
 use nro_protocol::{Packet, PacketWriter};
 
 use crate::data_game::{DataGameAssets, put_utf};
+use crate::router::is_own_home_map;
 
 /// Resolves gender-relative `SubTaskMain.npcId` negative sentinels (`-2..=-5`).
 #[inline]
@@ -291,12 +292,17 @@ pub fn pkt_map_info_with_ship(
         m.write_bool((73..=77).contains(&mob_tid));
     }
     m.write_i8(0);
-    let mut npcs = map.npcs.clone();
-    if matches!(mid, 21..=23) {
-        if snap.mabu_egg.is_some() && !npcs.iter().any(|&(nid, _, _)| nid == 50) {
+    let mut npcs: Vec<_> = map
+        .npcs
+        .iter()
+        .copied()
+        .filter(|&(nid, _, _)| !matches!(nid, 50 | 51))
+        .collect();
+    if is_own_home_map(map.id, snap.gender) {
+        if snap.mabu_egg.is_some() {
             npcs.push((50, 340, 288));
         }
-        if snap.dua_hau_egg.is_some() && !npcs.iter().any(|&(nid, _, _)| nid == 51) {
+        if snap.dua_hau_egg.is_some() {
             npcs.push((51, 380, 288));
         }
     }

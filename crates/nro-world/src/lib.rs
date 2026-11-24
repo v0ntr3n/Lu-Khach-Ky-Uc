@@ -1,21 +1,4 @@
 //! Safe, deterministic world runtime (`nro-world`) ported from `Teamobi2026/SRC/src/nro`.
-//!
-//! # Architecture Overview
-//! - [`s2c_packets`]: Complete server-to-client binary [`nro_protocol::Packet`] builders for
-//!   `Service.java`, `ChangeMapService.java`, `Zone.java`, `Mob.java`, `ChatGlobalService.java`,
-//!   `SubMenuService.java`, and `NpcService.java`.
-//! - [`zone_actor`]: Isolated single-threaded [`zone_actor::ZoneActor`] ticking every `50 ms`
-//!   over cache-friendly `slotmap::SlotMap` + Struct-of-Arrays (SoA) slices, with deadlock-free
-//!   two-phase `ChangeMap` handoffs across `DashMap<(MapId, ZoneId), mpsc::Sender<ZoneCommand>>`.
-//! - [`dungeons`]: State machines and schedules for all 6 `phoban` dungeons (`BanDoKhoBau`,
-//!   `BlackBallWar`, `DestronGas`, `MajinBuu14H`, `RedRibbonHQ`, `SnakeWay`) plus Namek Dragon
-//!   Balls (`NgocRongNamecService`), Majin Buu 12h, and Super Divine Water (`TayKarin`).
-//! - [`pvp_tournaments`]: Open-world PvP (`ThachDau` with fixed single loser deduction,
-//!   `LuyenTap`, `TraThu`, `PKCommeson`) and all 4 Martial Arts Arenas (`DHVT23`,
-//!   `DeathOrAliveArena`, `WorldMartialArts`, and `SuperRank`).
-//! - [`shenron_events`]: Earth, Namek, and Ice Shenron wish engines (completing `SHENRON_1_3`),
-//!   seasonal crafting (`NoiBanh` with hardened stack-quantity checks, `VuaHung`, `XeNuocMia`),
-//!   and stake-weighted `ChonAiDay` / `ConSoMayMan` lottery engines.
 
 #![forbid(unsafe_code)]
 
@@ -140,17 +123,11 @@ pub enum WorldError {
 /// Player progression snapshot evaluated by [`WorldRouter::validate_map_entry`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MapGateContext {
-    /// Current main quest task index (`TaskMain.id << 1 | index` in `ConstTask`).
     pub task_id: i32,
-    /// Current character combat power (`NPoint.power`).
     pub power: i64,
-    /// Whether the character owns an active companion pet (`Player.pet != null`).
     pub has_pet: bool,
-    /// Whether the character carries `Nhẫn Thời Không` (item `992`).
     pub has_time_ring_992: bool,
-    /// Whether the character currently holds a Namek Dragon Ball (`353..=359`).
     pub holding_namek_ball: bool,
-    /// Whether the player has admin/VIP zone-cooldown bypass privileges.
     pub is_admin: bool,
 }
 
@@ -193,9 +170,6 @@ impl WorldRouter {
     }
 
     /// Clones the mailbox `Sender` for `(map_id, zone_id)` and immediately releases the shard lock.
-    ///
-    /// # Errors
-    /// Returns [`WorldError::ZoneNotFound`] if the `(map_id, zone_id)` pair is absent.
     pub fn resolve_sender(
         &self,
         map_id: MapId,
@@ -208,9 +182,6 @@ impl WorldRouter {
     }
 
     /// Enforces `ChangeMapService.checkMapCanJoin` story, power, and item progression gates.
-    ///
-    /// # Errors
-    /// Returns [`WorldError::MapGateLocked`] when the player has not met map requirements.
     pub fn validate_map_entry(dest_map: MapId, ctx: MapGateContext) -> Result<(), WorldError> {
         if ctx.is_admin {
             return Ok(());
@@ -259,10 +230,7 @@ impl WorldRouter {
     }
 
     /// Validates manual UI zone switching (`ChangeMapService.changeZone`), enforcing the 10-second
-    /// cooldown and blocking manual switches in instanced dungeons, Black Ball War, or Mabu maps.
-    ///
-    /// # Errors
-    /// Returns [`WorldError`] if switching is prohibited on `current_map` or on cooldown.
+    /// cooldown when `last_zone_switch_ms > 0` and blocking restricted maps.
     pub fn validate_manual_zone_switch(
         current_map: MapId,
         ctx: MapGateContext,
@@ -299,11 +267,13 @@ impl WorldRouter {
                 reason: "zone switching is disabled on this map",
             });
         }
-        let elapsed = now_ms.saturating_sub(last_zone_switch_ms);
-        if elapsed < 10_000 {
-            return Err(WorldError::CooldownActive {
-                remaining_ms: 10_000 - elapsed,
-            });
+        if last_zone_switch_ms > 0 {
+            let elapsed = now_ms.saturating_sub(last_zone_switch_ms);
+            if elapsed < 10_000 {
+                return Err(WorldError::CooldownActive {
+                    remaining_ms: 10_000 - elapsed,
+                });
+            }
         }
         Ok(())
     }
@@ -332,6 +302,7 @@ mod tests {
         assert!(WorldRouter::validate_manual_zone_switch(MapId(85), strong, 20_000, 0).is_err());
         assert!(WorldRouter::validate_manual_zone_switch(MapId(39), strong, 20_000, 0).is_err());
         assert!(WorldRouter::validate_manual_zone_switch(MapId(47), strong, 20_000, 0).is_err());
+        assert!(WorldRouter::validate_manual_zone_switch(MapId(5), strong, 3_000, 0).is_ok());
         assert_eq!(
             WorldRouter::validate_manual_zone_switch(MapId(5), strong, 14_000, 10_000),
             Err(WorldError::CooldownActive {

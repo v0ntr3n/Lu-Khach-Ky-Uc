@@ -183,28 +183,34 @@ impl ZoneActor {
             return (0, Vec::new());
         };
         let attacker_loc = self.arena.locations[attacker_idx];
+        let mob_limit = self.mobs.len().min(128);
+        let mut valid_mobs: SmallVec<[u8; 10]> = SmallVec::new();
+        let mut seen = [false; 128];
+        for &mob_u8 in mob_ids {
+            let idx = usize::from(mob_u8);
+            if idx >= mob_limit || seen[idx] {
+                continue;
+            }
+            seen[idx] = true;
+            let mob = &self.mobs[idx];
+            let dx = i64::from(attacker_loc.x) - i64::from(mob.loc.x);
+            let dy = i64::from(attacker_loc.y) - i64::from(mob.loc.y);
+            if mob.status != 0 && mob.hp > 0 && dx * dx + dy * dy <= MAX_MOB_RANGE_SQ {
+                valid_mobs.push(mob_u8);
+            }
+        }
+        if valid_mobs.is_empty() {
+            return (0, Vec::new());
+        }
         if !is_offline_map(self.cfg.id.0) {
             self.broadcast(
-                &s2c_packets::peer_attack_mobs(pid, skill_paint_id, mob_ids),
+                &s2c_packets::peer_attack_mobs(pid, skill_paint_id, &valid_mobs),
                 Some(attacker_idx),
             );
         }
         let mut tnsm = 0_u64;
         let mut killed_temp_ids = Vec::new();
-        let mut seen = [false; 256];
-        for &mob_u8 in mob_ids {
-            if seen[usize::from(mob_u8)] {
-                continue;
-            }
-            seen[usize::from(mob_u8)] = true;
-            let in_range = self.mobs.get(usize::from(mob_u8)).is_some_and(|mob| {
-                let dx = i64::from(attacker_loc.x) - i64::from(mob.loc.x);
-                let dy = i64::from(attacker_loc.y) - i64::from(mob.loc.y);
-                mob.status != 0 && mob.hp > 0 && dx * dx + dy * dy <= MAX_MOB_RANGE_SQ
-            });
-            if !in_range {
-                continue;
-            }
+        for mob_u8 in valid_mobs {
             if let Some((mob_tnsm, maybe_killed)) =
                 self.hit_single_mob(pid, attacker_idx, mob_u8, damage, is_crit)
             {
@@ -218,7 +224,10 @@ impl ZoneActor {
     }
 
     pub(super) fn respawn_dead_mobs(&mut self) {
-        if matches!(self.cfg.id.0.0, 53..=62 | 135..=138 | 141..=144 | 146..=149 | 151 | 152) {
+        if matches!(
+            self.cfg.id.0.0,
+            53..=62 | 135..=138 | 141..=144 | 146..=149 | 151 | 152
+        ) {
             return;
         }
         let mut live_pkts = Vec::new();

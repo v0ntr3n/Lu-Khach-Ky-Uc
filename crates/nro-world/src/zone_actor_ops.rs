@@ -1,6 +1,6 @@
 //! Tick simulation, player admission, item pickup, and two-phase `ChangeMap` handlers for [`ZoneActor`].
 
-use nro_core::{EntityKey, Location, MapId, ZoneId};
+use nro_core::{EntityKey, Location, MapId, PlayerId, ZoneId};
 use tokio::sync::oneshot;
 use tracing::warn;
 
@@ -102,7 +102,7 @@ impl ZoneActor {
             .map(|i| self.arena.locations[i].x);
         let mut dead = Vec::new();
         let mut hopped = Vec::new();
-        let max_x = self.cfg.map_width.max(4_095);
+        let max_x = self.effective_map_width();
         for (k, it) in &mut self.ground_items {
             let age = self.now_ms.saturating_sub(it.times_ms.0);
             if !offline
@@ -207,21 +207,19 @@ impl ZoneActor {
             loc: ing.loc,
         };
         let add_pkt = s2c_packets::player_add(&sw, 231)?;
-        while let Some(stale_key) = self.arena.find_player_key(pid) {
-            let _ = self.arena.swap_remove(stale_key);
+        if has_existing {
+            self.remove_pet_on_leave(pid);
+            while let Some(stale_key) = self.arena.find_player_key(pid) {
+                let _ = self.arena.swap_remove(stale_key);
+            }
+            if !offline {
+                self.broadcast(&s2c_packets::player_remove(pid), None);
+            }
         }
         let key = self.arena.insert_player(ing);
         let new_idx = self.arena.dense_index(key);
         if !offline {
             self.broadcast(&add_pkt, new_idx);
-            if ship_type > 0 {
-                self.broadcast(&s2c_packets::spaceship_arrive(pid, ship_type), None);
-            }
-        } else if ship_type > 0
-            && let Some(idx) = new_idx
-            && let Some(tx) = &self.arena.outbound_txs[idx]
-        {
-            let _ = tx.try_send(s2c_packets::spaceship_arrive(pid, ship_type));
         }
         Ok(key)
     }
@@ -301,6 +299,14 @@ impl ZoneActor {
         ship_type: i8,
         reply: oneshot::Sender<Result<EntityKey, (WorldError, Option<EntityKey>)>>,
     ) {
+        let Some(idx) = self.arena.dense_index(key) else {
+            let _ = reply.send(Err((WorldError::EntityNotFound(key), None)));
+            return;
+        };
+        if self.arena.kinds[idx] != EntityKind::Player {
+            let _ = reply.send(Err((WorldError::EntityNotFound(key), None)));
+            return;
+        }
         let Some(dest_tx) = self.router.get(&dest).map(|e| e.value().clone()) else {
             let _ = reply.send(Err((
                 WorldError::ZoneNotFound {
@@ -316,8 +322,15 @@ impl ZoneActor {
             return;
         };
         let pid = p.identity.0;
-        self.remove_pet_on_leave(pid);
-        if !is_offline_map(self.cfg.id.0) {
+        let offline = is_offline_map(self.cfg.id.0);
+        let pet_backup = self.pets.remove(&pid);
+        if pet_backup.is_some() && !offline {
+            self.broadcast(
+                &s2c_packets::player_remove(PlayerId(pid.0.saturating_neg())),
+                None,
+            );
+        }
+        if !offline {
             self.broadcast(&s2c_packets::player_remove(pid), None);
         }
         let (prev_loc, rb_tx) = (p.loc, self.self_tx.clone());
@@ -357,6 +370,7 @@ impl ZoneActor {
             let rollback_key = if rb_tx
                 .send(ZoneCommand::RollbackPlayer {
                     ingress: Box::new(backup),
+                    pet: pet_backup,
                     reply: rb_ack_tx,
                 })
                 .await

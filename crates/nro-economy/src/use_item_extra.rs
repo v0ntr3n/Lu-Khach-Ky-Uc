@@ -6,6 +6,34 @@ use nro_core::{GameRng, ItemInstance, TemplateId};
 
 use super::{BuffSlot, MabuEggState, UseItemCtx, UseItemEffect, UseItemError, UseItemService};
 
+/// Toggles Porata fusion (`454`, `921`, `1819`), rejecting fusion entry when `pet_hp <= 0`.
+pub fn apply_porata_fusion(
+    id: i16,
+    fusion_mode: &mut i8,
+    has_pet: bool,
+    pet_hp: i64,
+) -> Result<UseItemEffect, UseItemError> {
+    if !has_pet {
+        return Err(UseItemError::PreconditionFailed("pet required"));
+    }
+    if *fusion_mode == const_player::NON_FUSION && pet_hp <= 0 {
+        return Err(UseItemError::PreconditionFailed(
+            "Đệ tử đã chết, không thể hợp thể!",
+        ));
+    }
+    let m = match id {
+        454 => const_player::HOP_THE_PORATA,
+        921 => const_player::HOP_THE_PORATA2,
+        _ => const_player::HOP_THE_PORATA3,
+    };
+    *fusion_mode = if *fusion_mode == const_player::NON_FUSION {
+        m
+    } else {
+        const_player::NON_FUSION
+    };
+    Ok(UseItemEffect::Applied)
+}
+
 impl UseItemService {
     pub(in crate::use_item) fn use_bag_item_by_id(
         inv: &mut Inventory,
@@ -13,6 +41,7 @@ impl UseItemService {
         id: i16,
         snap: &ItemInstance,
         ctx: &mut UseItemCtx<'_>,
+        pet_hp: i64,
         rng: &mut GameRng,
     ) -> Result<UseItemEffect, UseItemError> {
         match id {
@@ -68,23 +97,7 @@ impl UseItemService {
             | 1614..=1616
             | 1628
             | 1635 => Self::apply_buff(inv, bag_slot, id, snap, ctx),
-            454 | 921 | 1819 => {
-                if !ctx.has_pet {
-                    Err(UseItemError::PreconditionFailed("pet required"))
-                } else {
-                    let m = match id {
-                        454 => const_player::HOP_THE_PORATA,
-                        921 => const_player::HOP_THE_PORATA2,
-                        _ => const_player::HOP_THE_PORATA3,
-                    };
-                    *ctx.fusion_mode = if *ctx.fusion_mode == const_player::NON_FUSION {
-                        m
-                    } else {
-                        const_player::NON_FUSION
-                    };
-                    Ok(UseItemEffect::Applied)
-                }
-            }
+            454 | 921 | 1819 => apply_porata_fusion(id, ctx.fusion_mode, ctx.has_pet, pet_hp),
             460 => {
                 if !ctx.hungry_soi_in_zone {
                     return Err(UseItemError::PreconditionFailed("no SoiHecQuyn"));
@@ -183,6 +196,11 @@ impl UseItemService {
             }
             1787 => Ok(UseItemEffect::TeleportMap(164)),
             1795 => {
+                if *ctx.fusion_mode != const_player::NON_FUSION {
+                    return Err(UseItemError::PreconditionFailed(
+                        "Vui lòng tách hợp thể trước!",
+                    ));
+                }
                 if !ctx.has_pet
                     || *ctx.pet_type != 1
                     || ctx.pet_power < 40_000_000_000

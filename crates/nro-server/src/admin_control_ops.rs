@@ -1,7 +1,8 @@
 //! Account moderation, VND, currency, and item-grant operations for [`AdminControl`].
 
-use nro_core::{AccountId, ItemInstance, TemplateId};
+use nro_core::{AccountId, ItemInstance, ItemOption, TemplateId};
 use nro_db::player_repo::{LIMIT_GOLD, PlayerSnapshot};
+use nro_economy::Inventory;
 use nro_protocol::{Packet, SessionHandle};
 use nro_world::s2c_packets;
 use smallvec::SmallVec;
@@ -13,26 +14,35 @@ use crate::router::{
 };
 use crate::runtime::unix_now_ms;
 
+const MAX_NON_STACKABLE_GRANT_QTY: u32 = 20;
+
 impl AdminControl {
     /// Disconnects the live session for `account_id` if currently online.
     pub fn kick_user(&self, account_id: i32) -> Result<String, String> {
-        let Some(sid) = self
+        let mut kicked = false;
+        if let Some(sid) = self
             .shared
             .clients
             .accounts
             .get(&AccountId(account_id))
             .map(|v| *v.value())
-        else {
-            return Err(format!("Tài khoản #{account_id} hiện không online."));
-        };
-        if let Some(handle) = self.shared.clients.sessions.get(&sid) {
+            && let Some(handle) = self.shared.clients.sessions.get(&sid)
+        {
             handle.disconnect();
-            info!(account_id, "admin UI kicked online account");
-            return Ok(format!("Đã kick tài khoản #{account_id}."));
+            kicked = true;
         }
-        Err(format!(
-            "Không tìm thấy phiên kết nối cho tài khoản #{account_id}."
-        ))
+        for entry in &self.shared.clients.authenticated {
+            if entry.value().snapshot.account_id == Some(AccountId(account_id)) {
+                entry.value().handle.disconnect();
+                kicked = true;
+            }
+        }
+        if kicked {
+            info!(account_id, "admin UI kicked online account");
+            Ok(format!("Đã kick tài khoản #{account_id}."))
+        } else {
+            Err(format!("Tài khoản #{account_id} hiện không online."))
+        }
     }
 
     /// Updates `ban` flag in `fjall` and kicks the account immediately when banning.
@@ -99,23 +109,24 @@ impl AdminControl {
             return Err(format!("Không tìm thấy tài khoản #{account_id}."));
         }
         if delta > 0 {
-            self.rt
-                .block_on(
-                    self.shared
-                        .accounts_repo
-                        .add_vnd(AccountId(account_id), delta),
-                )
-                .map_err(|err| format!("Lỗi cộng VND: {err}"))?;
-            Ok(format!("Đã cộng +{delta} VND cho tài khoản #{account_id}."))
+            let capped = delta.min(i64::from(i32::MAX));
+            self.run_async(
+                self.shared
+                    .accounts_repo
+                    .add_vnd(AccountId(account_id), capped),
+            )?
+            .map_err(|err| format!("Lỗi cộng VND: {err}"))?;
+            Ok(format!(
+                "Đã cộng +{capped} VND cho tài khoản #{account_id}."
+            ))
         } else {
             let amount = i32::try_from(delta.unsigned_abs()).unwrap_or(i32::MAX);
             let ok = self
-                .rt
-                .block_on(
+                .run_async(
                     self.shared
                         .accounts_repo
                         .sub_vnd(AccountId(account_id), amount),
-                )
+                )?
                 .map_err(|err| format!("Lỗi trừ VND: {err}"))?;
             if ok {
                 Ok(format!("Đã trừ {amount} VND của tài khoản #{account_id}."))
@@ -181,7 +192,7 @@ impl AdminControl {
         ))
     }
 
-    /// Gives `qty` of `template_id` into the player's bag (online or offline).
+    /// Gives `qty` of `template_id` into the player's bag, splitting non-stackable items cleanly across slots.
     pub fn give_item(&self, account_id: i32, template_id: i16, qty: u32) -> Result<String, String> {
         if template_id < 0 || qty == 0 {
             return Err("Template ID phải >= 0 và số lượng phải > 0.".to_owned());
@@ -193,15 +204,17 @@ impl AdminControl {
             .iter()
             .find(|it| it.id == i32::from(template_id))
         else {
-            return Err(format!("Item template {template_id} not found"));
+            return Err(format!("Không tìm thấy vật phẩm #{template_id}."));
         };
         let allow_stack = tpl.is_up_to_up;
-        let item = ItemInstance {
-            template_id: TemplateId(template_id),
-            quantity: qty,
-            options: SmallVec::new(),
-            create_time_ms: unix_now_ms(),
-        };
+        if !allow_stack && qty > MAX_NON_STACKABLE_GRANT_QTY {
+            return Err(format!(
+                "Vật phẩm không xếp chồng chỉ được tặng tối đa {MAX_NON_STACKABLE_GRANT_QTY} món mỗi lần."
+            ));
+        }
+        let default_opts = default_gear_options(tpl.item_type, tpl.level);
+        let now_ms = unix_now_ms();
+
         if let Some(sid) = self
             .shared
             .clients
@@ -214,12 +227,19 @@ impl AdminControl {
                     return Err("Người chơi đang giao dịch, vui lòng thử lại sau!".to_owned());
                 }
                 let mut inv = snapshot_to_economy_inv(&entry.snapshot);
-                inv.add_to_bag(item.clone(), allow_stack)
-                    .map_err(|err| format!("Hành trang đầy hoặc lỗi thêm đồ: {err}"))?;
+                insert_granted_items(
+                    &mut inv,
+                    template_id,
+                    qty,
+                    allow_stack,
+                    &default_opts,
+                    now_ms,
+                )?;
                 sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
                 let bag_pkt = s2c_packets::inventory_bag(&entry.snapshot.items_bag);
                 let notify = s2c_packets::thong_bao(&format!(
-                    "Admin vừa tặng bạn x{qty} vật phẩm #{template_id}!"
+                    "Admin vừa tặng bạn x{qty} {} (#{template_id})!",
+                    tpl.name
                 ));
                 Some((
                     entry.snapshot.clone(),
@@ -237,30 +257,37 @@ impl AdminControl {
                     try_send_if_ready(&handle, account_id, msg);
                 }
                 return Ok(format!(
-                    "Đã tặng x{qty} item #{template_id} (online) cho tài khoản #{account_id}."
+                    "Đã tặng x{qty} {} (#{template_id}, online) cho TK #{account_id}.",
+                    tpl.name
                 ));
             }
         }
         let mut snap = self.load_offline_snapshot(account_id)?;
         let mut inv = snapshot_to_economy_inv(&snap);
-        inv.add_to_bag(item, allow_stack)
-            .map_err(|err| format!("Hành trang đầy hoặc lỗi thêm đồ: {err}"))?;
+        insert_granted_items(
+            &mut inv,
+            template_id,
+            qty,
+            allow_stack,
+            &default_opts,
+            now_ms,
+        )?;
         sync_economy_inv_to_snapshot(&inv, &mut snap);
         self.persist_snapshot(account_id, &snap)?;
         Ok(format!(
-            "Đã tặng x{qty} item #{template_id} (offline) cho tài khoản #{account_id}."
+            "Đã tặng x{qty} {} (#{template_id}, offline) cho TK #{account_id}.",
+            tpl.name
         ))
     }
 
     pub(super) fn load_offline_snapshot(&self, account_id: i32) -> Result<PlayerSnapshot, String> {
-        self.rt
-            .block_on(
-                self.shared
-                    .players_repo
-                    .load_by_account(AccountId(account_id), self.shared.config.parity_mode),
-            )
-            .map_err(|err| format!("Lỗi đọc nhân vật: {err}"))?
-            .ok_or_else(|| format!("Tài khoản #{account_id} chưa tạo nhân vật."))
+        self.run_async(
+            self.shared
+                .players_repo
+                .load_by_account(AccountId(account_id), self.shared.config.parity_mode),
+        )?
+        .map_err(|err| format!("Lỗi đọc nhân vật: {err}"))?
+        .ok_or_else(|| format!("Tài khoản #{account_id} chưa tạo nhân vật."))
     }
 
     pub(super) fn persist_snapshot(
@@ -268,17 +295,16 @@ impl AdminControl {
         account_id: i32,
         snap: &PlayerSnapshot,
     ) -> Result<(), String> {
-        self.rt
-            .block_on(self.shared.players_repo.save_player(
-                snap,
-                None,
-                self.shared.config.parity_mode,
-                unix_now_ms(),
-            ))
-            .map_err(|err| {
-                warn!(account_id, player_id = snap.id.0, error = %err, "failed to persist admin snapshot");
-                format!("Lỗi lưu nhân vật: {err}")
-            })
+        self.run_async(self.shared.players_repo.save_player(
+            snap,
+            None,
+            self.shared.config.parity_mode,
+            unix_now_ms(),
+        ))?
+        .map_err(|err| {
+            warn!(account_id, player_id = snap.id.0, error = %err, "failed to persist admin snapshot");
+            format!("Lỗi lưu nhân vật: {err}")
+        })
     }
 }
 
@@ -287,6 +313,61 @@ pub(super) fn try_send_if_ready(handle: &SessionHandle, account_id: i32, pkt: Pa
         && let Err(err) = handle.try_send(pkt)
     {
         warn!(account_id, error = %err, "failed to send admin packet to online session");
+    }
+}
+
+fn default_gear_options(item_type: i32, level: i32) -> SmallVec<[ItemOption; 4]> {
+    let lv = level.max(1);
+    let (id, param) = match item_type {
+        0 => (47, lv * 3),
+        1 => (6, lv * 30),
+        2 => (0, lv * 8),
+        3 => (7, lv * 20),
+        4 => (14, 1),
+        _ => (73, 0),
+    };
+    SmallVec::from_slice(&[ItemOption { id, param }])
+}
+
+fn insert_granted_items(
+    inv: &mut Inventory,
+    template_id: i16,
+    qty: u32,
+    allow_stack: bool,
+    opts: &SmallVec<[ItemOption; 4]>,
+    now_ms: i64,
+) -> Result<(), String> {
+    if allow_stack {
+        inv.add_to_bag(
+            ItemInstance {
+                template_id: TemplateId(template_id),
+                quantity: qty,
+                options: opts.clone(),
+                create_time_ms: now_ms,
+            },
+            true,
+        )
+        .map_err(|err| format!("Hành trang đầy hoặc lỗi thêm đồ: {err}"))
+    } else {
+        let free_slots = inv.bag.iter().filter(|s| s.is_none()).count();
+        if free_slots < usize::try_from(qty).unwrap_or(usize::MAX) {
+            return Err(format!(
+                "Hành trang không đủ chỗ trống (cần {qty} ô, hiện còn {free_slots} ô)."
+            ));
+        }
+        for _ in 0..qty {
+            inv.add_to_bag(
+                ItemInstance {
+                    template_id: TemplateId(template_id),
+                    quantity: 1,
+                    options: opts.clone(),
+                    create_time_ms: now_ms,
+                },
+                false,
+            )
+            .map_err(|err| format!("Lỗi thêm trang bị vào hành trang: {err}"))?;
+        }
+        Ok(())
     }
 }
 

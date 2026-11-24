@@ -1,5 +1,7 @@
 //! Background polling, debounced refreshes, item search, and async admin actions for `AdminApp`.
 
+use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use chrono::Local;
@@ -180,19 +182,25 @@ impl AdminApp {
         self.is_refreshing = true;
         self.refresh_pending = false;
         let query = self.search_input.read(cx).value().to_string();
-        let filter = self.user_filter;
-        let online_only = filter == UserFilter::Online;
+        let online_only = self.user_filter == UserFilter::Online;
+        let banned_only = self.user_filter == UserFilter::Banned;
         cx.spawn(async move |this, cx| {
-            let (summary, mut users) = cx
+            let outcome = cx
                 .background_executor()
-                .spawn(async move { (control.summary(), control.list_users(&query, online_only)) })
+                .spawn(async move {
+                    catch_unwind(AssertUnwindSafe(|| {
+                        (
+                            control.summary(),
+                            control.list_users_filtered(&query, online_only, banned_only),
+                        )
+                    }))
+                })
                 .await;
-            if filter == UserFilter::Banned {
-                users.retain(|u| u.ban);
-            }
             let _ = this.update(cx, |app, cx| {
                 app.is_refreshing = false;
-                if !app.shutting_down {
+                if !app.shutting_down
+                    && let Ok((summary, users)) = outcome
+                {
                     let first_ready = app.summary.is_none();
                     app.online_count = summary.online_players;
                     app.bind_addr.clone_from(&summary.bind_addr);
@@ -240,15 +248,17 @@ impl AdminApp {
         self.action_in_flight = true;
         cx.notify();
         cx.spawn(async move |this, cx| {
-            let res = cx
+            let outcome = cx
                 .background_executor()
-                .spawn(async move { work(control) })
+                .spawn(async move { catch_unwind(AssertUnwindSafe(|| work(control))) })
                 .await;
             let _ = this.update(cx, |app, cx| {
                 app.action_in_flight = false;
-                match res {
-                    Ok(msg) | Err(msg) => app.push_feedback(msg),
-                }
+                let msg = match outcome {
+                    Ok(Ok(ok_msg) | Err(ok_msg)) => ok_msg,
+                    Err(_) => "Thao tác gặp lỗi nội bộ (panic đã được chặn an toàn).".to_owned(),
+                };
+                app.push_feedback(msg);
                 if !app.shutting_down {
                     app.spawn_refresh(cx);
                 }
@@ -264,6 +274,10 @@ impl AdminApp {
         }
         self.shutting_down = true;
         self.refresh_pending = false;
+        if let Some(ctrl) = &self.control {
+            ctrl.trigger_shutdown();
+        }
+        self.window_closed.store(true, Ordering::Release);
         self.push_feedback("Đang lưu dữ liệu và tắt server...".to_owned());
         cx.quit();
     }

@@ -7,7 +7,7 @@ use password_hash::{PasswordHasher, PasswordVerifier};
 use tracing::info;
 
 use super::{AccountRepo, AccountRow};
-use crate::codec::{canonical_lookup_key, dec_i32, enc_i32, decode_val, encode_val};
+use crate::codec::{canonical_lookup_key, dec_i32, decode_val, enc_i32, encode_val};
 use crate::{DbError, DbResult};
 
 /// Maximum PHC password string length enforced by [`verify_or_upgrade_password`].
@@ -68,14 +68,12 @@ pub async fn verify_or_upgrade_password(
     stored: String,
     candidate: String,
 ) -> DbResult<Option<String>> {
-    tokio::task::spawn_blocking(move || verify_or_upgrade_password_sync(&stored, &candidate)).await?
+    tokio::task::spawn_blocking(move || verify_or_upgrade_password_sync(&stored, &candidate))
+        .await?
 }
 
 /// Synchronous Argon2id verifier / upgrader shared with CLI import tooling.
-pub fn verify_or_upgrade_password_sync(
-    stored: &str,
-    candidate: &str,
-) -> DbResult<Option<String>> {
+pub fn verify_or_upgrade_password_sync(stored: &str, candidate: &str) -> DbResult<Option<String>> {
     if stored.starts_with("$argon2") {
         let parsed = PasswordHash::new(stored).map_err(|e| DbError::PasswordHash(e.to_string()))?;
         Argon2::default()
@@ -86,6 +84,13 @@ pub fn verify_or_upgrade_password_sync(
         Ok(Some(hash_password_sync(candidate)?))
     } else {
         Err(DbError::InvalidCredentials)
+    }
+}
+
+fn guest_ip_allowed(acc: &AccountRow, truncated_ip: &str) -> bool {
+    match acc.ip_address.as_deref().filter(|s| !s.is_empty()) {
+        Some(saved) => saved == truncated_ip,
+        None => acc.last_time_login <= DateTime::UNIX_EPOCH,
     }
 }
 
@@ -123,8 +128,6 @@ impl AccountRepo {
     }
 
     /// Authenticates `username` + `password` with default `login_type = 0`.
-    ///
-    /// Delegates to [`Self::login_with_type`].
     pub async fn login(
         &self,
         username: &str,
@@ -133,16 +136,12 @@ impl AccountRepo {
         second_wait_login: u32,
         now: DateTime<Utc>,
     ) -> DbResult<AuthenticatedAccount> {
-        self.login_with_type(username, password, 0, client_ip, second_wait_login, now).await
+        self.login_with_type(username, password, 0, client_ip, second_wait_login, now)
+            .await
     }
 
-    /// Authenticates `username` + `password` (case-insensitive username match) with client
-    /// `login_type`, upgrades legacy plaintext hashes to Argon2id PHC, enforces ban/cooldown rules,
-    /// and updates login metadata.
-    ///
-    /// Supports the C# client guest relogin flow (`LoginScr.cs:469-473`) where subsequent guest
-    /// logins send `login_type == 1` and `password == "a"` against a guest account whose stored
-    /// password is empty or an Argon2id hash of `""`.
+    /// Authenticates `username` + `password` with client `login_type`, enforcing IP binding on
+    /// empty-password `User*` guest accounts so remote IPs cannot hijack active guests.
     pub async fn login_with_type(
         &self,
         username: &str,
@@ -160,23 +159,32 @@ impl AccountRepo {
             .get(&uname_key)?
             .ok_or(DbError::InvalidCredentials)?;
         let account_id = AccountId(dec_i32(&id_bytes)?);
-        let row = self.get_by_id(account_id)?.ok_or(DbError::InvalidCredentials)?;
+        let row = self
+            .get_by_id(account_id)?
+            .ok_or(DbError::InvalidCredentials)?;
+        let truncated_ip: String = client_ip.trim().chars().take(50).collect();
 
         let is_guest_relogin = login_type == 1
-            && password == "a"
+            && (password == "a" || password.is_empty())
             && (row.password.is_empty() || row.username.starts_with("User"));
 
-        let upgraded_phc = if is_guest_relogin {
+        let (upgraded_phc, used_empty_guest_pw) = if is_guest_relogin {
             match verify_or_upgrade_password(row.password.clone(), String::new()).await {
-                Ok(upgraded) => upgraded,
-                Err(DbError::InvalidCredentials) => {
-                    verify_or_upgrade_password(row.password.clone(), password.to_owned()).await?
-                }
+                Ok(upgraded) => (upgraded, true),
+                Err(DbError::InvalidCredentials) => (
+                    verify_or_upgrade_password(row.password.clone(), password.to_owned()).await?,
+                    false,
+                ),
                 Err(err) => return Err(err),
             }
         } else {
-            verify_or_upgrade_password(row.password.clone(), password.to_owned()).await?
+            let upg = verify_or_upgrade_password(row.password.clone(), password.to_owned()).await?;
+            (upg, password.is_empty() && row.username.starts_with("User"))
         };
+
+        if used_empty_guest_pw && !guest_ip_allowed(&row, &truncated_ip) {
+            return Err(DbError::InvalidCredentials);
+        }
 
         if row.ban {
             return Err(DbError::AccountBanned {
@@ -184,13 +192,24 @@ impl AccountRepo {
             });
         }
 
-        check_login_cooldown(now, row.last_time_login, row.last_time_logout, second_wait_login)?;
+        check_login_cooldown(
+            now,
+            row.last_time_login,
+            row.last_time_logout,
+            second_wait_login,
+        )?;
 
-        let truncated_ip: String = client_ip.chars().take(50).collect();
         let (final_row, password_upgraded) = {
-            let _guard = self.pool.lock_stripe(u64::from(account_id.0.cast_unsigned()));
-            let mut latest = self.get_by_id(account_id)?.ok_or(DbError::InvalidCredentials)?;
+            let _guard = self
+                .pool
+                .lock_stripe(u64::from(account_id.0.cast_unsigned()));
+            let mut latest = self
+                .get_by_id(account_id)?
+                .ok_or(DbError::InvalidCredentials)?;
             if latest.password != row.password {
+                return Err(DbError::InvalidCredentials);
+            }
+            if used_empty_guest_pw && !guest_ip_allowed(&latest, &truncated_ip) {
                 return Err(DbError::InvalidCredentials);
             }
             if latest.ban {
@@ -212,7 +231,9 @@ impl AccountRepo {
                 false
             };
             latest.last_time_login = now;
-            latest.ip_address = Some(truncated_ip);
+            if !truncated_ip.is_empty() {
+                latest.ip_address = Some(truncated_ip);
+            }
             self.pool
                 .ks()
                 .accounts
@@ -221,11 +242,16 @@ impl AccountRepo {
         };
 
         if password_upgraded {
-            info!(account_id = account_id.0, "upgraded legacy plaintext password to Argon2id PHC");
+            info!(
+                account_id = account_id.0,
+                "upgraded legacy plaintext password to Argon2id PHC"
+            );
         }
 
         let create_time = final_row.create_time.unwrap_or(now);
-        let delta_secs = (now - create_time).num_seconds().clamp(0, i64::from(i32::MAX)) as i32;
+        let delta_secs = (now - create_time)
+            .num_seconds()
+            .clamp(0, i64::from(i32::MAX)) as i32;
         let is_new_member = (now - create_time).num_days() <= 35;
 
         Ok(AuthenticatedAccount {
@@ -262,7 +288,9 @@ impl AccountRepo {
 
     /// Updates `ban` flag on `account_id`, returning `true` if the account existed.
     pub fn set_ban(&self, account_id: AccountId, ban: bool) -> DbResult<bool> {
-        let _guard = self.pool.lock_stripe(u64::from(account_id.0.cast_unsigned()));
+        let _guard = self
+            .pool
+            .lock_stripe(u64::from(account_id.0.cast_unsigned()));
         let Some(mut row) = self.get_by_id(account_id)? else {
             return Ok(false);
         };
@@ -276,7 +304,9 @@ impl AccountRepo {
 
     /// Updates member activation (`active`) on `account_id`, returning `true` if the account existed.
     pub fn set_active(&self, account_id: AccountId, active: bool) -> DbResult<bool> {
-        let _guard = self.pool.lock_stripe(u64::from(account_id.0.cast_unsigned()));
+        let _guard = self
+            .pool
+            .lock_stripe(u64::from(account_id.0.cast_unsigned()));
         let Some(mut row) = self.get_by_id(account_id)? else {
             return Ok(false);
         };

@@ -1,18 +1,16 @@
-//! Revival, death cleanup (including fusion split & pet respawn), ground item pickup, and zone broadcasts.
+//! Revival, death cleanup (including fusion split & pet respawn), and disconnect preservation.
 
-use nro_core::{ItemInstance, Location, MapId, PlayerId, ZoneId};
+use nro_consts::const_player;
+use nro_core::{Location, MapId, PlayerId, ZoneId};
 use nro_db::json_columns::SocialPeer;
-use nro_economy::{InventoryError, ItemCatalog};
-use nro_protocol::{Packet, PacketWriter, ProtocolError, SessionHandle};
+use nro_protocol::{ProtocolError, SessionHandle};
 use nro_world::{ZoneCommand, s2c_packets};
-use tokio::sync::oneshot;
 
 use super::super::router_combat_pvp::pending_pvp;
 use super::super::{
-    DbItemCatalog, ServerSessionHandler, effective_appearance, recalculate_session_stats,
-    send_thong_bao, snapshot_to_economy_inv, sync_economy_inv_to_snapshot, wallet_money_pkt,
+    ServerSessionHandler, effective_appearance, pkt_fusion, recalculate_session_stats,
+    recalculate_snapshot_stats, send_thong_bao, sprite_restore_packets, wallet_money_pkt,
 };
-use super::is_offline_map;
 use crate::runtime::unix_now_ms;
 
 impl ServerSessionHandler {
@@ -22,7 +20,7 @@ impl ServerSessionHandler {
         sid: u64,
         return_home: bool,
     ) -> Result<(), ProtocolError> {
-        let revived = self
+        let prep = self
             .shared
             .clients
             .authenticated
@@ -31,70 +29,128 @@ impl ServerSessionHandler {
                 if entry.snapshot.stats.hp > 0 {
                     return None;
                 }
-                if !return_home {
-                    if entry.snapshot.wallet.gem < 1 {
-                        return Some(Err("Không đủ 1 ngọc xanh để hồi sinh tại chỗ!"));
-                    }
-                    entry.snapshot.wallet.gem -= 1;
-                    entry.snapshot.stats.hp = entry.snapshot.stats.hp_max.max(1);
-                    entry.snapshot.stats.mp = entry.snapshot.stats.mp_max.max(1);
-                } else {
-                    entry.snapshot.stats.hp = 1;
-                    entry.snapshot.stats.mp = 1;
+                if super::super::router_shop::is_in_trade(entry.snapshot.id) {
+                    return Some(Err("Không thể hồi sinh khi đang giao dịch!"));
                 }
-                let (pid, loc, stats) = (
+                let prev_mp = entry.snapshot.stats.mp;
+                if !return_home {
+                    if entry.snapshot.wallet.ruby >= 1 {
+                        entry.snapshot.wallet.ruby -= 1;
+                    } else if entry.snapshot.wallet.gem >= 1 {
+                        entry.snapshot.wallet.gem -= 1;
+                    } else {
+                        return Some(Err("Bạn không đủ ngọc để hồi sinh tại chỗ!"));
+                    }
+                }
+                entry.snapshot.stats.hp = entry.snapshot.stats.hp_max.max(1);
+                entry.snapshot.stats.mp = entry.snapshot.stats.mp_max.max(1);
+                let (pid, loc, stats, ek) = (
                     entry.snapshot.id,
                     entry.snapshot.location,
                     entry.snapshot.stats,
+                    entry.entity_key,
                 );
-                if !return_home
-                    && let (Some(ek), Ok(tx)) = (
-                        entry.entity_key,
-                        self.shared
-                            .world_router
-                            .resolve_sender(loc.map_id, loc.zone_id),
-                    )
-                {
-                    let _ = tx.try_send(ZoneCommand::UpdatePlayerStats(ek, stats));
-                }
                 Some(Ok((
                     pid,
                     loc,
                     stats,
+                    prev_mp,
+                    ek,
                     wallet_money_pkt(&entry.snapshot.wallet),
                     entry.snapshot.gender,
                 )))
             });
-        match revived {
-            Some(Ok((pid, loc, stats, money_pkt, gender))) => {
-                if return_home {
-                    let home = MapId(21 + i16::from(u8::from(gender)));
-                    self.switch_player_zone(session, sid, Some(home), ZoneId(0), Some((300, 336)))
-                        .await?;
-                    let (me_live, _) = s2c_packets::char_revive_packets(
-                        pid,
-                        stats.hp,
-                        stats.hp_max,
-                        Location {
-                            map_id: home,
-                            zone_id: ZoneId(0),
-                            x: 300,
-                            y: 336,
-                        },
-                    );
-                    session.send(me_live).await?;
-                    session.send(s2c_packets::me_load_point(&stats)).await?;
-                } else {
-                    let (me_live, peer_live) =
-                        s2c_packets::char_revive_packets(pid, stats.hp, stats.hp_max, loc);
-                    session.send(me_live).await?;
-                    session.send(money_pkt).await?;
-                    session.send(s2c_packets::me_load_point(&stats)).await?;
-                    self.broadcast_to_zone_peers(loc, Some(sid), &peer_live);
+        let (pid, orig_loc, stats, prev_mp, orig_ek, money_pkt, gender) = match prep {
+            Some(Ok(v)) => v,
+            Some(Err(msg)) => return send_thong_bao(session, msg),
+            None => return Ok(()),
+        };
+        if let (Some(ek), Ok(src_tx)) = (
+            orig_ek,
+            self.shared
+                .world_router
+                .resolve_sender(orig_loc.map_id, orig_loc.zone_id),
+        ) {
+            let _ = src_tx.send(ZoneCommand::UpdatePlayerStats(ek, stats)).await;
+        }
+        if return_home {
+            let home = MapId(21 + i16::from(i8::from(gender)));
+            let switched = self
+                .switch_player_zone_with_ship(
+                    session,
+                    sid,
+                    Some(home),
+                    ZoneId(0),
+                    Some((300, 336)),
+                    0,
+                )
+                .await;
+            if !matches!(switched, Ok(true)) {
+                let rollback_zone =
+                    self.shared
+                        .clients
+                        .authenticated
+                        .get_mut(&sid)
+                        .map(|mut entry| {
+                            entry.snapshot.stats.hp = 0;
+                            entry.snapshot.stats.mp = prev_mp;
+                            (
+                                entry.entity_key,
+                                entry.snapshot.location,
+                                entry.snapshot.stats,
+                            )
+                        });
+                if let Some((Some(rb_ek), rb_loc, rb_stats)) = rollback_zone
+                    && let Ok(tx) = self
+                        .shared
+                        .world_router
+                        .resolve_sender(rb_loc.map_id, rb_loc.zone_id)
+                {
+                    let _ = tx
+                        .send(ZoneCommand::UpdatePlayerStats(rb_ek, rb_stats))
+                        .await;
                 }
+                let _ = switched?;
+                return Ok(());
             }
-            Some(Err(msg)) => send_thong_bao(session, msg)?,
-            None => {}
+            let (final_loc, final_ek, final_stats) = self
+                .shared
+                .clients
+                .authenticated
+                .get(&sid)
+                .map_or((orig_loc, orig_ek, stats), |e| {
+                    (e.snapshot.location, e.entity_key, e.snapshot.stats)
+                });
+            if let (Some(dest_ek), Ok(dest_tx)) = (
+                final_ek,
+                self.shared
+                    .world_router
+                    .resolve_sender(final_loc.map_id, final_loc.zone_id),
+            ) {
+                let _ = dest_tx
+                    .send(ZoneCommand::UpdatePlayerStats(dest_ek, final_stats))
+                    .await;
+            }
+            let (me_live, peer_live) = s2c_packets::char_revive_packets(
+                pid,
+                final_stats.hp,
+                final_stats.hp_max,
+                final_loc,
+            );
+            session.send(me_live).await?;
+            session
+                .send(s2c_packets::me_load_point(&final_stats))
+                .await?;
+            self.broadcast_to_zone_peers(final_loc, Some(sid), &peer_live);
+            crate::router_pet::sync_online_pet_map_state(&self.shared, pid).await;
+        } else {
+            let (me_live, peer_live) =
+                s2c_packets::char_revive_packets(pid, stats.hp, stats.hp_max, orig_loc);
+            session.send(me_live).await?;
+            session.send(money_pkt).await?;
+            session.send(s2c_packets::me_load_point(&stats)).await?;
+            self.broadcast_to_zone_peers(orig_loc, Some(sid), &peer_live);
+            crate::router_pet::sync_online_pet_map_state(&self.shared, pid).await;
         }
         Ok(())
     }
@@ -147,7 +203,7 @@ impl ServerSessionHandler {
             super::super::router_skill::clear_skill_state(pid),
             super::super::router_skill::take_monkey_revert_pending(pid),
         );
-        if let Some((h, st, rpkt, fpkt, unfused_pet)) = self
+        if let Some((h, st, body_pkt, rpkts, fpkt, unfused_pet)) = self
             .shared
             .clients
             .authenticated
@@ -156,12 +212,24 @@ impl ServerSessionHandler {
                 let unfused = entry.snapshot.pet.as_mut().is_some_and(|p| {
                     if p.fusion_type != 0 {
                         p.fusion_type = 0;
+                        p.fusion_time_left_ms = 0;
                         p.status = 0;
                         true
                     } else {
                         false
                     }
                 });
+                if unfused {
+                    super::super::router_secondary::last_fusion_enter_ms().remove(&pid);
+                    super::super::router_secondary::record_pet_unfusion_cooldown(
+                        pid,
+                        unix_now_ms(),
+                    );
+                    crate::router_pet::recalculate_pet_in_snapshot(
+                        &self.shared,
+                        &mut entry.snapshot,
+                    );
+                }
                 let recompute = cleared || unfused;
                 if recompute {
                     recalculate_session_stats(
@@ -179,19 +247,34 @@ impl ServerSessionHandler {
                             tx.try_send(ZoneCommand::UpdatePlayerStats(ek, entry.snapshot.stats));
                     }
                 }
-                let fpkt = unfused.then(|| {
-                    let mut w = PacketWriter::with_capacity(5);
-                    w.write_i8(1);
-                    w.write_i32(pid.0 as i32);
-                    w.finish(nro_consts::cmd_message::FUSION)
-                });
+                let need_restore = reverted || unfused;
+                let (body_pkt, rpkts) = if need_restore {
+                    let (eh, eb, el, _, is_disg) =
+                        effective_appearance(&self.shared.templates, &entry.snapshot);
+                    if let (Some(ek), Ok(tx)) = (
+                        entry.entity_key,
+                        self.shared
+                            .world_router
+                            .resolve_sender(loc.map_id, loc.zone_id),
+                    ) {
+                        let _ = tx.try_send(ZoneCommand::UpdatePlayerParts(ek, (eh, eb, el)));
+                    }
+                    (
+                        Some(s2c_packets::inventory_body(eh, &entry.snapshot.items_body)),
+                        Some(sprite_restore_packets(pid, eh, eb, el, is_disg)),
+                    )
+                } else {
+                    (None, None)
+                };
+                let fpkt = unfused.then(|| pkt_fusion(pid, 1));
                 let unfused_pet = unfused.then(|| {
                     crate::router_pet::build_pet_companion(&self.shared.templates, &entry.snapshot)
                 });
                 (
                     entry.handle.clone(),
                     recompute.then_some(entry.snapshot.stats),
-                    (reverted || unfused).then(|| self.revert_monkey_appearance_entry(&entry, loc)),
+                    body_pkt,
+                    rpkts,
                     fpkt,
                     unfused_pet,
                 )
@@ -200,11 +283,16 @@ impl ServerSessionHandler {
             if let Some(pkt) = fpkt {
                 self.broadcast_zone_or_self(loc, sid, &pkt);
             }
+            if let Some(pkts) = rpkts {
+                for p in pkts.into_iter().flatten() {
+                    self.broadcast_zone_or_self(loc, sid, &p);
+                }
+            }
+            if let Some(bp) = body_pkt {
+                let _ = h.try_send(bp);
+            }
             if let Some(st) = st {
                 let _ = h.try_send(s2c_packets::me_load_point(&st));
-            }
-            if let Some(pkt) = rpkt {
-                self.broadcast_zone_or_self(loc, sid, &pkt);
             }
             if let Some(pet) = unfused_pet
                 && let Ok(tx) = self
@@ -237,146 +325,30 @@ impl ServerSessionHandler {
         loc: Location,
         sid: u64,
     ) {
-        self.handle_player_death_cleanup(pid, loc, sid);
+        self.forfeit_active_pvp(pid, loc, sid);
         pending_pvp().retain(|k, _| k.0 != pid && k.1 != pid);
-    }
-
-    pub(crate) async fn teleport_player(
-        &self,
-        session: &SessionHandle,
-        sid: u64,
-        map_id: MapId,
-        zone_id: ZoneId,
-        coords: (i16, i16),
-    ) -> Result<(), ProtocolError> {
-        self.switch_player_zone(session, sid, Some(map_id), zone_id, Some(coords))
-            .await
-    }
-
-    pub(in crate::router) async fn handle_pick_map_item(
-        &self,
-        session: &SessionHandle,
-        sid: u64,
-        item_map_id: i16,
-    ) -> Result<(), ProtocolError> {
-        let Some((ek, loc, pid)) = self.shared.clients.authenticated.get(&sid).and_then(|e| {
-            e.entity_key
-                .map(|k| (k, e.snapshot.location, e.snapshot.id))
-        }) else {
-            return Ok(());
-        };
-        let Ok(zone_tx) = self
-            .shared
-            .world_router
-            .resolve_sender(loc.map_id, loc.zone_id)
-        else {
-            return Ok(());
-        };
-        let (reply_tx, reply_rx) = oneshot::channel();
-        if zone_tx
-            .send(ZoneCommand::PickItem(ek, item_map_id, reply_tx))
-            .await
-            .is_ok()
-            && let Ok(Ok(picked)) = reply_rx.await
+        super::super::router_skill_effects::clear_player_effects(pid);
+        let cleared = super::super::router_skill::clear_skill_state(pid);
+        let _ = super::super::router_skill::take_monkey_revert_pending(pid);
+        if sid != 0
+            && let Some(mut entry) = self.shared.clients.authenticated.get_mut(&sid)
         {
-            let (template_id, quantity) = picked.stack;
-            let is_currency = matches!(template_id.0, 76 | 77 | 188..=190 | 861);
-            let catalog = DbItemCatalog(&self.shared.templates);
-            let mut in_trade = false;
-            let bag_res = self
-                .shared
-                .clients
-                .authenticated
-                .get_mut(&sid)
-                .map(|mut entry| {
-                    if super::super::router_shop::is_in_trade(entry.snapshot.id) {
-                        in_trade = true;
-                        return Ok(None);
-                    }
-                    let mut inv = snapshot_to_economy_inv(&entry.snapshot);
-                    match template_id.0 {
-                        76 | 188..=190 => inv.add_gold_clamped(u64::from(quantity)),
-                        77 => inv.gem = inv.gem.saturating_add(quantity),
-                        861 => inv.ruby = inv.ruby.saturating_add(quantity),
-                        _ => inv.add_to_bag(
-                            ItemInstance {
-                                template_id,
-                                quantity,
-                                options: picked.options.iter().copied().collect(),
-                                create_time_ms: unix_now_ms(),
-                            },
-                            catalog.meta_of(template_id).stackable,
-                        )?,
-                    }
-                    sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
-                    Ok::<_, InventoryError>(Some((
-                        s2c_packets::inventory_bag(&entry.snapshot.items_bag),
-                        wallet_money_pkt(&entry.snapshot.wallet),
-                    )))
-                });
-            if in_trade {
-                let _ = zone_tx.send(ZoneCommand::RestoreGroundItem(picked)).await;
-                return send_thong_bao(session, "Không thể thao tác khi đang giao dịch!");
-            }
-            match bag_res {
-                Some(Err(InventoryError::ContainerFull(_))) => {
-                    let _ = zone_tx.send(ZoneCommand::RestoreGroundItem(picked)).await;
-                    send_thong_bao(session, "Hành trang đã đầy!")?;
+            let timed_unfused = entry.snapshot.pet.as_mut().is_some_and(|p| {
+                if p.fusion_type == const_player::LUONG_LONG_NHAT_THE {
+                    p.fusion_type = const_player::NON_FUSION;
+                    p.fusion_time_left_ms = 0;
+                    p.status = 0;
+                    true
+                } else {
+                    false
                 }
-                Some(Err(_) | Ok(None)) | None => {
-                    let _ = zone_tx.send(ZoneCommand::RestoreGroundItem(picked)).await;
-                }
-                Some(Ok(Some((bag_pkt, money_pkt)))) => {
-                    let (my_p, peer_p) = s2c_packets::item_map_pickup_packets(
-                        item_map_id,
-                        pid,
-                        quantity,
-                        "",
-                        is_currency,
-                    )?;
-                    session.send(my_p).await?;
-                    self.broadcast_to_zone_peers(loc, Some(sid), &peer_p);
-                    session.send(bag_pkt).await?;
-                    session.send(money_pkt).await?;
-                    self.advance_task_on_pick_item(session, sid, template_id)
-                        .await?;
-                }
+            });
+            if timed_unfused {
+                crate::router_pet::recalculate_pet_in_snapshot(&self.shared, &mut entry.snapshot);
             }
-        }
-        Ok(())
-    }
-
-    pub(in crate::router) fn broadcast_to_zone_peers(
-        &self,
-        loc: Location,
-        exclude_sid: Option<u64>,
-        pkt: &Packet,
-    ) {
-        if is_offline_map(loc.map_id) {
-            return;
-        }
-        for rec in &self.shared.clients.authenticated {
-            if exclude_sid != Some(*rec.key())
-                && rec.value().snapshot.location.map_id == loc.map_id
-                && rec.value().snapshot.location.zone_id == loc.zone_id
-            {
-                let _ = rec.value().handle.try_send(pkt.clone());
+            if cleared || timed_unfused {
+                recalculate_snapshot_stats(&mut entry.snapshot, self.shared.config.parity_mode);
             }
-        }
-    }
-
-    pub(in crate::router) fn broadcast_zone_or_self(
-        &self,
-        loc: Location,
-        actor_sid: u64,
-        pkt: &Packet,
-    ) {
-        if is_offline_map(loc.map_id) {
-            if let Some(rec) = self.shared.clients.authenticated.get(&actor_sid) {
-                let _ = rec.value().handle.try_send(pkt.clone());
-            }
-        } else {
-            self.broadcast_to_zone_peers(loc, None, pkt);
         }
     }
 }

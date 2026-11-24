@@ -11,16 +11,17 @@ mod admin_control_pet;
 pub use admin_control_pet::pet_type_label;
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use admin_control_extra::{matches_query, row_from_snap};
 use nro_core::AccountId;
 use nro_db::player_repo::PlayerSnapshot;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 use crate::runtime::SharedServerState;
+use admin_control_extra::{matches_query, row_from_snap};
 
 const MAX_LIST_ROWS: usize = 100;
 
@@ -72,7 +73,7 @@ pub struct AdminUserRow {
 pub struct AdminControl {
     pub(super) shared: Arc<SharedServerState>,
     pub(super) rt: tokio::runtime::Handle,
-    shutdown: CancellationToken,
+    pub(super) shutdown: CancellationToken,
     bind_addr: Arc<str>,
     shutdown_triggered: Arc<AtomicBool>,
 }
@@ -94,6 +95,16 @@ impl AdminControl {
             bind_addr,
             shutdown_triggered: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    pub(super) fn run_async<F: Future>(&self, fut: F) -> Result<F::Output, String> {
+        if self.shutdown.is_cancelled() {
+            return Err("Máy chủ đang dừng hoặc đã tắt!".to_owned());
+        }
+        if tokio::runtime::Handle::try_current().is_ok() {
+            return Err("Không thể gọi đồng bộ từ luồng Tokio!".to_owned());
+        }
+        Ok(self.rt.block_on(fut))
     }
 
     /// Returns the cached `ip:port` bind address without touching runtime registries.
@@ -120,20 +131,32 @@ impl AdminControl {
         }
     }
 
-    /// Lists up to `limit` online users from in-memory session state with zero DB I/O.
+    /// Lists up to `limit` online users with real account metadata from `fjall` point lookups.
     #[must_use]
     pub fn list_online_users(&self, query: &str, limit: usize) -> Vec<AdminUserRow> {
         if limit == 0 {
             return Vec::new();
         }
-        let needle = query.trim().to_ascii_lowercase();
+        let needle = query.trim().to_lowercase();
         let mut rows = Vec::with_capacity(limit.min(MAX_LIST_ROWS));
         for entry in &self.shared.clients.authenticated {
             let e = entry.value();
             let Some(aid) = e.snapshot.account_id else {
                 continue;
             };
-            let username = format!("acc_{}", aid.0);
+            let acc_opt = self.shared.accounts_repo.get_by_id(aid).ok().flatten();
+            let (username, ban, active, is_admin, vnd) = acc_opt.map_or_else(
+                || (format!("acc_{}", aid.0), false, e.activated, e.is_admin, 0),
+                |acc| {
+                    (
+                        acc.username,
+                        acc.ban,
+                        acc.active != 0,
+                        acc.is_admin,
+                        acc.vnd,
+                    )
+                },
+            );
             if !matches_query(
                 &needle,
                 aid.0,
@@ -149,10 +172,10 @@ impl AdminControl {
                 Some(e.snapshot.clone()),
                 &self.shared.templates.maps,
                 true,
-                false,
-                e.activated,
-                e.is_admin,
-                0,
+                ban,
+                active,
+                is_admin,
+                vnd,
                 0,
             ));
         }
@@ -161,12 +184,17 @@ impl AdminControl {
         rows
     }
 
-    /// Searches up to `limit` online and offline accounts by username, character name, or IDs.
-    pub fn search_users(&self, query: &str, limit: usize) -> Result<Vec<AdminUserRow>, String> {
+    /// Searches up to `limit` online and offline accounts, optionally filtering banned rows first.
+    pub fn search_users_filtered(
+        &self,
+        query: &str,
+        limit: usize,
+        banned_only: bool,
+    ) -> Result<Vec<AdminUserRow>, String> {
         if limit == 0 {
             return Ok(Vec::new());
         }
-        let needle = query.trim().to_ascii_lowercase();
+        let needle = query.trim().to_lowercase();
         let mut online_by_acc: HashMap<i32, PlayerSnapshot> = HashMap::new();
         for entry in &self.shared.clients.authenticated {
             if let Some(aid) = entry.value().snapshot.account_id {
@@ -178,6 +206,9 @@ impl AdminControl {
             .accounts_repo
             .list_all()
             .map_err(|err| format!("Lỗi DB khi tải danh sách tài khoản: {err}"))?;
+        if banned_only {
+            accounts.retain(|a| a.ban);
+        }
         accounts.sort_by(|a, b| {
             let ao = online_by_acc.contains_key(&a.id);
             let bo = online_by_acc.contains_key(&b.id);
@@ -192,14 +223,14 @@ impl AdminControl {
             let live = online_by_acc.remove(&acc.id);
             let online = live.is_some();
             let snap = live.or_else(|| {
-                self.rt
-                    .block_on(
-                        self.shared
-                            .players_repo
-                            .load_by_account(AccountId(acc.id), self.shared.config.parity_mode),
-                    )
-                    .ok()
-                    .flatten()
+                self.run_async(
+                    self.shared
+                        .players_repo
+                        .load_by_account(AccountId(acc.id), self.shared.config.parity_mode),
+                )
+                .ok()
+                .and_then(Result::ok)
+                .flatten()
             });
             let (pid, pname) = snap
                 .as_ref()
@@ -223,14 +254,35 @@ impl AdminControl {
         Ok(rows)
     }
 
+    /// Searches up to `limit` online and offline accounts by username, character name, or IDs.
+    pub fn search_users(&self, query: &str, limit: usize) -> Result<Vec<AdminUserRow>, String> {
+        self.search_users_filtered(query, limit, false)
+    }
+
+    /// Lists up to [`MAX_LIST_ROWS`] accounts with optional online/banned pre-filtering.
+    #[must_use]
+    pub fn list_users_filtered(
+        &self,
+        query: &str,
+        online_only: bool,
+        banned_only: bool,
+    ) -> Vec<AdminUserRow> {
+        if online_only {
+            let mut rows = self.list_online_users(query, MAX_LIST_ROWS);
+            if banned_only {
+                rows.retain(|r| r.ban);
+            }
+            rows
+        } else {
+            self.search_users_filtered(query, MAX_LIST_ROWS, banned_only)
+                .unwrap_or_default()
+        }
+    }
+
     /// Lists up to [`MAX_LIST_ROWS`] accounts (online first), keeping `nro-admin-ui` compatible.
     #[must_use]
     pub fn list_users(&self, query: &str, online_only: bool) -> Vec<AdminUserRow> {
-        if online_only {
-            self.list_online_users(query, MAX_LIST_ROWS)
-        } else {
-            self.search_users(query, MAX_LIST_ROWS).unwrap_or_default()
-        }
+        self.list_users_filtered(query, online_only, false)
     }
 
     /// Toggles maintenance mode and notifies all connected players.

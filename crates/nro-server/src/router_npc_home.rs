@@ -14,8 +14,8 @@ use nro_world::{ZoneCommand, s2c_packets};
 use smallvec::SmallVec;
 
 use super::{
-    ServerSessionHandler, npc_menu_index, snapshot_to_economy_inv, sync_economy_inv_to_snapshot,
-    wallet_money_pkt,
+    ServerSessionHandler, is_own_home_map, npc_menu_index, snapshot_to_economy_inv,
+    sync_economy_inv_to_snapshot, wallet_money_pkt,
 };
 use crate::data_game_tpl;
 use crate::runtime::unix_now_ms;
@@ -30,13 +30,26 @@ impl ServerSessionHandler {
         is_dua_hau: bool,
         now_ms: i64,
     ) -> Result<(), ProtocolError> {
-        let egg = self.shared.clients.authenticated.get(&sid).and_then(|e| {
-            if is_dua_hau {
-                e.snapshot.dua_hau_egg
-            } else {
-                e.snapshot.mabu_egg
-            }
-        });
+        let Some((in_own_home, egg)) = self.shared.clients.authenticated.get(&sid).map(|e| {
+            (
+                is_own_home_map(e.snapshot.location.map_id, e.snapshot.gender),
+                if is_dua_hau {
+                    e.snapshot.dua_hau_egg
+                } else {
+                    e.snapshot.mabu_egg
+                },
+            )
+        }) else {
+            return Ok(());
+        };
+        if !in_own_home {
+            npc_menu_index().remove(&player_id);
+            return session
+                .send(s2c_packets::thong_bao(
+                    "Chỉ có thể thao tác tại nhà riêng của bạn!",
+                )?)
+                .await;
+        }
         if is_dua_hau {
             let Some(egg) = egg else {
                 npc_menu_index().remove(&player_id);
@@ -126,6 +139,19 @@ impl ServerSessionHandler {
         select: u8,
     ) -> Result<(), ProtocolError> {
         npc_menu_index().remove(&pid);
+        if !self
+            .shared
+            .clients
+            .authenticated
+            .get(&sid)
+            .is_some_and(|e| is_own_home_map(e.snapshot.location.map_id, e.snapshot.gender))
+        {
+            return session
+                .send(s2c_packets::thong_bao(
+                    "Chỉ có thể thao tác tại nhà riêng của bạn!",
+                )?)
+                .await;
+        }
         let now_ms = unix_now_ms();
         if npc_id == i16::from(const_npc::QUA_TRUNG) {
             if cur_menu_idx == const_npc::CAN_NOT_OPEN_EGG && select == 0 {
@@ -207,6 +233,7 @@ impl ServerSessionHandler {
                             }
                             entry.snapshot.pet = Some(fresh);
                             entry.snapshot.mabu_egg = None;
+                            super::router_world::tick_magic_tree(&mut entry.snapshot, now_ms);
                             crate::router_pet::recalculate_pet_in_snapshot(
                                 &self.shared,
                                 &mut entry.snapshot,
@@ -245,7 +272,7 @@ impl ServerSessionHandler {
                             session.send(p).await?;
                         }
                         session.send(pt_pkt).await?;
-                        if matches!(snap.location.map_id.0, 21..=23) {
+                        if is_own_home_map(snap.location.map_id, snap.gender) {
                             session
                                 .send(data_game_tpl::pkt_map_info(
                                     &self.shared.assets,
@@ -265,7 +292,7 @@ impl ServerSessionHandler {
                                     .world_router
                                     .resolve_sender(snap.location.map_id, snap.location.zone_id),
                             ) {
-                                let _ = tx.try_send(ZoneCommand::SyncZoneState(ek));
+                                let _ = tx.send(ZoneCommand::SyncZoneState(ek)).await;
                             }
                         }
                         crate::router_pet::sync_online_pet_map_state(&self.shared, pid).await;
@@ -316,6 +343,7 @@ impl ServerSessionHandler {
                     .map_err(|_| "Hành trang đã đầy!".to_owned())?;
                     sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
                     entry.snapshot.dua_hau_egg = None;
+                    super::router_world::tick_magic_tree(&mut entry.snapshot, now_ms);
                     Ok((
                         s2c_packets::inventory_bag(&entry.snapshot.items_bag),
                         entry.snapshot.clone(),
@@ -325,7 +353,7 @@ impl ServerSessionHandler {
             match res {
                 Some(Ok((bag_pkt, snap, ek))) => {
                     session.send(bag_pkt).await?;
-                    if matches!(snap.location.map_id.0, 21..=23) {
+                    if is_own_home_map(snap.location.map_id, snap.gender) {
                         session
                             .send(data_game_tpl::pkt_map_info(
                                 &self.shared.assets,
@@ -345,7 +373,7 @@ impl ServerSessionHandler {
                                 .world_router
                                 .resolve_sender(snap.location.map_id, snap.location.zone_id),
                         ) {
-                            let _ = tx.try_send(ZoneCommand::SyncZoneState(ek));
+                            let _ = tx.send(ZoneCommand::SyncZoneState(ek)).await;
                         }
                         crate::router_pet::sync_online_pet_map_state(&self.shared, pid).await;
                     }

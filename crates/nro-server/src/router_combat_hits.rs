@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use nro_boss::EngineEffect;
 use nro_core::{Location, PlayerId};
-use nro_player::skills::SkillKind;
+use nro_player::skills::{CcFlags, SkillKind};
 use nro_protocol::{ProtocolError, SessionHandle};
 use nro_world::{ZoneCommand, s2c_packets};
 
@@ -76,7 +76,7 @@ impl ServerSessionHandler {
                 else {
                     continue;
                 };
-                let mut rng = next_combat_rng(attacker_sid, cast.now_ms);
+                let mut rng = next_combat_rng(cast.now_ms, attacker_sid, tpid.0.cast_unsigned());
                 let (dealt, mut fx) = {
                     let mut mgr = self.shared.bosses.lock();
                     let Some(bi) = mgr.instances().get(&tpid.0) else {
@@ -88,18 +88,21 @@ impl ServerSessionHandler {
                     {
                         continue;
                     }
-                    let before = bi.stats.hp;
-                    let fx = mgr.apply_player_hit(
-                        &atk_view,
-                        tpid.0,
-                        raw_dmg,
-                        piercing,
-                        false,
-                        &mut rng,
-                        cast.now_ms as u64,
-                    );
-                    let after = mgr.instances().get(&tpid.0).map_or(0, |b| b.stats.hp);
-                    (before.saturating_sub(after).max(0), fx)
+                    let mut fx = Vec::new();
+                    let dealt = mgr
+                        .apply_hit(
+                            tpid,
+                            &atk_view,
+                            cast.skill_kind.unwrap_or(SkillKind::Dragon),
+                            raw_dmg,
+                            piercing,
+                            false,
+                            &mut rng,
+                            cast.now_ms.max(0).cast_unsigned(),
+                            &mut fx,
+                        )
+                        .map_or(0, |out| out.applied_damage.max(0));
+                    (dealt, fx)
                 };
                 self.apply_attacker_lifesteal(attacker_sid, loc, dealt, cast.attacker_drains);
                 boss_effects.append(&mut fx);
@@ -114,8 +117,11 @@ impl ServerSessionHandler {
             if tsid == attacker_sid {
                 continue;
             }
-            let pvp_pair_ok = lock_pvp().contains_key(&(atk_pid, tpid))
-                || lock_pvp().contains_key(&(tpid, atk_pid));
+            let pvp_pair_ok = {
+                let pvp = lock_pvp();
+                pvp.get(&atk_pid).is_some_and(|&(opp, _)| opp == tpid)
+                    || pvp.get(&tpid).is_some_and(|&(opp, _)| opp == atk_pid)
+            };
             let hit_res = self
                 .shared
                 .clients
@@ -193,18 +199,35 @@ impl ServerSessionHandler {
                         piercing: true,
                     });
                 }
-                if let Some(sk) = cast.skill_kind {
-                    let (flags, durs) = nro_player::skills::cc_durations_ms(sk, cast.skill_point);
-                    if flags.contains(nro_player::skills::CcFlags::BLIND_DCTT) && durs[1] > 0 {
-                        let _ = self.shared.clients.authenticated.get(&tsid).map(|e| {
-                            super::super::router_skill_effects::apply_boss_debuff_to_player(
-                                tpid,
-                                nro_boss::PlayerDebuffKind::Stun,
-                                u64::from(durs[1]),
-                                &e.snapshot.items_body,
-                                cast.now_ms,
-                            )
+                if cast.skill_kind == Some(SkillKind::DichChuyenTucThoi) {
+                    let (dctt_ms, _, _) =
+                        nro_player::skills::cc_durations_ms(cast.skill_point, false);
+                    let red_pct = self
+                        .shared
+                        .clients
+                        .authenticated
+                        .get(&tsid)
+                        .map_or(0_u64, |e| {
+                            let s: i32 = e
+                                .snapshot
+                                .items_body
+                                .iter()
+                                .flatten()
+                                .flat_map(|it| it.options.iter())
+                                .filter(|o| o.id == 175)
+                                .map(|o| o.param.max(0))
+                                .sum();
+                            u64::try_from(s.clamp(0, 100)).unwrap_or(0)
                         });
+                    let eff_ms = dctt_ms.saturating_mul(100_u64.saturating_sub(red_pct)) / 100;
+                    if eff_ms > 0 {
+                        super::super::router_skill_effects::apply_player_cc(
+                            tpid,
+                            CcFlags::BLIND_DCTT,
+                            1,
+                            eff_ms,
+                            cast.now_ms,
+                        );
                     }
                 }
                 if died {
@@ -224,7 +247,7 @@ impl ServerSessionHandler {
         sid: u64,
         mobs: &[u8],
     ) -> Result<(), ProtocolError> {
-        let mut revert_pkt = None;
+        let mut revert_pkts = None;
         let prep = self
             .shared
             .clients
@@ -232,11 +255,13 @@ impl ServerSessionHandler {
             .get_mut(&sid)
             .and_then(|mut entry| {
                 let ek = entry.entity_key?;
-                let cast = self.prepare_attack_cast(&mut entry, sid, &mut revert_pkt)?;
+                let cast = self.prepare_attack_cast(&mut entry, sid, &mut revert_pkts)?;
                 Some((ek, entry.snapshot.location, cast))
             });
-        if let Some((rloc, rpkt)) = revert_pkt {
-            self.broadcast_zone_or_self(rloc, sid, &rpkt);
+        if let Some((rloc, rpkts)) = revert_pkts {
+            for p in rpkts.into_iter().flatten() {
+                self.broadcast_zone_or_self(rloc, sid, &p);
+            }
         }
         if let Some((ek, loc, cast)) = prep {
             session.send(s2c_packets::me_load_mp(cast.new_mp)).await?;
@@ -251,14 +276,14 @@ impl ServerSessionHandler {
         if targets.is_empty() {
             return;
         }
-        let mut revert_pkt = None;
+        let mut revert_pkts = None;
         let prep = self
             .shared
             .clients
             .authenticated
             .get_mut(&sid)
             .and_then(|mut entry| {
-                let cast = self.prepare_attack_cast(&mut entry, sid, &mut revert_pkt)?;
+                let cast = self.prepare_attack_cast(&mut entry, sid, &mut revert_pkts)?;
                 let _ = entry.handle.try_send(s2c_packets::me_load_mp(cast.new_mp));
                 Some((
                     entry.snapshot.id,
@@ -267,8 +292,10 @@ impl ServerSessionHandler {
                     cast,
                 ))
             });
-        if let Some((rloc, rpkt)) = revert_pkt {
-            self.broadcast_zone_or_self(rloc, sid, &rpkt);
+        if let Some((rloc, rpkts)) = revert_pkts {
+            for p in rpkts.into_iter().flatten() {
+                self.broadcast_zone_or_self(rloc, sid, &p);
+            }
         }
         if let Some((atk_pid, cur_flag, loc, cast)) = prep {
             let valid = dedup_take(targets.iter().copied(), cast.max_fight);
@@ -289,7 +316,7 @@ impl ServerSessionHandler {
         mobs: &[u8],
         players: &[PlayerId],
     ) -> Result<(), ProtocolError> {
-        let mut revert_pkt = None;
+        let mut revert_pkts = None;
         let prep = self
             .shared
             .clients
@@ -297,7 +324,7 @@ impl ServerSessionHandler {
             .get_mut(&sid)
             .and_then(|mut entry| {
                 let ek = entry.entity_key?;
-                let cast = self.prepare_attack_cast(&mut entry, sid, &mut revert_pkt)?;
+                let cast = self.prepare_attack_cast(&mut entry, sid, &mut revert_pkts)?;
                 Some((
                     ek,
                     entry.snapshot.id,
@@ -306,8 +333,10 @@ impl ServerSessionHandler {
                     cast,
                 ))
             });
-        if let Some((rloc, rpkt)) = revert_pkt {
-            self.broadcast_zone_or_self(rloc, sid, &rpkt);
+        if let Some((rloc, rpkts)) = revert_pkts {
+            for p in rpkts.into_iter().flatten() {
+                self.broadcast_zone_or_self(rloc, sid, &p);
+            }
         }
         if let Some((ek, atk_pid, cur_flag, loc, cast)) = prep {
             session.send(s2c_packets::me_load_mp(cast.new_mp)).await?;

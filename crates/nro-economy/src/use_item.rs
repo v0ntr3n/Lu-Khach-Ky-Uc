@@ -14,6 +14,7 @@ mod use_item_extra;
 #[path = "use_item_pea.rs"]
 mod use_item_pea;
 
+pub use use_item_extra::apply_porata_fusion;
 pub use use_item_pea::{
     DuaHauEggState, GiftCodeDef, GiftCodeService, LuckyRoundMode, LuckyRoundService, MabuEggState,
     MagicTreeState,
@@ -139,6 +140,11 @@ impl TimedBuffState {
     }
 }
 
+/// Optional bit inside [`UseItemCtx::pet_unlocked_skills`] indicating the pet is currently dead (`hp <= 0`).
+pub const PET_DEAD_BIT: u8 = 1 << 6;
+/// Optional bit inside [`UseItemCtx::pet_unlocked_skills`] indicating the pet wears `>= 1` body item.
+pub const PET_EQUIPPED_BIT: u8 = 1 << 7;
+
 /// Mutable gameplay context passed into [`UseItemService::use_bag_item`].
 pub struct UseItemCtx<'a> {
     pub now_ms: i64,
@@ -203,6 +209,25 @@ impl UseItemService {
         catalog: &dyn ItemCatalog,
         rng: &mut GameRng,
     ) -> Result<UseItemEffect, UseItemError> {
+        let pet_hp = if (ctx.pet_unlocked_skills & PET_DEAD_BIT) != 0 {
+            0
+        } else {
+            1
+        };
+        let pet_equipped = (ctx.pet_unlocked_skills & PET_EQUIPPED_BIT) != 0;
+        Self::use_bag_item_with_pet(inv, bag_slot, ctx, pet_hp, pet_equipped, catalog, rng)
+    }
+
+    /// Dispatches item usage with explicit companion pet `pet_hp` and `pet_has_body_items` guards.
+    pub fn use_bag_item_with_pet(
+        inv: &mut Inventory,
+        bag_slot: usize,
+        ctx: &mut UseItemCtx<'_>,
+        pet_hp: i64,
+        pet_has_body_items: bool,
+        catalog: &dyn ItemCatalog,
+        rng: &mut GameRng,
+    ) -> Result<UseItemEffect, UseItemError> {
         let snap = inv.bag_item(bag_slot)?.clone();
         let (id, meta): (i16, ItemMeta) = (snap.template_id.0, catalog.meta_of(snap.template_id));
         if ctx.stats.power < meta.power_require {
@@ -213,7 +238,7 @@ impl UseItemService {
         }
         if let Some(&(_, (h, b, l))) = PET2_SPRITES.iter().find(|&&(pid, _)| pid == id) {
             Self::check_equip_prereqs(&snap, meta, ctx)?;
-            inv.bag_to_body(bag_slot, 7.min(inv.body.len().saturating_sub(1)), rng)?;
+            Self::equip_into_body_slot(inv, bag_slot, 7, rng)?;
             return Ok(UseItemEffect::SpawnedPet2(h, b, l));
         }
         match meta.item_type {
@@ -224,10 +249,10 @@ impl UseItemService {
             }
             11 | 23 | 24 => {
                 Self::check_equip_prereqs(&snap, meta, ctx)?;
-                inv.bag_to_body(
+                Self::equip_into_body_slot(
+                    inv,
                     bag_slot,
-                    (if meta.item_type == 11 { 8 } else { 9 })
-                        .min(inv.body.len().saturating_sub(1)),
+                    if meta.item_type == 11 { 8 } else { 9 },
                     rng,
                 )?;
                 return Ok(UseItemEffect::Applied);
@@ -248,7 +273,7 @@ impl UseItemService {
             }
             25 if id != 361 => {
                 Self::check_equip_prereqs(&snap, meta, ctx)?;
-                inv.bag_to_body(bag_slot, 4.min(inv.body.len().saturating_sub(1)), rng)?;
+                Self::equip_into_body_slot(inv, bag_slot, 4, rng)?;
                 return Ok(UseItemEffect::Applied);
             }
             33 => {
@@ -265,6 +290,11 @@ impl UseItemService {
                 if *ctx.fusion_mode != const_player::NON_FUSION {
                     return Err(UseItemError::PreconditionFailed(
                         "Vui lòng tách hợp thể trước khi đổi đệ tử!",
+                    ));
+                }
+                if pet_has_body_items {
+                    return Err(UseItemError::PreconditionFailed(
+                        "Vui lòng tháo hết trang bị của đệ tử trước!",
                     ));
                 }
                 inv.sub_from_bag_slot(bag_slot, 1)?;
@@ -289,8 +319,20 @@ impl UseItemService {
                 inv.sub_from_bag_slot(bag_slot, 1)?;
                 Ok(UseItemEffect::UpgradedPetSkill(slot_idx))
             }
-            _ => Self::use_bag_item_by_id(inv, bag_slot, id, &snap, ctx, rng),
+            _ => Self::use_bag_item_by_id(inv, bag_slot, id, &snap, ctx, pet_hp, rng),
         }
+    }
+
+    fn equip_into_body_slot(
+        inv: &mut Inventory,
+        bag_slot: usize,
+        body_slot: usize,
+        rng: &mut GameRng,
+    ) -> Result<(), InventoryError> {
+        if inv.body.len() <= body_slot {
+            inv.body.resize(body_slot + 1, None);
+        }
+        inv.bag_to_body(bag_slot, body_slot, rng)
     }
 
     fn check_equip_prereqs(

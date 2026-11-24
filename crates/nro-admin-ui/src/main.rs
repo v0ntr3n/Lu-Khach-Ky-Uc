@@ -16,8 +16,10 @@ mod views;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 
 use anyhow::Context as _;
 use clap::Parser;
@@ -77,6 +79,7 @@ fn spawn_server_thread(
     cli: GuiCliArgs,
     boot_state: Arc<Mutex<BootState>>,
     shutdown_token: CancellationToken,
+    ui_exit_token: CancellationToken,
 ) -> thread::JoinHandle<()> {
     let bg_shutdown = shutdown_token;
     thread::Builder::new()
@@ -100,7 +103,9 @@ fn spawn_server_thread(
                     )
                 })?;
 
-                let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build()?;
+                let rt = tokio::runtime::Builder::new_multi_thread()
+                    .enable_all()
+                    .build()?;
                 let rt_handle = rt.handle().clone();
                 let ready_state = Arc::clone(&boot_state);
                 rt.block_on(async move {
@@ -114,6 +119,7 @@ fn spawn_server_thread(
                     if let Err(err) = runtime.shutdown_and_flush().await {
                         error!(error = %err, "error during server shutdown flush");
                     }
+                    ui_exit_token.cancelled().await;
                     Ok(())
                 })
             })();
@@ -138,23 +144,45 @@ fn main() {
 
     let boot_state = Arc::new(Mutex::new(BootState::Booting));
     let shutdown_token = CancellationToken::new();
-    let server_thread = spawn_server_thread(cli, Arc::clone(&boot_state), shutdown_token.clone());
+    let ui_exit_token = CancellationToken::new();
+    let window_closed = Arc::new(AtomicBool::new(false));
+    let server_thread = spawn_server_thread(
+        cli,
+        Arc::clone(&boot_state),
+        shutdown_token.clone(),
+        ui_exit_token.clone(),
+    );
 
     let ui_state = Arc::clone(&boot_state);
     let ui_logs = log_buffer;
+    let ui_closed_flag = Arc::clone(&window_closed);
     gpui_kit::application()
         .with_assets(gpui_kit::assets::Assets)
         .run(move |cx| {
             gpui_kit::init(cx);
             cx.activate(true);
+            let watcher_flag = Arc::clone(&ui_closed_flag);
+            cx.spawn(async move |cx| {
+                loop {
+                    cx.background_executor()
+                        .timer(Duration::from_millis(250))
+                        .await;
+                    if watcher_flag.load(Ordering::Acquire) {
+                        let _ = cx.update(|cx| cx.quit());
+                        break;
+                    }
+                }
+            })
+            .detach();
             let window_options = WindowOptions {
                 window_bounds: Some(WindowBounds::centered(size(px(1280.0), px(820.0)), cx)),
                 focus: true,
                 show: true,
                 ..Default::default()
             };
+            let app_closed_flag = Arc::clone(&ui_closed_flag);
             if let Err(err) = gpui_kit::open_window(window_options, cx, |window, cx| {
-                cx.new(|cx| AdminApp::new(ui_state, ui_logs, window, cx))
+                cx.new(|cx| AdminApp::new(ui_state, ui_logs, app_closed_flag, window, cx))
             }) {
                 error!(error = %err, "failed to open GPUI window");
                 eprintln!("[nro-server-gui] Failed to open GPUI window: {err:#}");
@@ -171,5 +199,6 @@ fn main() {
             shutdown_token.cancel();
         }
     }
+    ui_exit_token.cancel();
     let _ = server_thread.join();
 }

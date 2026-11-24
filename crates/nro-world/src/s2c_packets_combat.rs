@@ -142,7 +142,7 @@ pub fn item_map_my_pick(
     notice: &str,
     is_currency: bool,
 ) -> Result<Packet, PacketError> {
-    let qty_i16 = i16::try_from(qty).unwrap_or(9_999);
+    let qty_i16 = i16::try_from(qty).unwrap_or(i16::MAX);
     build_pkt_res(cmd_message::ITEMMAP_MYPICK, 8 + notice.len(), |w| {
         w.write_i16(id);
         w.write_utf(notice)?;
@@ -182,27 +182,75 @@ pub fn item_map_remove(item_map_id: i16) -> Packet {
 #[must_use]
 pub fn update_caption(gender: i8) -> Packet {
     const TRAI_DAT: [&str; 22] = [
-        "Tân binh", "Tập sự", "Chiến binh", "Đội trưởng",
-        "Siêu cấp 1", "Siêu cấp 2", "Siêu cấp 3", "Siêu cấp 4", "Siêu cấp 5",
-        "Siêu cấp 6", "Siêu cấp 7",
-        "Thần cấp 1", "Thần cấp 2", "Thần cấp 3", "Thần cấp 4", "Thần cấp 5",
-        "Thần cấp 6", "Thần cấp 7", "Thần cấp 8", "Thần cấp 9", "Thần cấp 10",
+        "Tân binh",
+        "Tập sự",
+        "Chiến binh",
+        "Đội trưởng",
+        "Siêu cấp 1",
+        "Siêu cấp 2",
+        "Siêu cấp 3",
+        "Siêu cấp 4",
+        "Siêu cấp 5",
+        "Siêu cấp 6",
+        "Siêu cấp 7",
+        "Thần cấp 1",
+        "Thần cấp 2",
+        "Thần cấp 3",
+        "Thần cấp 4",
+        "Thần cấp 5",
+        "Thần cấp 6",
+        "Thần cấp 7",
+        "Thần cấp 8",
+        "Thần cấp 9",
+        "Thần cấp 10",
         "Thần cấp 11",
     ];
     const NAMEC: [&str; 22] = [
-        "Tân binh", "Tập sự", "Chiến binh", "Đội trưởng",
-        "Siêu Namec 1", "Siêu Namec 2", "Siêu Namec 3", "Siêu Namec 4", "Siêu Namec 5",
-        "Siêu Namec 6", "Siêu Namec 7",
-        "Thần Namec 1", "Thần Namec 2", "Thần Namec 3", "Thần Namec 4", "Thần Namec 5",
-        "Thần Namec 6", "Thần Namec 7", "Thần Namec 8", "Thần Namec 9", "Thần Namec 10",
+        "Tân binh",
+        "Tập sự",
+        "Chiến binh",
+        "Đội trưởng",
+        "Siêu Namec 1",
+        "Siêu Namec 2",
+        "Siêu Namec 3",
+        "Siêu Namec 4",
+        "Siêu Namec 5",
+        "Siêu Namec 6",
+        "Siêu Namec 7",
+        "Thần Namec 1",
+        "Thần Namec 2",
+        "Thần Namec 3",
+        "Thần Namec 4",
+        "Thần Namec 5",
+        "Thần Namec 6",
+        "Thần Namec 7",
+        "Thần Namec 8",
+        "Thần Namec 9",
+        "Thần Namec 10",
         "Thần Namec 11",
     ];
     const XAYDA: [&str; 22] = [
-        "Tân binh", "Tập sự", "Chiến binh", "Đội trưởng",
-        "Siêu Xayda 1", "Siêu Xayda 2", "Siêu Xayda 3", "Siêu Xayda 4", "Siêu Xayda 5",
-        "Siêu Xayda 6", "Siêu Xayda 7",
-        "Thần Xayda 1", "Thần Xayda 2", "Thần Xayda 3", "Thần Xayda 4", "Thần Xayda 5",
-        "Thần Xayda 6", "Thần Xayda 7", "Thần Xayda 8", "Thần Xayda 9", "Thần Xayda 10",
+        "Tân binh",
+        "Tập sự",
+        "Chiến binh",
+        "Đội trưởng",
+        "Siêu Xayda 1",
+        "Siêu Xayda 2",
+        "Siêu Xayda 3",
+        "Siêu Xayda 4",
+        "Siêu Xayda 5",
+        "Siêu Xayda 6",
+        "Siêu Xayda 7",
+        "Thần Xayda 1",
+        "Thần Xayda 2",
+        "Thần Xayda 3",
+        "Thần Xayda 4",
+        "Thần Xayda 5",
+        "Thần Xayda 6",
+        "Thần Xayda 7",
+        "Thần Xayda 8",
+        "Thần Xayda 9",
+        "Thần Xayda 10",
         "Thần Xayda 11",
     ];
     let captions: &[&str] = match gender {
@@ -231,12 +279,16 @@ pub fn change_on_skill(shortcuts: &[i8]) -> Packet {
 /// Builds opcode `1` (`REGISTER`) account registration response.
 #[must_use]
 pub fn register_result(ok: bool, msg: &str) -> Packet {
-    build_pkt(cmd_message::REGISTER, 3 + msg.len().min(MAX_SAFE_UTF_BYTES), |w| {
-        w.write_bool(ok);
-        if !ok {
-            write_utf_lossy(w, msg);
-        }
-    })
+    build_pkt(
+        cmd_message::REGISTER,
+        3 + msg.len().min(MAX_SAFE_UTF_BYTES),
+        |w| {
+            w.write_bool(ok);
+            if !ok {
+                write_utf_lossy(w, msg);
+            }
+        },
+    )
 }
 
 /// Builds opcode `-37` (`BODY`) equipped inventory packet.

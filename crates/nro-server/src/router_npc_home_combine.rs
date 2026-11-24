@@ -76,6 +76,10 @@ impl ServerSessionHandler {
                 )?)
                 .await;
         };
+        if comb_npc != npc_id {
+            pending_combine().remove(&pid);
+            return Ok(());
+        }
         let batch_rolls: Option<u8> = match (op, select) {
             (_, 0) => None,
             (CombineOp::PhaLeHoaTrangBi, 1) => Some(10),

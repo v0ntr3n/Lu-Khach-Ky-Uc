@@ -170,11 +170,13 @@ pub fn chat_global(
         |w| {
             w.write_utf(name)?;
             w.write_utf(&format!("|5|{text}"))?;
-            w.write_i32(pid_i32(sender));
-            for v in [parts.0, -1, parts.1, parts.2, parts.3] {
-                w.write_i16(v);
+            if !name.is_empty() {
+                w.write_i32(pid_i32(sender));
+                for v in [parts.0, -1, parts.1, parts.2, parts.3] {
+                    w.write_i16(v);
+                }
+                w.write_i8(0);
             }
-            w.write_i8(0);
             Ok(())
         },
     )

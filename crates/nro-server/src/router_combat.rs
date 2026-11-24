@@ -4,6 +4,8 @@
 mod router_combat_hits;
 #[path = "router_combat_lifecycle.rs"]
 mod router_combat_lifecycle;
+#[path = "router_combat_pickup.rs"]
+mod router_combat_pickup;
 
 use nro_boss::PlayerView;
 use nro_core::{EntityKey, Location, MapId};
@@ -133,7 +135,7 @@ impl ServerSessionHandler {
         &self,
         entry: &mut ActivePlayerEntry,
         sid: u64,
-        revert_pkt: &mut Option<(Location, Packet)>,
+        revert_pkt: &mut Option<(Location, [Option<Packet>; 2])>,
     ) -> Option<CastPrep> {
         let (sel, now_ms, pid, loc) = (
             entry.selected_skill,

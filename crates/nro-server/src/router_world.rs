@@ -6,6 +6,7 @@ mod router_world_move;
 use std::sync::OnceLock;
 
 use dashmap::{DashMap, DashSet, mapref::entry::Entry};
+use nro_consts::const_player;
 use nro_core::PlayerId;
 use nro_protocol::{AdminCommand, ChatDirective, ProtocolError, SessionHandle, parse_chat_command};
 use nro_world::{ZoneCommand, s2c_packets};
@@ -14,7 +15,9 @@ use tracing::info;
 pub(super) use super::router_world_tree::{
     build_magic_tree_load, build_magic_tree_menu_pkt, tick_magic_tree,
 };
-use super::{ServerSessionHandler, effective_appearance, send_thong_bao};
+use super::{
+    ServerSessionHandler, effective_appearance, is_own_home_map, pkt_fusion, send_thong_bao,
+};
 use crate::data_game::DataGameAssets;
 use crate::data_game_tpl;
 use crate::runtime::unix_now_ms;
@@ -57,12 +60,18 @@ impl ServerSessionHandler {
             );
             return Ok(());
         }
-        let Some((snap, activated, ek)) = self
-            .shared
-            .clients
-            .authenticated
-            .get(&sid)
-            .map(|e| (e.snapshot.clone(), e.activated, e.entity_key))
+        let now_ms = unix_now_ms();
+        let Some((snap, activated, ek)) =
+            self.shared
+                .clients
+                .authenticated
+                .get_mut(&sid)
+                .map(|mut e| {
+                    if is_own_home_map(e.snapshot.location.map_id, e.snapshot.gender) {
+                        tick_magic_tree(&mut e.snapshot, now_ms);
+                    }
+                    (e.snapshot.clone(), e.activated, e.entity_key)
+                })
         else {
             return Ok(());
         };
@@ -90,6 +99,15 @@ impl ServerSessionHandler {
             })
             .unwrap_or(0) as u8;
         session.send(p_all).await?;
+        if let Some(ft) = snap.pet.as_ref().map(|p| p.fusion_type).filter(|&f| f != 0) {
+            let wire_mode = match ft {
+                const_player::HOP_THE_PORATA
+                | const_player::HOP_THE_PORATA2
+                | const_player::HOP_THE_PORATA3 => 6_i8,
+                other => other,
+            };
+            session.send(pkt_fusion(snap.id, wire_mode)).await?;
+        }
         if is_disguised {
             session
                 .send(s2c_packets::update_body(
@@ -157,8 +175,11 @@ impl ServerSessionHandler {
         self.send_login_secondary(session, &snap).await?;
         session.send(p_task).await?;
         session.send(p_map).await?;
-        for egg_pkt in crate::router_pet::build_home_egg_pkts(&snap, unix_now_ms()) {
-            session.send(egg_pkt).await?;
+        if is_own_home_map(snap.location.map_id, snap.gender) {
+            session.send(build_magic_tree_load(&snap)?).await?;
+            for egg_pkt in crate::router_pet::build_home_egg_pkts(&snap, now_ms) {
+                session.send(egg_pkt).await?;
+            }
         }
         if let (Some(ek), Ok(tx)) = (
             ek,
@@ -166,7 +187,7 @@ impl ServerSessionHandler {
                 .world_router
                 .resolve_sender(snap.location.map_id, snap.location.zone_id),
         ) {
-            let _ = tx.try_send(ZoneCommand::SyncZoneState(ek));
+            let _ = tx.send(ZoneCommand::SyncZoneState(ek)).await;
         }
         crate::router_pet::sync_online_pet_map_state(&self.shared, snap.id).await;
         Ok(())
@@ -184,7 +205,7 @@ impl ServerSessionHandler {
             .authenticated
             .get_mut(&sid)
             .map(|mut e| {
-                if matches!(e.snapshot.location.map_id.0, 21..=23) {
+                if is_own_home_map(e.snapshot.location.map_id, e.snapshot.gender) {
                     tick_magic_tree(&mut e.snapshot, now_ms);
                 }
                 (e.snapshot.clone(), e.entity_key)
@@ -195,7 +216,7 @@ impl ServerSessionHandler {
         session
             .send(s2c_packets::me_load_point(&snap.stats))
             .await?;
-        if matches!(snap.location.map_id.0, 21..=23) {
+        if is_own_home_map(snap.location.map_id, snap.gender) {
             session.send(build_magic_tree_load(&snap)?).await?;
             for egg_pkt in crate::router_pet::build_home_egg_pkts(&snap, now_ms) {
                 session.send(egg_pkt).await?;
@@ -207,7 +228,7 @@ impl ServerSessionHandler {
                 .world_router
                 .resolve_sender(snap.location.map_id, snap.location.zone_id),
         ) {
-            let _ = tx.try_send(ZoneCommand::SyncZoneState(ek));
+            let _ = tx.send(ZoneCommand::SyncZoneState(ek)).await;
         }
         crate::router_pet::sync_online_pet_map_state(&self.shared, snap.id).await;
         Ok(())

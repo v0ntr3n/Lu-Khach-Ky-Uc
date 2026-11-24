@@ -43,7 +43,7 @@ pub enum AdminCommandError {
     InvalidSpawnItemSyntax,
 }
 
-/// Strongly typed admin command covering all 6 exact and 12 prefix commands in `Command.java`.
+/// Strongly typed admin command covering all exact and prefix commands in `Command.java`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AdminCommand {
     /// `"item"`: Open give-item-to-player form (`Input.createFormGiveItem`).
@@ -61,7 +61,7 @@ pub enum AdminCommand {
     },
     /// `"a"`: Open `ConstNpc.MENU_ADMIN` (`512`) server telemetry dashboard.
     OpenAdminDashboard,
-    /// `"toado*"`: Send OK dialog displaying current `x` and `y` coordinates.
+    /// `"toado"`: Send OK dialog displaying current `x` and `y` coordinates.
     ShowCoordinates,
     /// `"upp <power>"`: Add `power` SM/TN to `player.pet` (ordered before `"up"`!).
     AddPetPower {
@@ -73,12 +73,12 @@ pub enum AdminCommand {
         /// Power/potential delta (`i64`).
         power: i64,
     },
-    /// `"dm <damage>"`: Set `player.nPoint.dameg = damage`.
+    /// `"dmg <damage>"` / `"dm <damage>"`: Set `player.nPoint.dameg = damage`.
     SetBaseDamage {
         /// New base damage (`i32`).
         damage: i32,
     },
-    /// `"hp <hpg>"`: Set `player.nPoint.hpg = hpg`.
+    /// `"hpg <hpg>"` / `"hp <hpg>"`: Set `player.nPoint.hpg = hpg`.
     SetBaseHp {
         /// New base HP (`i32`).
         hp_base: i32,
@@ -107,11 +107,11 @@ pub enum AdminCommand {
         /// Target task ID (`taskMain.id` is set to `task_id - 1` before `sendNextTaskMain`).
         task_id: i32,
     },
-    /// `"1*"`: Open Bot Manager menu (`npc_id = 206_783`).
+    /// `"1"`: Open Bot Manager menu (`npc_id = 206_783`).
     OpenBotMenu,
-    /// `"2*"`: Switch to `PK_ALL` and spawn a `BotAttackplayer` clone at current coordinates.
+    /// `"2"`: Switch to `PK_ALL` and spawn a `BotAttackplayer` clone at current coordinates.
     SpawnAttackBot,
-    /// `"b*"`: Open custom multi-option item sender form (`Input.createFormSenditem1`).
+    /// `"b"`: Open custom multi-option item sender form (`Input.createFormSenditem1`).
     OpenSendItemForm1,
 }
 
@@ -160,12 +160,30 @@ pub fn parse_chat_command(raw_text: &str, is_admin: bool) -> ChatDirective {
     if cleaned.is_empty() {
         return ChatDirective::EmptyIgnore;
     }
+    if let Some(pet_cmd) = parse_pet_trigger(cleaned) {
+        return ChatDirective::ZoneChat {
+            cleaned_text: cleaned.to_owned(),
+            pet_side_effect: Some(pet_cmd),
+        };
+    }
     if is_admin && let Some(admin_outcome) = try_parse_admin(cleaned) {
         return ChatDirective::Admin(admin_outcome);
     }
     ChatDirective::ZoneChat {
         cleaned_text: cleaned.to_owned(),
-        pet_side_effect: parse_pet_trigger(cleaned),
+        pet_side_effect: None,
+    }
+}
+
+fn strip_num_cmd<'a>(text: &'a str, prefix: &str) -> Option<&'a str> {
+    let rest = text.strip_prefix(prefix)?;
+    if rest.is_empty()
+        || rest.starts_with(char::is_whitespace)
+        || rest.starts_with(|c: char| c.is_ascii_digit() || c == '-')
+    {
+        Some(rest.trim())
+    } else {
+        None
     }
 }
 
@@ -177,69 +195,123 @@ fn try_parse_admin(text: &str) -> Option<Result<AdminCommand, AdminCommandError>
         "hs" => return Some(Ok(AdminCommand::ReleaseSkillCooldowns)),
         "d" => return Some(Ok(AdminCommand::NudgeDown { delta_y: 10 })),
         "a" => return Some(Ok(AdminCommand::OpenAdminDashboard)),
+        "1" => return Some(Ok(AdminCommand::OpenBotMenu)),
+        "2" => return Some(Ok(AdminCommand::SpawnAttackBot)),
+        "b" => return Some(Ok(AdminCommand::OpenSendItemForm1)),
         _ => {}
     }
-    if text.starts_with("toado") {
+    if text == "toado"
+        || text
+            .strip_prefix("toado")
+            .is_some_and(|r| r.starts_with(char::is_whitespace))
+    {
         return Some(Ok(AdminCommand::ShowCoordinates));
     }
-    if let Some(rest) = text.strip_prefix("upp") {
-        return Some(rest.trim().parse::<i64>().map(|power| AdminCommand::AddPetPower { power }).map_err(|_| AdminCommandError::InvalidPetPower));
+    if let Some(rest) = strip_num_cmd(text, "upp") {
+        return Some(
+            rest.parse::<i64>()
+                .map(|power| AdminCommand::AddPetPower { power })
+                .map_err(|_| AdminCommandError::InvalidPetPower),
+        );
     }
-    if let Some(rest) = text.strip_prefix("dm") {
-        return Some(rest.trim().parse::<i32>().map(|damage| AdminCommand::SetBaseDamage { damage }).map_err(|_| AdminCommandError::InvalidDamage));
+    if let Some(rest) = strip_num_cmd(text, "up") {
+        return Some(
+            rest.parse::<i64>()
+                .map(|power| AdminCommand::AddPlayerPower { power })
+                .map_err(|_| AdminCommandError::InvalidPlayerPower),
+        );
     }
-    if let Some(rest) = text.strip_prefix("hp") {
-        return Some(rest.trim().parse::<i32>().map(|hp_base| AdminCommand::SetBaseHp { hp_base }).map_err(|_| AdminCommandError::InvalidBaseHp));
+    if let Some(rest) = strip_num_cmd(text, "dmg").or_else(|| strip_num_cmd(text, "dm")) {
+        return Some(
+            rest.parse::<i32>()
+                .map(|damage| AdminCommand::SetBaseDamage { damage })
+                .map_err(|_| AdminCommandError::InvalidDamage),
+        );
     }
-    if let Some(rest) = text.strip_prefix("ki") {
-        return Some(rest.trim().parse::<i32>().map(|mp_base| AdminCommand::SetBaseKi { mp_base }).map_err(|_| AdminCommandError::InvalidBaseKi));
+    if let Some(rest) = strip_num_cmd(text, "hpg").or_else(|| strip_num_cmd(text, "hp")) {
+        return Some(
+            rest.parse::<i32>()
+                .map(|hp_base| AdminCommand::SetBaseHp { hp_base })
+                .map_err(|_| AdminCommandError::InvalidBaseHp),
+        );
     }
-    if let Some(rest) = text.strip_prefix("up") {
-        return Some(rest.trim().parse::<i64>().map(|power| AdminCommand::AddPlayerPower { power }).map_err(|_| AdminCommandError::InvalidPlayerPower));
+    if let Some(rest) = strip_num_cmd(text, "ki") {
+        return Some(
+            rest.parse::<i32>()
+                .map(|mp_base| AdminCommand::SetBaseKi { mp_base })
+                .map_err(|_| AdminCommandError::InvalidBaseKi),
+        );
     }
-    if text.starts_with("i ") {
+    if text == "i"
+        || text
+            .strip_prefix('i')
+            .is_some_and(|r| r.starts_with(char::is_whitespace))
+    {
         return Some(parse_spawn_items(text));
     }
-    if let Some(rest) = text.strip_prefix('m') {
-        return Some(rest.trim().parse::<i16>().map(|id| AdminCommand::TeleportMap { map_id: MapId(id) }).map_err(|_| AdminCommandError::InvalidMapId));
+    if let Some(rest) = strip_num_cmd(text, "m") {
+        return Some(
+            rest.parse::<i16>()
+                .map(|id| AdminCommand::TeleportMap { map_id: MapId(id) })
+                .map_err(|_| AdminCommandError::InvalidMapId),
+        );
     }
-    if let Some(rest) = text.strip_prefix('n') {
-        return Some(rest.trim().parse::<i32>().map(|task_id| AdminCommand::SetMainTask { task_id }).map_err(|_| AdminCommandError::InvalidTaskId));
+    if let Some(rest) = strip_num_cmd(text, "n") {
+        return Some(
+            rest.parse::<i32>()
+                .map(|task_id| AdminCommand::SetMainTask { task_id })
+                .map_err(|_| AdminCommandError::InvalidTaskId),
+        );
     }
-    if text.starts_with('1') { return Some(Ok(AdminCommand::OpenBotMenu)); }
-    if text.starts_with('2') { return Some(Ok(AdminCommand::SpawnAttackBot)); }
-    if text.starts_with('b') { return Some(Ok(AdminCommand::OpenSendItemForm1)); }
     None
 }
 
 fn parse_spawn_items(text: &str) -> Result<AdminCommand, AdminCommandError> {
-    let parts: Vec<&str> = text.split(' ').collect();
-    if parts.len() < 2 || parts[1].is_empty() {
+    let parts: Vec<&str> = text.split_whitespace().collect();
+    if parts.len() < 2 {
         return Err(AdminCommandError::MissingSpawnItemArgs);
     }
-    let item_id = parts[1].parse::<i32>().ok().and_then(|v| i16::try_from(v).ok()).map(TemplateId).ok_or(AdminCommandError::InvalidSpawnItemSyntax)?;
-    let quantity = if parts.len() >= 3 && !parts[2].is_empty() {
-        parts[2].parse::<i32>().map_err(|_| AdminCommandError::InvalidSpawnItemSyntax)?
+    let item_id = parts[1]
+        .parse::<i32>()
+        .ok()
+        .and_then(|v| i16::try_from(v).ok())
+        .map(TemplateId)
+        .ok_or(AdminCommandError::InvalidSpawnItemSyntax)?;
+    let quantity = if parts.len() >= 3 {
+        parts[2]
+            .parse::<i32>()
+            .map_err(|_| AdminCommandError::InvalidSpawnItemSyntax)?
     } else {
         1
     };
-    if quantity < 0 {
+    if quantity <= 0 {
         return Err(AdminCommandError::InvalidSpawnItemSyntax);
     }
     let mut options = Vec::new();
     for token in parts.iter().skip(3) {
-        if let Some((opt_str, val_str)) = token.split_once(':') {
-            let option_id = opt_str.parse::<i32>().map_err(|_| AdminCommandError::InvalidSpawnItemSyntax)?;
-            let param = val_str.parse::<i32>().map_err(|_| AdminCommandError::InvalidSpawnItemSyntax)?;
-            options.push(AdminItemOption { option_id, param });
-        }
+        let (opt_str, val_str) = token
+            .split_once(':')
+            .ok_or(AdminCommandError::InvalidSpawnItemSyntax)?;
+        let option_id = opt_str
+            .parse::<i32>()
+            .map_err(|_| AdminCommandError::InvalidSpawnItemSyntax)?;
+        let param = val_str
+            .parse::<i32>()
+            .map_err(|_| AdminCommandError::InvalidSpawnItemSyntax)?;
+        options.push(AdminItemOption { option_id, param });
     }
-    Ok(AdminCommand::SpawnItems { item_id, quantity, options })
+    Ok(AdminCommand::SpawnItems {
+        item_id,
+        quantity,
+        options,
+    })
 }
 
 fn parse_pet_trigger(text: &str) -> Option<PetChatCommand> {
     if let Some(name) = text.strip_prefix("ten con la ") {
-        return Some(PetChatCommand::Rename { new_name: name.to_owned() });
+        return Some(PetChatCommand::Rename {
+            new_name: name.to_owned(),
+        });
     }
     match text {
         "di theo" | "follow" => Some(PetChatCommand::Follow),
@@ -251,3 +323,7 @@ fn parse_pet_trigger(text: &str) -> Option<PetChatCommand> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+#[path = "admin_cmd_tests.rs"]
+mod tests;

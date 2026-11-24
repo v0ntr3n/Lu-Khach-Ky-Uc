@@ -1,17 +1,18 @@
-//! Inventory drop, equip shortcut check, skill learning, skill books, and capsule map labels.
+//! Inventory drop (`handle_drop_inventory_item`), equip shortcut check, and skill point upgrade (`handle_skill_up`).
 
-use nro_core::{ItemInstance, MapId, TemplateId};
-use nro_db::{json_columns::SkillSlot, player_repo::PlayerSnapshot};
-use nro_economy::ItemCatalog;
-use nro_player::skills::SkillKind;
-use nro_protocol::{Packet, ProtocolError, SessionHandle};
+use nro_core::ItemInstance;
+use nro_db::json_columns::SkillSlot;
+use nro_economy::{ItemCatalog, TradeSession};
+use nro_protocol::{ProtocolError, SessionHandle};
 use nro_world::{GroundDropKind, ZoneCommand, s2c_packets};
 
 use super::super::{
-    DbItemCatalog, ServerSessionHandler, effective_appearance, recalculate_session_stats,
-    router_economy::resolve_equip_body_slot, send_thong_bao, snapshot_to_economy_inv,
-    sync_economy_inv_to_snapshot,
+    DbItemCatalog, ServerSessionHandler, effective_appearance, pkt_fusion,
+    recalculate_session_stats, router_economy::resolve_equip_body_slot, send_thong_bao,
+    snapshot_to_economy_inv, sprite_restore_packets, sync_economy_inv_to_snapshot,
+    unfuse_if_missing_porata,
 };
+use crate::runtime::unix_now_ms;
 
 impl ServerSessionHandler {
     pub(super) fn is_bag_equip_shortcut(&self, sid: u64, index: i8) -> bool {
@@ -56,7 +57,8 @@ impl ServerSessionHandler {
         let Ok(idx) = usize::try_from(index) else {
             return Ok(());
         };
-        let mut in_trade = false;
+        let catalog = DbItemCatalog(&self.shared.templates);
+        let mut block_err: Option<&'static str> = None;
         let drop_out = self
             .shared
             .clients
@@ -64,10 +66,27 @@ impl ServerSessionHandler {
             .get_mut(&sid)
             .and_then(|mut entry| {
                 if super::super::router_shop::is_in_trade(entry.snapshot.id) {
-                    in_trade = true;
+                    block_err = Some("Không thể thao tác khi đang giao dịch!");
+                    return None;
+                }
+                if entry.snapshot.mbv_pin.1 {
+                    block_err = Some("Hành trang đang khóa bảo vệ, không thể vứt vật phẩm!");
                     return None;
                 }
                 let mut inv = snapshot_to_economy_inv(&entry.snapshot);
+                let peek_item = match where_idx {
+                    0 => inv.body.get(idx)?.as_ref()?,
+                    1 => inv.bag.get(idx)?.as_ref()?,
+                    2 => inv.box_items.get(idx)?.as_ref()?,
+                    _ => return None,
+                };
+                if TradeSession::is_item_untradeable(
+                    peek_item,
+                    catalog.meta_of(peek_item.template_id),
+                ) {
+                    block_err = Some("Vật phẩm này không thể vứt bỏ!");
+                    return None;
+                }
                 let taken: ItemInstance = match where_idx {
                     0 => inv.body.get_mut(idx)?.take()?,
                     1 => inv.bag.get_mut(idx)?.take()?,
@@ -75,17 +94,25 @@ impl ServerSessionHandler {
                     _ => return None,
                 };
                 sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
-                if where_idx == 0 {
+                let unfused = (where_idx == 1)
+                    && unfuse_if_missing_porata(
+                        &self.shared,
+                        sid,
+                        &mut entry.snapshot,
+                        unix_now_ms(),
+                    );
+                if where_idx == 0 && !unfused {
                     recalculate_session_stats(
                         sid,
                         &mut entry.snapshot,
                         self.shared.config.parity_mode,
                     );
                 }
+                let body_changed = where_idx == 0 || unfused;
                 let (eh, eb, el, ebag, is_disg) =
                     effective_appearance(&self.shared.templates, &entry.snapshot);
                 let (pid, loc) = (entry.snapshot.id, entry.snapshot.location);
-                if where_idx == 0
+                if body_changed
                     && let (Some(ek), Ok(tx)) = (
                         entry.entity_key,
                         self.shared
@@ -96,51 +123,69 @@ impl ServerSessionHandler {
                     let _ = tx.try_send(ZoneCommand::UpdatePlayerParts(ek, (eh, eb, el)));
                     let _ = tx.try_send(ZoneCommand::UpdatePlayerStats(ek, entry.snapshot.stats));
                 }
-                let bcast = (where_idx == 0).then(|| {
+                let bcast = body_changed.then(|| {
                     (
                         s2c_packets::me_load_point(&entry.snapshot.stats),
-                        s2c_packets::update_body(pid, is_disg.then_some((eh, eb, el, 0))),
+                        unfused.then(|| pkt_fusion(pid, 1)),
+                        sprite_restore_packets(pid, eh, eb, el, is_disg),
                         s2c_packets::send_flag_bag(pid, ebag),
                     )
                 });
+                let pet_pkt = unfused
+                    .then(|| self.pkt_pet_detail(&entry.snapshot))
+                    .flatten();
                 Some((
                     taken,
                     pid,
                     loc,
+                    unfused,
                     [
                         s2c_packets::inventory_body(eh, &entry.snapshot.items_body),
                         s2c_packets::inventory_bag(&entry.snapshot.items_bag),
                         s2c_packets::inventory_box(&entry.snapshot.items_box),
                     ],
                     bcast,
+                    pet_pkt,
                 ))
             });
-        if in_trade {
-            return send_thong_bao(session, "Không thể thao tác khi đang giao dịch!");
+        if let Some(msg) = block_err {
+            return send_thong_bao(session, msg);
         }
-        if let Some((dropped, pid, loc, inv_pkts, bcast)) = drop_out {
+        if let Some((dropped, pid, loc, unfused, inv_pkts, bcast, pet_pkt)) = drop_out {
             if let Ok(tx) = self
                 .shared
                 .world_router
                 .resolve_sender(loc.map_id, loc.zone_id)
             {
                 let _ = tx
-                    .send(ZoneCommand::DropItem(
+                    .send(ZoneCommand::DropItemWithOptions(
                         dropped.template_id,
                         dropped.quantity,
                         loc,
                         Some(pid),
                         GroundDropKind::Standard,
+                        dropped.options,
                     ))
                     .await;
             }
             for p in inv_pkts {
                 session.send(p).await?;
             }
-            if let Some((pt_pkt, upd_body, flag_bag)) = bcast {
+            if let Some((pt_pkt, f_pkt, upd_bodies, flag_bag)) = bcast {
                 session.send(pt_pkt).await?;
-                self.broadcast_zone_or_self(loc, sid, &upd_body);
+                if let Some(fp) = f_pkt {
+                    self.broadcast_zone_or_self(loc, sid, &fp);
+                }
+                for p in upd_bodies.into_iter().flatten() {
+                    self.broadcast_zone_or_self(loc, sid, &p);
+                }
                 self.broadcast_zone_or_self(loc, sid, &flag_bag);
+            }
+            if let Some(pp) = pet_pkt {
+                session.send(pp).await?;
+            }
+            if unfused {
+                crate::router_pet::sync_online_pet_map_state(&self.shared, pid).await;
             }
         }
         Ok(())
@@ -227,163 +272,5 @@ impl ServerSessionHandler {
             }
         }
         Ok(())
-    }
-
-    pub(in crate::router) fn learn_shop_skill(
-        &self,
-        snap: &mut PlayerSnapshot,
-        item_id: TemplateId,
-    ) -> Option<Packet> {
-        let g_cls = i8::from(snap.gender);
-        let tpl = self
-            .shared
-            .templates
-            .items
-            .iter()
-            .find(|r| r.id == i32::from(item_id.0));
-        let st = tpl
-            .and_then(|ir| {
-                self.shared
-                    .templates
-                    .skills
-                    .iter()
-                    .find(|s| s.nclass_id == g_cls && ir.name.contains(&s.name))
-            })
-            .or_else(|| {
-                self.shared
-                    .templates
-                    .skills
-                    .iter()
-                    .find(|s| s.nclass_id == g_cls && s.levels.iter().any(|l| l.id == item_id.0))
-            })?;
-        let cur_pt = snap
-            .skills
-            .iter()
-            .find(|sk| sk.template_id == i32::from(st.id))
-            .map_or(0, |sk| sk.point);
-        let next_pt = (cur_pt + 1).min(st.max_point.max(1));
-        if next_pt <= cur_pt {
-            return None;
-        }
-        let lv = st
-            .levels
-            .iter()
-            .find(|l| l.point == next_pt)
-            .or_else(|| st.levels.first())?;
-        let tn_cost = i64::from(lv.price.max(0)).saturating_mul(1_000);
-        if snap.stats.power < lv.power_require || snap.stats.tiem_nang < tn_cost {
-            return None;
-        }
-        snap.stats.tiem_nang -= tn_cost;
-        if let Some(sk) = snap
-            .skills
-            .iter_mut()
-            .find(|s| s.template_id == i32::from(st.id))
-        {
-            let was_zero = sk.point <= 0;
-            sk.point = next_pt;
-            Some(if was_zero {
-                s2c_packets::me_add_skill(lv.id)
-            } else {
-                s2c_packets::me_update_skill(lv.id)
-            })
-        } else {
-            snap.skills.push(SkillSlot {
-                template_id: i32::from(st.id),
-                point: next_pt,
-                last_time_use_ms: 0,
-                curr_level: 0,
-            });
-            Some(s2c_packets::me_add_skill(lv.id))
-        }
-    }
-
-    pub(in crate::router) fn capsule_label_for(&self, map_id: MapId) -> (&str, &str) {
-        self.shared
-            .templates
-            .maps
-            .iter()
-            .find(|m| m.id == map_id)
-            .map_or(("Trạm tàu vũ trụ", "Trái Đất"), |m| {
-                (
-                    m.name.as_str(),
-                    match m.planet_id {
-                        1 => "Namếc",
-                        2 => "Xayda",
-                        _ => "Trái Đất",
-                    },
-                )
-            })
-    }
-
-    pub(in crate::router) fn apply_skill_book(
-        &self,
-        snap: &mut PlayerSnapshot,
-        book_tid: TemplateId,
-    ) -> Option<Packet> {
-        let g_cls = i8::from(snap.gender);
-        let item_rec = self
-            .shared
-            .templates
-            .items
-            .iter()
-            .find(|r| r.id == i32::from(book_tid.0));
-        let st = u16::try_from(book_tid.0)
-            .ok()
-            .and_then(SkillKind::from_skill_book_item)
-            .and_then(|kind| {
-                self.shared
-                    .templates
-                    .skills
-                    .iter()
-                    .find(|s| s.id == kind as i8)
-            })
-            .or_else(|| {
-                item_rec.and_then(|ir| {
-                    self.shared
-                        .templates
-                        .skills
-                        .iter()
-                        .find(|s| s.nclass_id == g_cls && ir.name.contains(&s.name))
-                })
-            })?;
-        let stid = st.id;
-        let new_pt = item_rec.map_or(1_i8, |ir| {
-            ir.level.clamp(1, i32::from(st.max_point.max(1))) as i8
-        });
-        if let Some(existing) = snap
-            .skills
-            .iter_mut()
-            .find(|sk| sk.template_id == i32::from(stid))
-        {
-            let was_zero = existing.point <= 0;
-            let final_pt = existing.point.max(new_pt);
-            existing.point = final_pt;
-            let lv_id = st
-                .levels
-                .iter()
-                .find(|l| l.point == final_pt)
-                .or_else(|| st.levels.first())
-                .map_or(i16::from(stid), |l| l.id);
-            Some(if was_zero {
-                s2c_packets::me_add_skill(lv_id)
-            } else {
-                s2c_packets::me_update_skill(lv_id)
-            })
-        } else {
-            let lv_id = st
-                .levels
-                .iter()
-                .find(|l| l.point == new_pt)
-                .or_else(|| st.levels.first())
-                .map_or(i16::from(stid), |l| l.id);
-            snap.skills.push(SkillSlot {
-                template_id: i32::from(stid),
-                point: new_pt,
-                last_time_use_ms: 0,
-                curr_level: 0,
-            });
-            Some(s2c_packets::me_add_skill(lv_id))
-        }
     }
 }

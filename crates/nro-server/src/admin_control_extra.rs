@@ -4,12 +4,13 @@ use nro_core::AccountId;
 use nro_db::player_repo::PlayerSnapshot;
 use nro_db::templates::MapTemplateRecord;
 use nro_protocol::SessionHandle;
-use nro_world::s2c_packets;
+use nro_world::{ZoneCommand, s2c_packets};
 use tracing::info;
 
 use super::admin_control_ops::try_send_if_ready;
 use super::admin_control_pet::pet_summary;
 use super::{AdminControl, AdminItemInfo, AdminUserRow};
+use crate::runtime::clear_dead_pet_timer;
 
 impl AdminControl {
     /// Searches item templates by ID or case-insensitive name, prioritizing exact ID matches.
@@ -66,7 +67,7 @@ impl AdminControl {
         exact
     }
 
-    /// Restores full HP and KI for an online player, persists the snapshot, and updates the client.
+    /// Restores full HP, KI, and Stamina for an online player (and any unfused Pet), reviving dead corpses cleanly.
     pub fn heal_player(&self, account_id: i32) -> Result<String, String> {
         let Some(sid) = self
             .shared
@@ -79,26 +80,74 @@ impl AdminControl {
         };
 
         let online = if let Some(mut entry) = self.shared.clients.authenticated.get_mut(&sid) {
+            let was_dead = entry.snapshot.stats.hp <= 0;
             let max_hp = entry.snapshot.stats.hp_max.max(1);
             let max_mp = entry.snapshot.stats.mp_max.max(1);
             entry.snapshot.stats.hp = max_hp;
             entry.snapshot.stats.mp = max_mp;
-            Some((entry.snapshot.clone(), entry.handle.clone()))
+            entry.snapshot.stats.stamina = entry.snapshot.stats.max_stamina.max(1_000);
+            let mut pet_healed = false;
+            if let Some(pet) = entry.snapshot.pet.as_mut()
+                && pet.fusion_type == 0
+            {
+                pet.stats.hp = pet.stats.hp_max.max(1_000);
+                pet.stats.mp = pet.stats.mp_max.max(1_000);
+                pet.stats.stamina = pet.stats.max_stamina.max(1_000);
+                pet_healed = true;
+            }
+            Some((
+                entry.snapshot.id,
+                entry.entity_key,
+                was_dead,
+                pet_healed,
+                entry.snapshot.clone(),
+                entry.handle.clone(),
+            ))
         } else {
             None
         };
 
-        let Some((snap, handle)) = online else {
+        let Some((pid, ek_opt, was_dead, pet_healed, snap, handle)) = online else {
             return Err(format!("Tài khoản #{account_id} hiện không online."));
         };
 
         self.persist_snapshot(account_id, &snap)?;
+        if was_dead {
+            let (me_live, _peer_live) = s2c_packets::char_revive_packets(
+                pid,
+                snap.stats.hp,
+                snap.stats.hp_max,
+                snap.location,
+            );
+            try_send_if_ready(&handle, account_id, me_live);
+        }
         try_send_if_ready(&handle, account_id, s2c_packets::me_load_point(&snap.stats));
-        if let Ok(notify) = s2c_packets::thong_bao("Admin đã hồi đầy HP và KI cho bạn!") {
+        if let Some(ek) = ek_opt
+            && let Some(ztx) = self
+                .shared
+                .world_router
+                .get(&(snap.location.map_id, snap.location.zone_id))
+        {
+            let _ = ztx.try_send(ZoneCommand::UpdatePlayerStats(ek, snap.stats));
+        }
+        if pet_healed {
+            clear_dead_pet_timer(pid);
+            if let Some(det) = crate::router_pet::build_pet_detail_pkt(&self.shared, &snap) {
+                try_send_if_ready(&handle, account_id, det);
+            }
+            crate::router_pet::try_sync_online_pet_map_state(&self.shared, pid);
+        }
+        if let Ok(notify) = s2c_packets::thong_bao("Admin đã hồi đầy HP, KI và Thể lực cho bạn!")
+        {
             try_send_if_ready(&handle, account_id, notify);
         }
-        info!(account_id, "admin UI healed online player");
-        Ok(format!("Đã hồi đầy HP và KI cho tài khoản #{account_id}."))
+        info!(
+            account_id,
+            was_dead, pet_healed, "admin UI healed online player"
+        );
+        Ok(format!(
+            "Đã hồi đầy HP, KI và Thể lực cho tài khoản #{account_id}."
+        ))
     }
 
     /// Sends a direct server notification message (`thong_bao`) to a single online player.
@@ -174,22 +223,22 @@ impl AdminControl {
         }
     }
 
-    /// Disconnects all currently online authenticated players.
+    /// Disconnects all active sessions (both authenticated and pre-character sessions).
     #[allow(clippy::unnecessary_wraps)]
     pub fn kick_all_online(&self) -> Result<String, String> {
         let handles: Vec<SessionHandle> = self
             .shared
             .clients
-            .authenticated
+            .sessions
             .iter()
-            .map(|entry| entry.value().handle.clone())
+            .map(|entry| entry.value().clone())
             .collect();
         let count = handles.len();
         for handle in &handles {
             handle.disconnect();
         }
-        info!(count, "admin UI disconnected all online players");
-        Ok(format!("Đã ngắt kết nối {count} người chơi online."))
+        info!(count, "admin UI disconnected all sessions");
+        Ok(format!("Đã ngắt kết nối {count} phiên đang kết nối."))
     }
 }
 
@@ -205,8 +254,8 @@ pub(super) fn matches_query(
     }
     acc_id.to_string().contains(needle)
         || pid.is_some_and(|p| p.to_string().contains(needle))
-        || username.to_ascii_lowercase().contains(needle)
-        || pname.to_ascii_lowercase().contains(needle)
+        || username.to_lowercase().contains(needle)
+        || pname.to_lowercase().contains(needle)
 }
 
 pub(super) fn row_from_snap(

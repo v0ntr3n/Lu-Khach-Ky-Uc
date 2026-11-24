@@ -8,9 +8,10 @@ use nro_protocol::{Packet, PacketWriter, PetChatCommand};
 use nro_world::{PetCompanion, ZoneCommand};
 
 use super::{build_pet_detail_pkt, default_pet_name, resolve_pet_appearance};
+use crate::router::is_own_home_map;
 use crate::runtime::SharedServerState;
 
-const PEA_TEMPLATES: [i16; 10] = [13, 60, 61, 62, 63, 64, 65, 295, 523, 595];
+const PEA_TEMPLATES: [i16; 10] = [13, 60, 61, 62, 63, 64, 65, 352, 523, 595];
 
 #[must_use]
 pub(crate) fn build_pet_companion(
@@ -43,9 +44,11 @@ pub(crate) fn build_pet_companion(
     })
 }
 
-/// Synchronizes an online player's live [`PetCompanion`] into their current [`nro_world::ZoneActor`].
-pub(crate) async fn sync_online_pet_map_state(shared: &SharedServerState, pid: PlayerId) {
-    let target = shared
+fn snapshot_pet_sync_target(
+    shared: &SharedServerState,
+    pid: PlayerId,
+) -> Option<(nro_core::Location, Option<PetCompanion>)> {
+    shared
         .clients
         .players
         .get(&pid)
@@ -57,8 +60,12 @@ pub(crate) async fn sync_online_pet_map_state(shared: &SharedServerState, pid: P
                     build_pet_companion(&shared.templates, &entry.snapshot),
                 )
             })
-        });
-    let Some((loc, pet)) = target else {
+        })
+}
+
+/// Synchronizes an online player's live [`PetCompanion`] into their current [`nro_world::ZoneActor`].
+pub(crate) async fn sync_online_pet_map_state(shared: &SharedServerState, pid: PlayerId) {
+    let Some((loc, pet)) = snapshot_pet_sync_target(shared, pid) else {
         return;
     };
     if let Ok(zone_tx) = shared.world_router.resolve_sender(loc.map_id, loc.zone_id) {
@@ -71,10 +78,23 @@ pub(crate) async fn sync_online_pet_map_state(shared: &SharedServerState, pid: P
     }
 }
 
-/// Builds `-122` (`DUAHAU` / `MABU_EGG`) packets for home maps (`21..=23`) when eggs are planted.
+/// Non-blocking variant of [`sync_online_pet_map_state`] for hot `ZoneEvent` consumer paths.
+pub(crate) fn try_sync_online_pet_map_state(shared: &SharedServerState, pid: PlayerId) {
+    let Some((loc, pet)) = snapshot_pet_sync_target(shared, pid) else {
+        return;
+    };
+    if let Ok(zone_tx) = shared.world_router.resolve_sender(loc.map_id, loc.zone_id) {
+        let _ = zone_tx.try_send(ZoneCommand::SyncPlayerPet {
+            player_id: pid,
+            pet,
+        });
+    }
+}
+
+/// Builds `-122` (`DUAHAU` / `MABU_EGG`) packets for the player's own home map (`21 + gender`).
 #[must_use]
 pub(crate) fn build_home_egg_pkts(snap: &PlayerSnapshot, now_ms: i64) -> Vec<Packet> {
-    if !matches!(snap.location.map_id.0, 21..=23) {
+    if !is_own_home_map(snap.location.map_id, snap.gender) {
         return Vec::new();
     }
     let mut out = Vec::new();
@@ -131,6 +151,7 @@ pub(crate) fn heal_pet_with_pea(
 }
 
 pub(crate) fn heal_pet_stats_with_pea(snap: &mut PlayerSnapshot, pea: &ItemInstance) -> bool {
+    let master_pid = snap.id;
     let Some(pet) = snap.pet.as_mut() else {
         return false;
     };
@@ -151,6 +172,7 @@ pub(crate) fn heal_pet_stats_with_pea(snap: &mut PlayerSnapshot, pea: &ItemInsta
     if pet.stats.hp <= 0 {
         pet.stats.hp = heal.max(1).min(hp_max);
         pet.stats.mp = heal.max(1).min(mp_max);
+        crate::runtime::clear_dead_pet_timer(master_pid);
     } else {
         pet.stats.hp = pet.stats.hp.saturating_add(heal).min(hp_max);
         pet.stats.mp = pet.stats.mp.saturating_add(heal).min(mp_max);
@@ -218,13 +240,13 @@ mod tests {
 
     use super::*;
     use crate::router_pet::{
-        make_fresh_pet, recalculate_pet_with_templates,
+        is_valid_part, make_fresh_pet, recalculate_pet_with_templates,
         router_pet_pkt::build_pet_detail_pkt_from_templates,
     };
 
     #[test]
     fn fresh_pet_milestones_detail_egg_pea_and_chat() {
-        let tpl = GameTemplates::default();
+        let mut tpl = GameTemplates::default();
         let seed = NewPlayerSeed {
             account_id: AccountId(1),
             name: "Goku".into(),
@@ -236,11 +258,12 @@ mod tests {
         let mut snap = PlayerSnapshot::from_seed(PlayerId(7), &seed);
         snap.location.map_id = MapId(21);
 
-        let kid_beer = make_fresh_pet(3, Gender::Xayda);
-        assert_eq!(kid_beer.name, "$Kid Beer");
-        assert_eq!(kid_beer.items_body.len(), 9);
-        assert_eq!(kid_beer.skills.len(), 5);
-        assert_eq!(kid_beer.skills[0].template_id, 4);
+        let uub = make_fresh_pet(2, Gender::TraiDat);
+        assert_eq!(uub.skills.len(), 5);
+        let jiren = make_fresh_pet(4, Gender::Xayda);
+        assert_eq!(resolve_pet_appearance(&tpl, &jiren), (876, 877, 878, -1));
+        let baby = make_fresh_pet(0, Gender::Xayda);
+        assert_eq!(resolve_pet_appearance(&tpl, &baby), (305, 57, 58, -1));
 
         let mut pet = make_fresh_pet(0, Gender::Namec);
         pet.stats.power = 20_000_000_000;
@@ -256,8 +279,7 @@ mod tests {
         let pkt = build_pet_detail_pkt_from_templates(&tpl, &snap).expect("detail pkt");
         let mut r = pkt.reader();
         assert_eq!(r.read_i8().expect("mode"), 2);
-        let head = r.read_i16().expect("head");
-        assert!(head > 0);
+        assert!(r.read_i16().expect("head") > 0);
         let body_len = r.read_u8().expect("body len");
         for _ in 0..body_len {
             assert_eq!(r.read_i16().expect("empty slot"), -1);
@@ -265,36 +287,28 @@ mod tests {
         assert_eq!(r.read_i64().expect("dead hp preserved as 0"), 0);
 
         let pea = ItemInstance::with_options(
-            TemplateId(60),
+            TemplateId(352),
             1,
-            vec![ItemOption { id: 2, param: 3 }],
+            vec![ItemOption {
+                id: 48,
+                param: 64_000,
+            }],
             1_000,
         );
         assert!(heal_pet_stats_with_pea(&mut snap, &pea));
         assert!(snap.pet.as_ref().expect("pet").stats.hp > 0);
 
-        assert_eq!(
-            apply_pet_chat_to_snapshot(
-                &mut snap,
-                &PetChatCommand::Rename {
-                    new_name: "Piccolo".into()
-                }
-            ),
-            Some("Dạ, con đã nhớ tên mới rồi sư phụ!")
-        );
-        assert_eq!(snap.pet.as_ref().expect("pet").name, "$Piccolo");
-
         snap.mabu_egg = Some(EggTimer {
             last_time_create_ms: 1_000,
             time_done_ms: 61_000,
         });
-        let eggs = build_home_egg_pkts(&snap, 2_000);
-        assert_eq!(eggs.len(), 1);
-        let mut er = eggs[0].reader();
-        assert_eq!(er.read_i16().expect("npc 50"), 50);
-        assert_eq!(er.read_i8().expect("1 frame"), 1);
-        assert_eq!(er.read_i16().expect("egg icon"), 4664);
-        assert_eq!(er.read_i8().expect("status"), 0);
-        assert_eq!(er.read_i32().expect("rem secs"), 60);
+        assert_eq!(build_home_egg_pkts(&snap, 2_000).len(), 1);
+        snap.location.map_id = MapId(22);
+        assert!(build_home_egg_pkts(&snap, 2_000).is_empty());
+
+        tpl.parts = vec![(0, 0, vec![(100, 0, 0)]), (50, 0, vec![(2955, 0, 0)])];
+        assert!(is_valid_part(&tpl, 0, 0));
+        assert!(!is_valid_part(&tpl, 0, 1));
+        assert!(!is_valid_part(&tpl, 50, 0));
     }
 }

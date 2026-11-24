@@ -1,11 +1,14 @@
-//! Character creation (`CREATE_PLAYER`) and zone admission pipeline.
+//! Character creation (`CREATE_PLAYER`) validation and zone admission pipeline.
+
+#[path = "router_auth_evict.rs"]
+mod router_auth_evict;
 
 use nro_core::{AccountId, Gender, Location, MapId, ZoneId};
 use nro_db::player_repo::{NewPlayerSeed, PlayerSnapshot};
 use nro_protocol::{Packet, ProtocolError, SessionHandle};
-use nro_world::{PlayerIngress, ZoneCommand};
+use nro_world::ZoneCommand;
 use slotmap::SlotMap;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
 use super::super::{effective_appearance, recalculate_snapshot_stats, send_dialog};
@@ -13,6 +16,8 @@ use super::ServerSessionHandler;
 use crate::data_game::DataGameAssets;
 use crate::data_game_tpl;
 use crate::runtime::{ActivePlayerEntry, LeaderboardSlot, unix_now_ms};
+
+const STARTER_HAIRS: [[i16; 3]; 3] = [[64, 30, 31], [9, 29, 32], [6, 27, 28]];
 
 impl ServerSessionHandler {
     pub(in crate::router) async fn handle_create_char(
@@ -39,17 +44,11 @@ impl ServerSessionHandler {
                 "Phiên đăng nhập chưa xác thực, vui lòng đăng nhập lại!",
             );
         }
-        let trimmed = name.trim();
-        if trimmed.is_empty() || trimmed.chars().count() > 15 {
-            return send_dialog(session, "Tên nhân vật không hợp lệ (1-15 ký tự)!");
-        }
         let mut guard = match self.try_reserve_account(account_id, session.id()) {
             Ok(g) => g,
             Err(old_sid) => {
-                if old_sid != session.id()
-                    && let Some(h) = self.shared.clients.sessions.get(&old_sid)
-                {
-                    h.disconnect();
+                if old_sid != session.id() {
+                    self.evict_online_session(old_sid).await;
                 }
                 return send_dialog(
                     session,
@@ -57,9 +56,43 @@ impl ServerSessionHandler {
                 );
             }
         };
+        self.evict_account_sessions(account_id, session.id()).await;
+        let (is_admin, activated) = match self.shared.accounts_repo.get_by_id(account_id) {
+            Ok(Some(acc)) => (acc.is_admin, acc.active != 0),
+            _ => (false, false),
+        };
+        if let Ok(Some(existing)) = self
+            .shared
+            .players_repo
+            .load_by_account(account_id, self.shared.config.parity_mode)
+            .await
+        {
+            if self
+                .admit_player_into_world(session, account_id, existing, is_admin, activated)
+                .await?
+            {
+                guard.armed = false;
+            }
+            return Ok(());
+        }
+        if !(3..=12).contains(&name.len())
+            || !name
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+        {
+            return send_dialog(
+                session,
+                "Tên nhân vật phải từ 3 đến 12 ký tự chữ thường hoặc số (a-z, 0-9)!",
+            );
+        }
+        if !matches!(gender_raw, 0..=2)
+            || !STARTER_HAIRS[gender_raw as usize].contains(&i16::from(hair))
+        {
+            return send_dialog(session, "Hành tinh hoặc kiểu tóc khởi tạo không hợp lệ!");
+        }
         let seed = NewPlayerSeed {
             account_id,
-            name: trimmed.to_owned(),
+            name: name.to_owned(),
             gender: Gender::from_i8_lossy(gender_raw),
             hair: i16::from(hair),
             test_mode: false,
@@ -73,11 +106,6 @@ impl ServerSessionHandler {
                 .await
             {
                 Ok(Some(snap)) => {
-                    let (is_admin, activated) =
-                        match self.shared.accounts_repo.get_by_id(account_id) {
-                            Ok(Some(acc)) => (acc.is_admin, acc.active != 0),
-                            _ => (false, false),
-                        };
                     self.shared.leaderboards.mark_dirty(LeaderboardSlot::Power);
                     self.shared.leaderboards.mark_dirty(LeaderboardSlot::Task);
                     if self
@@ -127,6 +155,15 @@ impl ServerSessionHandler {
         let session_key = sm.insert(());
         let (outbound_tx, mut outbound_rx) = mpsc::channel::<Packet>(256);
 
+        let home_map = MapId(21 + i16::from(i8::from(snap.gender)));
+        if matches!(snap.location.map_id.0, 21..=23) && snap.location.map_id != home_map {
+            snap.location = Location {
+                map_id: home_map,
+                zone_id: ZoneId(0),
+                x: 300,
+                y: 336,
+            };
+        }
         let zones_count = self
             .shared
             .templates
@@ -160,7 +197,6 @@ impl ServerSessionHandler {
             }
         }
         if entity_key.is_none() {
-            let home_map = MapId(21 + i16::from(u8::from(snap.gender)));
             let home_loc = Location {
                 map_id: home_map,
                 zone_id: ZoneId(0),
@@ -237,9 +273,6 @@ impl ServerSessionHandler {
             let (ev_pid, ev_loc) = (evicted.snapshot.id, evicted.snapshot.location);
             self.cleanup_trade_on_disconnect(ev_pid);
             self.cleanup_combat_on_disconnect(ev_pid, ev_loc, 0);
-            super::super::router_skill::clear_skill_state(ev_pid);
-            let _ = super::super::router_skill::take_monkey_revert_pending(ev_pid);
-            super::super::router_secondary::clear_clan_invites(ev_pid);
             if (ev_loc.map_id, ev_loc.zone_id) != (new_loc.map_id, new_loc.zone_id)
                 && let Ok(old_tx) = self
                     .shared
@@ -273,42 +306,5 @@ impl ServerSessionHandler {
             session.send(tile_pkt).await?;
         }
         Ok(true)
-    }
-
-    async fn try_enter_zone(
-        &self,
-        account_id: AccountId,
-        session_key: nro_core::SessionKey,
-        snap: &PlayerSnapshot,
-        loc: Location,
-        parts: (i16, i16, i16),
-        outbound_tx: mpsc::Sender<Packet>,
-    ) -> Option<nro_core::EntityKey> {
-        let zone_tx = self
-            .shared
-            .world_router
-            .resolve_sender(loc.map_id, loc.zone_id)
-            .ok()?;
-        let (reply_tx, reply_rx) = oneshot::channel();
-        let ingress = PlayerIngress {
-            session: (account_id, session_key),
-            identity: (snap.id, (snap.clan_id.0 >= 0).then_some(snap.clan_id)),
-            gender: snap.gender,
-            name: snap.name.clone(),
-            loc,
-            stats: snap.stats,
-            parts,
-            ship_type: 0,
-            outbound_tx: Some(outbound_tx),
-        };
-        if zone_tx
-            .send(ZoneCommand::EnterPlayer(Box::new(ingress), reply_tx))
-            .await
-            .is_ok()
-            && let Ok(Ok(ek)) = reply_rx.await
-        {
-            return Some(ek);
-        }
-        None
     }
 }

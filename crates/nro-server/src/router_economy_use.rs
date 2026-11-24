@@ -1,26 +1,31 @@
 //! Item consumption/drop (`-43`) entry dispatcher.
 
+#[path = "router_economy_books.rs"]
+mod router_economy_books;
 #[path = "router_economy_use_fx.rs"]
 mod router_economy_use_fx;
+#[path = "router_economy_use_post.rs"]
+mod router_economy_use_post;
 #[path = "router_economy_use_skills.rs"]
 mod router_economy_use_skills;
 
 use nro_boss::BossStatus;
-use nro_consts::{cmd_message, const_player};
+use nro_consts::const_player;
 use nro_core::{GameRng, TemplateId};
 use nro_db::json_columns::EggTimer;
-use nro_economy::{MabuEggState, UseItemCtx, UseItemEffect, UseItemService};
-use nro_protocol::{PacketWriter, ProtocolError, SessionHandle};
-use nro_world::{ZoneCommand, s2c_packets};
+use nro_economy::{ItemCatalog, MabuEggState, UseItemCtx, UseItemEffect, UseItemService};
+use nro_protocol::{ProtocolError, SessionHandle};
+use nro_world::s2c_packets;
 
 use super::{
     DbItemCatalog, ServerSessionHandler, effective_appearance, router_economy::session_buffs,
-    send_thong_bao, snapshot_to_economy_inv, sync_economy_inv_to_snapshot, wallet_money_pkt,
+    send_thong_bao, snapshot_to_economy_inv, sync_economy_inv_to_snapshot,
 };
 use crate::runtime::unix_now_ms;
 use router_economy_use_fx::UseItemPostState;
+use router_economy_use_post::check_pea_or_porata_precond;
 
-const PEA_IDS: [i16; 10] = [13, 60, 61, 62, 63, 64, 65, 295, 523, 595];
+const PEA_IDS: [i16; 10] = [13, 60, 61, 62, 63, 64, 65, 352, 523, 595];
 
 impl ServerSessionHandler {
     pub(super) async fn handle_use_item(
@@ -120,6 +125,26 @@ impl ServerSessionHandler {
                 let used_item = inv.bag_item(bag_slot).ok()?.clone();
                 let item_tid = used_item.template_id;
                 let now_ms = unix_now_ms();
+                let is_pea =
+                    PEA_IDS.contains(&item_tid.0) || catalog.meta_of(item_tid).item_type == 6;
+                let (prev_fusion, mut fallback_fusion) = (
+                    entry
+                        .snapshot
+                        .pet
+                        .as_ref()
+                        .map_or(const_player::NON_FUSION, |p| p.fusion_type),
+                    const_player::NON_FUSION,
+                );
+                if let Some(msg) = check_pea_or_porata_precond(
+                    &entry.snapshot,
+                    item_tid,
+                    is_pea,
+                    prev_fusion,
+                    now_ms,
+                ) {
+                    post.err_msg = Some(String::from(msg));
+                    return None;
+                }
                 let (current_day, mut last_wood_chest_day, mut last_pea_ms) = (
                     now_ms / 86_400_000,
                     entry.snapshot.ruong_go.3,
@@ -140,28 +165,32 @@ impl ServerSessionHandler {
                     .map_or(0, |p| p.type_pet.max(0).cast_unsigned());
                 let pet_unlocked_skills = entry.snapshot.pet.as_ref().map_or(0_u8, |p| {
                     (0..4_u8).fold(0_u8, |acc, i| {
-                        acc | u8::from(
-                            p.skills
-                                .get(usize::from(i))
-                                .is_some_and(|s| s.template_id >= 0 && s.point > 0 && s.point < 7),
-                        ) << i
+                        let upgradable = p.skills.get(usize::from(i)).is_some_and(|s| {
+                            let max_pt = self
+                                .shared
+                                .templates
+                                .skills
+                                .iter()
+                                .find(|st| i32::from(st.id) == s.template_id)
+                                .map_or(7, |st| st.max_point.max(1));
+                            s.template_id >= 0 && s.point > 0 && s.point < max_pt
+                        });
+                        acc | (u8::from(upgradable) << i)
                     })
                 });
                 let mut mabu_egg = entry.snapshot.mabu_egg.map(|e| MabuEggState {
                     ready_at_ms: e.last_time_create_ms.saturating_add(e.time_done_ms),
                 });
-                let (gender, has_pet, pet_power) = (
+                let (gender, has_pet, pet_power, pet_hp, pet_equipped) = (
                     entry.snapshot.gender,
                     entry.snapshot.pet.is_some(),
                     entry.snapshot.pet.as_ref().map_or(0, |p| p.stats.power),
-                );
-                let (prev_fusion, mut fallback_fusion) = (
+                    entry.snapshot.pet.as_ref().map_or(0, |p| p.stats.hp),
                     entry
                         .snapshot
                         .pet
                         .as_ref()
-                        .map_or(const_player::NON_FUSION, |p| p.fusion_type),
-                    const_player::NON_FUSION,
+                        .is_some_and(|p| p.items_body.iter().any(Option::is_some)),
                 );
                 let mut rng = GameRng::from_seed(now_ms.cast_unsigned() ^ sid);
                 let result = {
@@ -187,7 +216,15 @@ impl ServerSessionHandler {
                         hungry_soi_in_zone,
                         mabu_egg: &mut mabu_egg,
                     };
-                    UseItemService::use_bag_item(&mut inv, bag_slot, &mut ctx, &catalog, &mut rng)
+                    UseItemService::use_bag_item_with_pet(
+                        &mut inv,
+                        bag_slot,
+                        &mut ctx,
+                        pet_hp,
+                        pet_equipped,
+                        &catalog,
+                        &mut rng,
+                    )
                 };
                 entry.last_pea_ms = last_pea_ms;
                 entry.snapshot.ruong_go.3 = last_wood_chest_day;
@@ -222,10 +259,15 @@ impl ServerSessionHandler {
                             .as_ref()
                             .map_or(const_player::NON_FUSION, |p| p.fusion_type);
                         if cur_fusion != prev_fusion {
-                            if cur_fusion != const_player::NON_FUSION {
+                            if cur_fusion == const_player::LUONG_LONG_NHAT_THE {
                                 super::router_secondary::last_fusion_enter_ms().insert(pid, now_ms);
                             } else {
                                 super::router_secondary::last_fusion_enter_ms().remove(&pid);
+                                if cur_fusion == const_player::NON_FUSION {
+                                    super::router_secondary::record_pet_unfusion_cooldown(
+                                        pid, now_ms,
+                                    );
+                                }
                             }
                             if let Some(pet) = entry.snapshot.pet.as_mut() {
                                 pet.status = if cur_fusion != const_player::NON_FUSION {
@@ -245,7 +287,7 @@ impl ServerSessionHandler {
                             &mut entry.snapshot,
                             self.shared.config.parity_mode,
                         );
-                        if PEA_IDS.contains(&item_tid.0) || (596..=604).contains(&item_tid.0) {
+                        if is_pea || (596..=604).contains(&item_tid.0) {
                             post.extra_pkts.extend([
                                 s2c_packets::me_load_hp(entry.snapshot.stats.hp),
                                 s2c_packets::me_load_mp(entry.snapshot.stats.mp),
@@ -259,36 +301,6 @@ impl ServerSessionHandler {
                                 post.pet_sync_pid = Some(pid);
                             }
                         }
-                        if buffs != prev_buffs {
-                            let icon_id = self
-                                .shared
-                                .templates
-                                .items
-                                .iter()
-                                .find(|r| r.id == i32::from(item_tid.0))
-                                .map_or(0_i16, |r| r.icon_id as i16);
-                            for &(slot, exp) in &buffs.active {
-                                if exp > now_ms
-                                    && !prev_buffs
-                                        .active
-                                        .iter()
-                                        .any(|&(ps, pe)| ps == slot && pe == exp)
-                                {
-                                    let mut w = PacketWriter::with_capacity(4);
-                                    w.write_i16(icon_id);
-                                    w.write_i16(
-                                        ((exp - now_ms) / 1_000).clamp(0, i64::from(i16::MAX))
-                                            as i16,
-                                    );
-                                    post.extra_pkts.push(w.finish(cmd_message::ITEM_TIME));
-                                }
-                            }
-                        }
-                        if entry.snapshot.stats.stamina != prev_stamina {
-                            post.extra_pkts.push(s2c_packets::stamina(
-                                i16::try_from(entry.snapshot.stats.stamina).unwrap_or(i16::MAX),
-                            ));
-                        }
                         self.apply_use_item_effect(
                             sid,
                             &mut entry.snapshot,
@@ -299,52 +311,18 @@ impl ServerSessionHandler {
                             &mut rng,
                             &mut post,
                         );
-                        let (eh, eb, el, ebag, is_disg) =
-                            effective_appearance(&self.shared.templates, &entry.snapshot);
-                        let loc = entry.snapshot.location;
-                        let mut bcasts = Vec::new();
-                        if cur_fusion != prev_fusion {
-                            let wire_fusion = match cur_fusion {
-                                const_player::NON_FUSION => 1_i8,
-                                const_player::HOP_THE_PORATA
-                                | const_player::HOP_THE_PORATA2
-                                | const_player::HOP_THE_PORATA3 => 6_i8,
-                                other => other,
-                            };
-                            let mut w = PacketWriter::with_capacity(5);
-                            w.write_i8(wire_fusion);
-                            w.write_i32(pid.0 as i32);
-                            bcasts.push(w.finish(cmd_message::FUSION));
-                        }
-                        if (eh, eb, el, is_disg) != (prev_app.0, prev_app.1, prev_app.2, prev_app.4)
-                        {
-                            bcasts.push(s2c_packets::update_body(
-                                pid,
-                                is_disg.then_some((eh, eb, el, 0)),
-                            ));
-                        }
-                        if ebag != prev_app.3 {
-                            bcasts.push(s2c_packets::send_flag_bag(pid, ebag));
-                        }
-                        if !bcasts.is_empty() {
-                            post.zone_bcasts = Some((loc, bcasts));
-                        }
-                        if let (Some(ek), Ok(tx)) = (
-                            entry.entity_key,
-                            self.shared
-                                .world_router
-                                .resolve_sender(loc.map_id, loc.zone_id),
-                        ) {
-                            let _ = tx.try_send(ZoneCommand::UpdatePlayerParts(ek, (eh, eb, el)));
-                            let _ = tx
-                                .try_send(ZoneCommand::UpdatePlayerStats(ek, entry.snapshot.stats));
-                        }
-                        Some([
-                            s2c_packets::inventory_body(eh, &entry.snapshot.items_body),
-                            s2c_packets::inventory_bag(&entry.snapshot.items_bag),
-                            s2c_packets::me_load_point(&entry.snapshot.stats),
-                            wallet_money_pkt(&entry.snapshot.wallet),
-                        ])
+                        Some(self.collect_use_item_bcasts_and_base_pkts(
+                            &entry,
+                            item_tid,
+                            now_ms,
+                            &buffs,
+                            &prev_buffs,
+                            prev_stamina,
+                            prev_app,
+                            prev_fusion,
+                            cur_fusion,
+                            &mut post,
+                        ))
                     }
                     Err(err) => {
                         post.err_msg = Some(format!("Không thể sử dụng vật phẩm: {err}"));

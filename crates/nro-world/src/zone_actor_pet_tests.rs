@@ -118,7 +118,7 @@ fn pet_companion_spawns_on_home_map_follows_refreshes_and_fights_mobs() {
     home.handle_command(ZoneCommand::SyncPlayerPet {
         player_id: PlayerId(9),
         pet: Some(PetCompanion {
-            name: "$Đệ tử".into(),
+            name: "$".into(),
             gender: Gender::TraiDat,
             parts: (303, 57, 60),
             flag_bag: -1,
@@ -137,13 +137,20 @@ fn pet_companion_spawns_on_home_map_follows_refreshes_and_fights_mobs() {
     });
     let add = h1_rx.try_recv().expect("owner sees GoHome pet on home map");
     assert_eq!(add.cmd, cmd_message::PLAYER_ADD);
-    assert_eq!(add.reader().read_i32().expect("neg pid"), -9);
+    let mut ar = add.reader();
+    assert_eq!(ar.read_i32().expect("neg pid"), -9);
+    let _ = ar.read_i32().expect("clan");
+    for _ in 0..5 {
+        let _ = ar.read_i8().expect("hdr");
+    }
+    let _ = ar.read_i16().expect("head");
+    assert_eq!(ar.read_utf().expect("default_pet_name"), "$Đệ tử");
     assert!(h2_rx.try_recv().is_err());
 
     home.handle_command(ZoneCommand::SyncPlayerPet {
         player_id: PlayerId(9),
         pet: Some(PetCompanion {
-            name: "$Mabư".into(),
+            name: "#Mabư".into(),
             gender: Gender::TraiDat,
             parts: (297, 298, 299),
             flag_bag: -1,
@@ -200,13 +207,13 @@ fn pet_companion_spawns_on_home_map_follows_refreshes_and_fights_mobs() {
         player_id: PlayerId(9),
         pet: Some(PetCompanion {
             name: "Đệ tử".into(),
-            gender: Gender::TraiDat,
+            gender: Gender::Xayda,
             parts: (303, 57, 60),
             flag_bag: -1,
             hp: 1_000,
             hp_max: 1_000,
             dame: 40,
-            status: 2,
+            status: 0,
             master_gender: Gender::TraiDat,
             loc: Location {
                 map_id: MapId(1),
@@ -223,18 +230,48 @@ fn pet_companion_spawns_on_home_map_follows_refreshes_and_fights_mobs() {
     field.handle_command(ZoneCommand::MovePlayer(
         fk,
         Location {
-            map_id: MapId(1),
-            zone_id: ZoneId(0),
+            map_id: MapId(99),
+            zone_id: ZoneId(9),
             x: 150,
             y: 200,
         },
     ));
-    let mv = f_rx.try_recv().expect("master receives pet move");
+    let mv = f_rx.try_recv().expect("master receives following pet move");
     assert_eq!(mv.cmd, cmd_message::PLAYER_MOVE);
     assert_eq!(mv.reader().read_i32().expect("pet id"), -9);
+
+    field.handle_command(ZoneCommand::SyncPlayerPet {
+        player_id: PlayerId(9),
+        pet: Some(PetCompanion {
+            name: "$Đệ tử".into(),
+            gender: Gender::Xayda,
+            parts: (303, 57, 60),
+            flag_bag: -1,
+            hp: 1_000,
+            hp_max: 1_000,
+            dame: 40,
+            status: 2,
+            master_gender: Gender::TraiDat,
+            loc: Location::new(100, 200),
+        }),
+    });
+    assert_eq!(
+        f_rx.try_recv().expect("status change move").cmd,
+        cmd_message::PLAYER_MOVE
+    );
     for _ in 0..20 {
         field.on_tick();
     }
+    let mut saw_xayda_paint = false;
+    while let Ok(pkt) = f_rx.try_recv() {
+        if pkt.cmd == cmd_message::PLAYER_ATTACK_NPC {
+            let mut r = pkt.reader();
+            let _ = r.read_i32().expect("pet");
+            assert_eq!(r.read_u8().expect("xayda_paint"), 28);
+            saw_xayda_paint = true;
+        }
+    }
+    assert!(saw_xayda_paint);
     assert!(matches!(
         ev_rx.try_recv().expect("pet combat reward"),
         ZoneEvent::PetCombatReward {

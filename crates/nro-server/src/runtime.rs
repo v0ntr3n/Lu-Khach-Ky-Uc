@@ -7,7 +7,9 @@ mod runtime_store;
 #[path = "runtime_ticks.rs"]
 mod runtime_ticks;
 
+pub(crate) use runtime_pet::{clear_dead_pet_timer, clear_pet_runtime_timers};
 pub use runtime_store::unix_now_ms;
+#[cfg(test)]
 pub(crate) use runtime_store::{discover_bootstrap_sql_in, open_or_bootstrap_store_in};
 
 use std::sync::Arc;

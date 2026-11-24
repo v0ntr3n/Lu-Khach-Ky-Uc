@@ -8,11 +8,11 @@ mod router_pet_pkt;
 
 pub(crate) use router_pet_ops::{
     apply_pet_chat_command, build_home_egg_pkts, build_pet_companion, heal_pet_with_pea,
-    sync_online_pet_map_state,
+    sync_online_pet_map_state, try_sync_online_pet_map_state,
 };
 pub(crate) use router_pet_pkt::{build_pet_detail_pkt, resolve_pet_appearance};
 
-use nro_core::{CoreStats, Gender, ItemInstance};
+use nro_core::{CoreStats, Gender, ItemInstance, ParityMode};
 use nro_db::{
     json_columns::{PetSnapshot, SkillSlot},
     player_repo::PlayerSnapshot,
@@ -49,7 +49,7 @@ pub(crate) fn make_fresh_pet(type_pet: i8, gender: Gender) -> PetSnapshot {
             _ => ("$Đệ tử", 2_000, 1_200, 1_200, 50, 15, 2),
         };
     let body_len = if matches!(kind, 2..=4) { 9 } else { 7 };
-    let skill_len = if matches!(kind, 3 | 4) { 5 } else { 4 };
+    let skill_len = if matches!(kind, 2..=4) { 5 } else { 4 };
     let first_sk = match gender {
         Gender::TraiDat => 0,
         Gender::Namec => 2,
@@ -107,18 +107,69 @@ pub(self) fn is_valid_item(tpl: &GameTemplates, item_id: i16) -> bool {
     item_id >= 0 && (tpl.items.is_empty() || tpl.items.iter().any(|r| r.id == i32::from(item_id)))
 }
 
-pub(self) fn is_valid_part(tpl: &GameTemplates, part_id: i16) -> bool {
-    if part_id <= 0 {
+pub(self) fn is_valid_part(tpl: &GameTemplates, part_id: i16, expected_type: i8) -> bool {
+    if part_id < 0 {
         return false;
     }
     if tpl.parts.is_empty() {
-        return part_id < 1_000;
+        return part_id < 2_000;
     }
-    usize::try_from(part_id).is_ok_and(|idx| idx < tpl.parts.len())
-        && tpl
-            .parts
-            .iter()
-            .any(|&(id, _, ref pi)| id == part_id && !pi.is_empty())
+    let found = tpl
+        .parts
+        .binary_search_by_key(&part_id, |&(id, _, _)| id)
+        .ok()
+        .map(|idx| &tpl.parts[idx])
+        .or_else(|| tpl.parts.iter().find(|&&(id, _, _)| id == part_id));
+    found.is_some_and(|&(_, part_type, ref pi)| {
+        part_type == expected_type
+            && pi
+                .iter()
+                .any(|&(icon_id, _, _)| icon_id > 0 && icon_id != 2955)
+    })
+}
+
+pub(self) fn compute_pet_npoint(
+    templates: &GameTemplates,
+    parity: ParityMode,
+    pet: &PetSnapshot,
+) -> (NPoint, Vec<Option<ItemInstance>>) {
+    let valid_body: Vec<Option<ItemInstance>> = pet
+        .items_body
+        .iter()
+        .map(|slot| {
+            slot.as_ref()
+                .filter(|it| is_valid_item(templates, it.template_id.0))
+                .cloned()
+        })
+        .collect();
+    let mut npoint = NPoint::new(pet.stats);
+    let kind =
+        PetKind::from_repr(u8::try_from(pet.type_pet.max(0)).unwrap_or(0)).unwrap_or_default();
+    let fusion_kind = if pet.fusion_type == 0 {
+        FusionKind::None
+    } else {
+        FusionKind::from_repr(u8::try_from(pet.fusion_type).unwrap_or(0))
+            .unwrap_or(FusionKind::LuongLongNhatThe)
+    };
+    let ctx = StatContext {
+        body: &valid_body,
+        radar_options: &[],
+        badge_options: &[],
+        bag_gear: (None, None),
+        sets: SetClothes::recompute(&valid_body, None, false),
+        buffs: ActiveBuffs {
+            war_mults: (1, 1),
+            ..Default::default()
+        },
+        is_human_player: false,
+        self_pet_info: Some((kind, fusion_kind, pet.fusion_type != 0)),
+        fused_pet_stats: None,
+        form_state: (0, 0, None),
+        map_env: (false, false),
+        parity,
+    };
+    npoint.cal_point(&ctx);
+    (npoint, valid_body)
 }
 
 fn pick_valid_skill_id(tpl: &GameTemplates, candidates: &[i32], seed: u64) -> i32 {
@@ -148,7 +199,7 @@ pub(crate) fn recalculate_pet_in_snapshot(shared: &SharedServerState, snap: &mut
 
 pub(crate) fn recalculate_pet_with_templates(
     templates: &GameTemplates,
-    parity: nro_core::ParityMode,
+    parity: ParityMode,
     snap: &mut PlayerSnapshot,
 ) {
     let master_seed = snap.id.0.cast_unsigned();
@@ -164,7 +215,7 @@ pub(crate) fn recalculate_pet_with_templates(
     while pet.items_body.len() < min_body {
         pet.items_body.push(None);
     }
-    let min_skills = if matches!(pet.type_pet, 3 | 4) { 5 } else { 4 };
+    let min_skills = if matches!(pet.type_pet, 2..=4) { 5 } else { 4 };
     while pet.skills.len() < min_skills {
         pet.skills.push(SkillSlot {
             template_id: -1,
@@ -223,42 +274,7 @@ pub(crate) fn recalculate_pet_with_templates(
         pet.stats.stamina = pet.stats.stamina.min(pet.stats.max_stamina);
     }
 
-    let valid_body: Vec<Option<ItemInstance>> = pet
-        .items_body
-        .iter()
-        .map(|slot| {
-            slot.as_ref()
-                .filter(|it| is_valid_item(templates, it.template_id.0))
-                .cloned()
-        })
-        .collect();
-    let mut npoint = NPoint::new(pet.stats);
-    let kind =
-        PetKind::from_repr(u8::try_from(pet.type_pet.max(0)).unwrap_or(0)).unwrap_or_default();
-    let fusion_kind = if pet.fusion_type == 0 {
-        FusionKind::None
-    } else {
-        FusionKind::from_repr(u8::try_from(pet.fusion_type).unwrap_or(0))
-            .unwrap_or(FusionKind::LuongLongNhatThe)
-    };
-    let ctx = StatContext {
-        body: &valid_body,
-        radar_options: &[],
-        badge_options: &[],
-        bag_gear: (None, None),
-        sets: SetClothes::recompute(&valid_body, None, false),
-        buffs: ActiveBuffs {
-            war_mults: (1, 1),
-            ..Default::default()
-        },
-        is_human_player: false,
-        self_pet_info: Some((kind, fusion_kind, pet.fusion_type != 0)),
-        fused_pet_stats: None,
-        form_state: (0, 0, None),
-        map_env: (false, false),
-        parity,
-    };
-    npoint.cal_point(&ctx);
+    let (npoint, _) = compute_pet_npoint(templates, parity, pet);
     pet.stats.hp_max = i64::from(npoint.hp_max).max(1);
     pet.stats.mp_max = i64::from(npoint.mp_max).max(1);
     pet.stats.dame = i64::from(npoint.dame).max(1);

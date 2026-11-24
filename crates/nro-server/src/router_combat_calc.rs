@@ -97,19 +97,20 @@ pub(super) fn compute_attack_damage(
     np.dame = i32::try_from(stats.dame.clamp(1, i64::from(i32::MAX))).unwrap_or(i32::MAX);
     np.def = stats.def.max(0);
     np.crit = i32::from(stats.crit);
-    for opt in entry.snapshot.items_body.iter().flatten().flat_map(|it| it.options.iter()) {
+    for opt in entry
+        .snapshot
+        .items_body
+        .iter()
+        .flatten()
+        .flat_map(|it| it.options.iter())
+    {
         match opt.id {
             5 => np.mods.tl_sdcm = np.mods.tl_sdcm.saturating_add(opt.param),
             19 => np.mods.tl_dame_att_mob.push(opt.param),
             _ => {}
         }
     }
-    let pet_body = entry
-        .snapshot
-        .pet
-        .as_ref()
-        .filter(|p| p.fusion_type != 0)
-        .map(|p| p.items_body.as_slice());
+    let pet_body = entry.snapshot.pet.as_ref().map(|p| p.items_body.as_slice());
     let sets = SetClothes::recompute(&entry.snapshot.items_body, pet_body, false);
     let intr = &entry.snapshot.intrinsic;
     let intrinsic = (
@@ -167,7 +168,10 @@ pub(super) fn apply_lifesteal(
     if dealt_dmg <= 0 || stats.hp <= 0 {
         return false;
     }
-    let hp_pct = drains.0.saturating_add(if is_mob { drains.2 } else { 0 }).max(0);
+    let hp_pct = drains
+        .0
+        .saturating_add(if is_mob { drains.2 } else { 0 })
+        .max(0);
     let mp_pct = drains.1.max(0);
     let hp_gain = dealt_dmg.saturating_mul(i64::from(hp_pct)) / 100;
     let mp_gain = dealt_dmg.saturating_mul(i64::from(mp_pct)) / 100;
@@ -194,14 +198,19 @@ pub(crate) fn apply_incoming_hit_to_player(
     force_piercing: bool,
     now_ms: i64,
 ) -> (InjuryOutcome, i64) {
-    let (gx1, gx2) = session_buffs().get(&target_sid).map_or((false, false), |b| {
-        (
-            b.has_active(now_ms, |s| s == BuffSlot::GiapXen(false)),
-            b.has_active(now_ms, |s| s == BuffSlot::GiapXen(true)),
-        )
-    });
+    let (gx1, gx2) = session_buffs()
+        .get(&target_sid)
+        .map_or((false, false), |b| {
+            (
+                b.has_active(now_ms, |s| s == BuffSlot::GiapXen(false)),
+                b.has_active(now_ms, |s| s == BuffSlot::GiapXen(true)),
+            )
+        });
     let piercing = force_piercing
-        || matches!(attacker_skill, Some(SkillKind::Makankosappo | SkillKind::TuSat));
+        || matches!(
+            attacker_skill,
+            Some(SkillKind::Makankosappo | SkillKind::TuSat)
+        );
     let mut np = NPoint::new(*stats);
     np.hp_max = i32::try_from(stats.hp_max.clamp(1, i64::from(i32::MAX))).unwrap_or(i32::MAX);
     np.hp = i32::try_from(stats.hp.clamp(0, i64::from(i32::MAX))).unwrap_or(i32::MAX);
@@ -231,12 +240,19 @@ pub(crate) fn apply_incoming_hit_to_player(
     if out.shield_broken {
         clear_shield(target_pid);
     }
-    let final_dmg = if out.dodged { 0 } else { i64::from(out.damage_taken.max(0)) };
+    let final_dmg = if out.dodged {
+        0
+    } else {
+        i64::from(out.damage_taken.max(0))
+    };
     if !out.dodged {
         stats.hp = stats.hp.saturating_sub(final_dmg).max(0);
     }
     if out.mp_absorbed > 0 {
-        stats.mp = stats.mp.saturating_add(i64::from(out.mp_absorbed)).min(stats.mp_max.max(1));
+        stats.mp = stats
+            .mp
+            .saturating_add(i64::from(out.mp_absorbed))
+            .min(stats.mp_max.max(1));
     }
     let reflect_pct = i64::from(np.mods.utils[0].max(0));
     let reflect_dmg = if !piercing && out.reflect_base_damage > 0 && reflect_pct > 0 {

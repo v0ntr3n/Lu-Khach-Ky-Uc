@@ -185,12 +185,12 @@ impl FjallEngine {
             Some(g) => {
                 let key = g.key()?;
                 let key_bytes: &[u8] = &key;
-                let seq_bytes: [u8; 8] =
-                    key_bytes.get(8..16).and_then(|s| s.try_into().ok()).ok_or_else(|| {
-                        DbError::InvalidColumnFormat {
-                            column: "history_tx.key",
-                            reason: format!("expected 16 bytes, got {}", key_bytes.len()),
-                        }
+                let seq_bytes: [u8; 8] = key_bytes
+                    .get(8..16)
+                    .and_then(|s| s.try_into().ok())
+                    .ok_or_else(|| DbError::InvalidColumnFormat {
+                        column: "history_tx.key",
+                        reason: format!("expected 16 bytes, got {}", key_bytes.len()),
                     })?;
                 u64::from_be_bytes(seq_bytes)
             }
@@ -266,9 +266,23 @@ impl FjallEngine {
         self.inner.cas_stripes[(seed as usize) & (CAS_STRIPES - 1)].lock()
     }
 
+    /// Allocates the next positive 32-bit account ID guarded by `checked_add(1)`.
     #[inline]
     pub fn alloc_account_id(&self) -> i32 {
-        self.inner.next_account_id.fetch_add(1, Ordering::Relaxed)
+        self.try_alloc_account_id().unwrap_or(i32::MAX)
+    }
+
+    /// Fallible account ID allocator rejecting `i32` overflow past `i32::MAX - 1`.
+    pub fn try_alloc_account_id(&self) -> DbResult<i32> {
+        self.inner
+            .next_account_id
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |cur| {
+                (cur >= 1).then(|| cur.checked_add(1)).flatten()
+            })
+            .map_err(|cur| DbError::InvalidColumnFormat {
+                column: "account.id",
+                reason: format!("allocated account id {cur} exhausted i32 sequence"),
+            })
     }
 
     /// Allocates the next positive 32-bit wire-safe player ID (`1..=i32::MAX`).
@@ -277,7 +291,9 @@ impl FjallEngine {
         self.inner
             .next_player_id
             .try_update(Ordering::Relaxed, Ordering::Relaxed, |cur| {
-                (1..=max_wire_id).contains(&cur).then_some(cur.saturating_add(1))
+                (1..=max_wire_id)
+                    .contains(&cur)
+                    .then_some(cur.saturating_add(1))
             })
             .map_err(|cur| DbError::InvalidColumnFormat {
                 column: "player.id",
@@ -297,9 +313,15 @@ impl FjallEngine {
 
     /// Advances high-water ID sequences after importing existing SQL rows.
     pub fn bump_sequences(&self, next_acc: i32, next_plr: i64, next_clan: i32) {
-        self.inner.next_account_id.fetch_max(next_acc.max(1), Ordering::SeqCst);
-        self.inner.next_player_id.fetch_max(next_plr.max(1), Ordering::SeqCst);
-        self.inner.next_clan_id.fetch_max(next_clan.max(0), Ordering::SeqCst);
+        self.inner
+            .next_account_id
+            .fetch_max(next_acc.max(1), Ordering::SeqCst);
+        self.inner
+            .next_player_id
+            .fetch_max(next_plr.max(1), Ordering::SeqCst);
+        self.inner
+            .next_clan_id
+            .fetch_max(next_clan.max(0), Ordering::SeqCst);
     }
 
     /// Seeds the `'international_womens_day'` record in `events` if absent.
@@ -320,7 +342,10 @@ impl FjallEngine {
         let (discovered_count, missing_canonical) = if has_templates {
             (CANONICAL_41_TABLES.len(), Vec::new())
         } else {
-            (0, CANONICAL_41_TABLES.iter().map(|&t| t.to_owned()).collect())
+            (
+                0,
+                CANONICAL_41_TABLES.iter().map(|&t| t.to_owned()).collect(),
+            )
         };
         Ok(SchemaHealthReport {
             discovered_count,
@@ -336,7 +361,10 @@ impl FjallEngine {
 
     /// Synchronously flushes and `fsync`s the active `fjall` journal (`PersistMode::SyncAll`).
     pub fn persist_sync(&self) -> DbResult<()> {
-        self.inner.db.persist(PersistMode::SyncAll).map_err(DbError::from)
+        self.inner
+            .db
+            .persist(PersistMode::SyncAll)
+            .map_err(DbError::from)
     }
 
     /// Flushes and `fsync`s the active `fjall` journal on a blocking worker thread.

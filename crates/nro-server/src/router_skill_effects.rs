@@ -28,7 +28,11 @@ pub(crate) fn clear_player_effects(pid: PlayerId) {
 
 /// Returns `true` if `items_body` contains Option `116` (`KHANG_TDHS`).
 pub(super) fn has_khang_tdhs(items_body: &[Option<ItemInstance>]) -> bool {
-    items_body.iter().flatten().flat_map(|it| it.options.iter()).any(|o| o.id == 116)
+    items_body
+        .iter()
+        .flatten()
+        .flat_map(|it| it.options.iter())
+        .any(|o| o.id == 116)
 }
 
 /// Returns `true` if `pid` currently has an active action-blocking CC flag.
@@ -59,7 +63,7 @@ pub(super) fn take_valid_tu_sat_prep(pid: PlayerId, now_ms: i64) -> bool {
 }
 
 /// Applies a timed [`CcFlags`] lock into `PLAYER_EFFECTS` at expiry slot `slot_idx` (`0..6`).
-pub(super) fn apply_player_cc(
+pub(crate) fn apply_player_cc(
     pid: PlayerId,
     flag: CcFlags,
     slot_idx: usize,
@@ -133,7 +137,11 @@ impl ServerSessionHandler {
         }
         let (_, sleep_ms, troi_ms) = cc_durations_ms(pt_u8, false);
         let (tdhs_ms, tdhs_range) = tdhs_stun_ms_and_range(pt_u8, false);
-        let max_range_px = if sel == 6 { i64::from(tdhs_range) + 80 } else { 380 };
+        let max_range_px = if sel == 6 {
+            i64::from(tdhs_range) + 80
+        } else {
+            380
+        };
         let duel_opp = lock_pvp().get(&caster_pid).map(|&(opp, _)| opp);
         let target_sids: Vec<u64> = self
             .shared
@@ -187,46 +195,67 @@ impl ServerSessionHandler {
     pub(crate) async fn tick_expired_buffs(&self) {
         let now_ms = unix_now_ms();
         let now_u64 = now_ms.max(0).cast_unsigned();
-        let sids: Vec<u64> =
-            self.shared.clients.authenticated.iter().map(|e| *e.key()).collect();
+        let sids: Vec<u64> = self
+            .shared
+            .clients
+            .authenticated
+            .iter()
+            .map(|e| *e.key())
+            .collect();
         for sid in sids {
-            let revert_info = self.shared.clients.authenticated.get_mut(&sid).and_then(|mut entry| {
-                let (pid, loc) = (entry.snapshot.id, entry.snapshot.location);
-                let hp_i32 =
-                    i32::try_from(entry.snapshot.stats.hp.clamp(0, i64::from(i32::MAX)))
-                        .unwrap_or(i32::MAX);
-                let idle = if let Some(mut eff) = player_effects().get_mut(&pid) {
-                    let _ = eff.tick(now_u64, hp_i32);
-                    is_effect_state_idle(&eff)
-                } else {
-                    false
-                };
-                if idle {
-                    player_effects().remove_if(&pid, |_, e| is_effect_state_idle(e));
+            let revert_info =
+                self.shared
+                    .clients
+                    .authenticated
+                    .get_mut(&sid)
+                    .and_then(|mut entry| {
+                        let (pid, loc) = (entry.snapshot.id, entry.snapshot.location);
+                        let hp_i32 =
+                            i32::try_from(entry.snapshot.stats.hp.clamp(0, i64::from(i32::MAX)))
+                                .unwrap_or(i32::MAX);
+                        let idle = if let Some(mut eff) = player_effects().get_mut(&pid) {
+                            let _ = eff.tick(now_u64, hp_i32);
+                            is_effect_state_idle(&eff)
+                        } else {
+                            false
+                        };
+                        if idle {
+                            player_effects().remove_if(&pid, |_, e| is_effect_state_idle(e));
+                        }
+                        let sess_pruned =
+                            super::router_economy::prune_expired_session_buffs(sid, now_ms);
+                        let skill_pruned =
+                            super::router_skill::prune_expired_skill_buffs(pid, now_ms);
+                        let monkey_rev = super::router_skill::take_monkey_revert_pending(pid);
+                        if sess_pruned || skill_pruned {
+                            super::recalculate_session_stats(
+                                sid,
+                                &mut entry.snapshot,
+                                self.shared.config.parity_mode,
+                            );
+                            if let (Some(ek), Ok(tx)) = (
+                                entry.entity_key,
+                                self.shared
+                                    .world_router
+                                    .resolve_sender(loc.map_id, loc.zone_id),
+                            ) {
+                                let _ = tx.try_send(ZoneCommand::UpdatePlayerStats(
+                                    ek,
+                                    entry.snapshot.stats,
+                                ));
+                            }
+                            if entry.handle.sent_key() {
+                                let _ = entry
+                                    .handle
+                                    .try_send(s2c_packets::me_load_point(&entry.snapshot.stats));
+                            }
+                        }
+                        monkey_rev.then(|| (loc, self.revert_monkey_appearance_entry(&entry, loc)))
+                    });
+            if let Some((loc, rpkts)) = revert_info {
+                for p in rpkts.into_iter().flatten() {
+                    self.broadcast_zone_or_self(loc, sid, &p);
                 }
-                let sess_pruned = super::router_economy::prune_expired_session_buffs(sid, now_ms);
-                let skill_pruned = super::router_skill::prune_expired_skill_buffs(pid, now_ms);
-                let monkey_rev = super::router_skill::take_monkey_revert_pending(pid);
-                if sess_pruned || skill_pruned {
-                    super::recalculate_session_stats(
-                        sid,
-                        &mut entry.snapshot,
-                        self.shared.config.parity_mode,
-                    );
-                    if let (Some(ek), Ok(tx)) = (
-                        entry.entity_key,
-                        self.shared.world_router.resolve_sender(loc.map_id, loc.zone_id),
-                    ) {
-                        let _ = tx.try_send(ZoneCommand::UpdatePlayerStats(ek, entry.snapshot.stats));
-                    }
-                    if entry.handle.sent_key() {
-                        let _ = entry.handle.try_send(s2c_packets::me_load_point(&entry.snapshot.stats));
-                    }
-                }
-                monkey_rev.then(|| (loc, self.revert_monkey_appearance_entry(&entry, loc)))
-            });
-            if let Some((loc, rpkt)) = revert_info {
-                self.broadcast_zone_or_self(loc, sid, &rpkt);
             }
         }
     }

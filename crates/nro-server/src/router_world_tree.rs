@@ -10,8 +10,8 @@ use nro_protocol::{Packet, PacketError, ProtocolError, SessionHandle};
 use nro_world::s2c_packets;
 
 use super::{
-    ServerSessionHandler, send_thong_bao, snapshot_to_economy_inv, sync_economy_inv_to_snapshot,
-    wallet_money_pkt,
+    ServerSessionHandler, is_own_home_map, send_thong_bao, snapshot_to_economy_inv,
+    sync_economy_inv_to_snapshot, wallet_money_pkt,
 };
 use crate::runtime::unix_now_ms;
 
@@ -33,12 +33,25 @@ enum MagicTreeAction {
 }
 
 impl ServerSessionHandler {
-    pub(super) async fn handle_magic_tree(&self, session: &SessionHandle, sid: u64, action: i8) -> Result<(), ProtocolError> {
+    pub(super) async fn handle_magic_tree(
+        &self,
+        session: &SessionHandle,
+        sid: u64,
+        action: i8,
+    ) -> Result<(), ProtocolError> {
         let now_ms = unix_now_ms();
-        let Some(snap) = self.shared.clients.authenticated.get_mut(&sid).map(|mut e| {
-            tick_magic_tree(&mut e.snapshot, now_ms);
-            e.snapshot.clone()
-        }) else {
+        let Some(snap) = self
+            .shared
+            .clients
+            .authenticated
+            .get_mut(&sid)
+            .and_then(|mut e| {
+                is_own_home_map(e.snapshot.location.map_id, e.snapshot.gender).then(|| {
+                    tick_magic_tree(&mut e.snapshot, now_ms);
+                    e.snapshot.clone()
+                })
+            })
+        else {
             return Ok(());
         };
         match action {
@@ -49,77 +62,72 @@ impl ServerSessionHandler {
         Ok(())
     }
 
-    pub(super) async fn handle_magic_tree_confirm(&self, session: &SessionHandle, sid: u64, menu_id: i8) -> Result<(), ProtocolError> {
+    pub(super) async fn handle_magic_tree_confirm(
+        &self,
+        session: &SessionHandle,
+        sid: u64,
+        menu_id: i8,
+    ) -> Result<(), ProtocolError> {
         let now_ms = unix_now_ms();
         let mut harvested_ok = false;
-        let outcome = self.shared.clients.authenticated.get_mut(&sid).map(|mut entry| {
-            if !matches!(entry.snapshot.location.map_id.0, 21..=23) {
-                return (Vec::new(), None);
-            }
-            if super::router_shop::is_in_trade(entry.snapshot.id) {
-                return (Vec::new(), Some("Không thể thao tác khi đang giao dịch!".to_owned()));
-            }
-            tick_magic_tree(&mut entry.snapshot, now_ms);
-            let mut mt = snapshot_to_econ_magic_tree(&entry.snapshot);
-            if let Some((_, cached_upgrading)) = magic_tree_menu_state().remove(&entry.snapshot.id)
-                && cached_upgrading != mt.is_upgrading
-            {
-                return (
-                    Vec::new(),
-                    Some("Trạng thái cây đậu đã thay đổi, vui lòng mở lại menu!".to_owned()),
-                );
-            }
-            let action = resolve_magic_tree_action(&mt, menu_id);
-            let Some(action) = action else {
-                return (Vec::new(), None);
-            };
-            let mut inv = snapshot_to_economy_inv(&entry.snapshot);
-            match action {
-                MagicTreeAction::Harvest => match mt.harvest(&mut inv, now_ms) {
-                    Ok(0) => (Vec::new(), Some("Chưa có đậu thần để thu hoạch!".to_owned())),
-                    Ok(harvested) => {
-                        sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
-                        sync_econ_magic_tree_to_snapshot(&mt, &mut entry.snapshot);
-                        harvested_ok = true;
-                        (
-                            vec![
-                                s2c_packets::magic_tree_harvest(0, i32::from(mt.level) * 60),
-                                s2c_packets::inventory_bag(&entry.snapshot.items_bag),
-                            ],
-                            Some(format!("Bạn vừa thu hoạch được {harvested} hạt đậu thần!")),
-                        )
-                    }
-                    Err(UseItemError::Inventory(InventoryError::ContainerFull(_))) => (
+        let outcome = self
+            .shared
+            .clients
+            .authenticated
+            .get_mut(&sid)
+            .map(|mut entry| {
+                if !is_own_home_map(entry.snapshot.location.map_id, entry.snapshot.gender) {
+                    return (Vec::new(), None);
+                }
+                if super::router_shop::is_in_trade(entry.snapshot.id) {
+                    return (
                         Vec::new(),
-                        Some("Hành trang đã đầy, không thể thu hoạch đậu!".to_owned()),
-                    ),
-                    Err(_) => (Vec::new(), Some("Không thể thu hoạch đậu thần lúc này!".to_owned())),
-                },
-                MagicTreeAction::StartUpgrade => match mt.start_upgrade(&mut inv, now_ms) {
-                    Ok(()) => {
-                        sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
-                        sync_econ_magic_tree_to_snapshot(&mt, &mut entry.snapshot);
-                        let mut pkts = Vec::with_capacity(2);
-                        if let Ok(load_pkt) = build_magic_tree_load(&entry.snapshot) {
-                            pkts.push(load_pkt);
+                        Some("Không thể thao tác khi đang giao dịch!".to_owned()),
+                    );
+                }
+                tick_magic_tree(&mut entry.snapshot, now_ms);
+                let mut mt = snapshot_to_econ_magic_tree(&entry.snapshot);
+                if let Some((_, cached_upgrading)) =
+                    magic_tree_menu_state().remove(&entry.snapshot.id)
+                    && cached_upgrading != mt.is_upgrading
+                {
+                    return (
+                        Vec::new(),
+                        Some("Trạng thái cây đậu đã thay đổi, vui lòng mở lại menu!".to_owned()),
+                    );
+                }
+                let Some(action) = resolve_magic_tree_action(&mt, menu_id) else {
+                    return (Vec::new(), None);
+                };
+                let mut inv = snapshot_to_economy_inv(&entry.snapshot);
+                match action {
+                    MagicTreeAction::Harvest => match mt.harvest(&mut inv, now_ms) {
+                        Ok(0) => (
+                            Vec::new(),
+                            Some("Chưa có đậu thần để thu hoạch!".to_owned()),
+                        ),
+                        Ok(harvested) => {
+                            sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
+                            sync_econ_magic_tree_to_snapshot(&mt, &mut entry.snapshot);
+                            harvested_ok = true;
+                            (
+                                vec![
+                                    s2c_packets::magic_tree_harvest(0, i32::from(mt.level) * 60),
+                                    s2c_packets::inventory_bag(&entry.snapshot.items_bag),
+                                ],
+                                Some(format!("Bạn vừa thu hoạch được {harvested} hạt đậu thần!")),
+                            )
                         }
-                        pkts.push(wallet_money_pkt(&entry.snapshot.wallet));
-                        let next_lv = (mt.level + 1).min(10);
-                        (pkts, Some(format!("Bắt đầu nâng cấp Đậu thần lên cấp {next_lv}!")))
-                    }
-                    Err(UseItemError::Inventory(InventoryError::InsufficientCurrency(_, req, _))) => (
-                        Vec::new(),
-                        Some(format!("Không đủ vàng để nâng cấp Đậu thần (cần {req} vàng)!")),
-                    ),
-                    Err(UseItemError::PreconditionFailed(_)) => (
-                        Vec::new(),
-                        Some("Đậu thần đã đạt cấp tối đa hoặc đang nâng cấp!".to_owned()),
-                    ),
-                    Err(_) => (Vec::new(), Some("Không thể nâng cấp Đậu thần lúc này!".to_owned())),
-                },
-                MagicTreeAction::FastFinish => {
-                    let was_upgrading = mt.is_upgrading;
-                    match mt.fast_finish(&mut inv, now_ms) {
+                        Err(UseItemError::Inventory(InventoryError::ContainerFull(_))) => (
+                            Vec::new(),
+                            Some("Hành trang đã đầy, không thể thu hoạch đậu!".to_owned()),
+                        ),
+                        Err(_) => (
+                            Vec::new(),
+                            Some("Không thể thu hoạch đậu thần lúc này!".to_owned()),
+                        ),
+                    },
+                    MagicTreeAction::StartUpgrade => match mt.start_upgrade(&mut inv, now_ms) {
                         Ok(()) => {
                             sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
                             sync_econ_magic_tree_to_snapshot(&mt, &mut entry.snapshot);
@@ -128,38 +136,88 @@ impl ServerSessionHandler {
                                 pkts.push(load_pkt);
                             }
                             pkts.push(wallet_money_pkt(&entry.snapshot.wallet));
-                            let msg = if was_upgrading {
-                                format!("Đã nâng cấp nhanh Đậu thần lên cấp {}!", mt.level)
-                            } else {
-                                "Đậu thần đã kết hạt xong!".to_owned()
-                            };
-                            (pkts, Some(msg))
+                            let next_lv = (mt.level + 1).min(10);
+                            (
+                                pkts,
+                                Some(format!("Bắt đầu nâng cấp Đậu thần lên cấp {next_lv}!")),
+                            )
                         }
-                        Err(UseItemError::Inventory(InventoryError::InsufficientCurrency(_, req, _))) => (
+                        Err(UseItemError::Inventory(InventoryError::InsufficientCurrency(
+                            _,
+                            req,
+                            _,
+                        ))) => (
                             Vec::new(),
-                            Some(format!("Không đủ ngọc xanh (cần {req} ngọc)!")),
+                            Some(format!(
+                                "Không đủ vàng để nâng cấp Đậu thần (cần {req} vàng)!"
+                            )),
                         ),
-                        Err(_) => (Vec::new(), Some("Không thể hoàn thành nhanh lúc này!".to_owned())),
-                    }
-                }
-                MagicTreeAction::CancelUpgrade => match mt.cancel_upgrade(&mut inv, now_ms) {
-                    Ok(refund) => {
-                        sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
-                        sync_econ_magic_tree_to_snapshot(&mt, &mut entry.snapshot);
-                        let mut pkts = Vec::with_capacity(2);
-                        if let Ok(load_pkt) = build_magic_tree_load(&entry.snapshot) {
-                            pkts.push(load_pkt);
+                        Err(UseItemError::PreconditionFailed(_)) => (
+                            Vec::new(),
+                            Some("Đậu thần đã đạt cấp tối đa hoặc đang nâng cấp!".to_owned()),
+                        ),
+                        Err(_) => (
+                            Vec::new(),
+                            Some("Không thể nâng cấp Đậu thần lúc này!".to_owned()),
+                        ),
+                    },
+                    MagicTreeAction::FastFinish => {
+                        let was_upgrading = mt.is_upgrading;
+                        match mt.fast_finish(&mut inv, now_ms) {
+                            Ok(()) => {
+                                sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
+                                sync_econ_magic_tree_to_snapshot(&mt, &mut entry.snapshot);
+                                let mut pkts = Vec::with_capacity(2);
+                                if let Ok(load_pkt) = build_magic_tree_load(&entry.snapshot) {
+                                    pkts.push(load_pkt);
+                                }
+                                pkts.push(wallet_money_pkt(&entry.snapshot.wallet));
+                                let msg = if was_upgrading {
+                                    format!("Đã nâng cấp nhanh Đậu thần lên cấp {}!", mt.level)
+                                } else {
+                                    "Đậu thần đã kết hạt xong!".to_owned()
+                                };
+                                (pkts, Some(msg))
+                            }
+                            Err(UseItemError::Inventory(InventoryError::InsufficientCurrency(
+                                _,
+                                req,
+                                _,
+                            ))) => (
+                                Vec::new(),
+                                Some(format!("Không đủ ngọc xanh (cần {req} ngọc)!")),
+                            ),
+                            Err(_) => (
+                                Vec::new(),
+                                Some("Không thể hoàn thành nhanh lúc này!".to_owned()),
+                            ),
                         }
-                        pkts.push(wallet_money_pkt(&entry.snapshot.wallet));
-                        (pkts, Some(if refund > 0 { format!("Đã hủy nâng cấp Đậu thần, hoàn lại {refund} vàng!") } else { "Đã hủy nâng cấp Đậu thần!".to_owned() }))
                     }
-                    Err(_) => (
-                        Vec::new(),
-                        Some("Đậu thần không đang trong quá trình nâng cấp!".to_owned()),
-                    ),
-                },
-            }
-        });
+                    MagicTreeAction::CancelUpgrade => match mt.cancel_upgrade(&mut inv, now_ms) {
+                        Ok(refund) => {
+                            sync_economy_inv_to_snapshot(&inv, &mut entry.snapshot);
+                            sync_econ_magic_tree_to_snapshot(&mt, &mut entry.snapshot);
+                            let mut pkts = Vec::with_capacity(2);
+                            if let Ok(load_pkt) = build_magic_tree_load(&entry.snapshot) {
+                                pkts.push(load_pkt);
+                            }
+                            pkts.push(wallet_money_pkt(&entry.snapshot.wallet));
+                            (
+                                pkts,
+                                Some(if refund > 0 {
+                                    format!("Đã hủy nâng cấp Đậu thần, hoàn lại {refund} vàng!")
+                                } else {
+                                    "Đã hủy nâng cấp Đậu thần!".to_owned()
+                                }),
+                            )
+                        }
+                        Err(_) => (
+                            Vec::new(),
+                            Some("Đậu thần không đang trong quá trình nâng cấp!".to_owned()),
+                        ),
+                    },
+                }
+            });
         if let Some((pkts, msg)) = outcome {
             for pkt in pkts {
                 session.send(pkt).await?;
@@ -228,15 +286,25 @@ pub(super) fn build_magic_tree_menu_pkt(snap: &PlayerSnapshot) -> Result<Packet,
     magic_tree_menu_state().insert(snap.id, mt.is_upgrading);
     let mut owned: Vec<String> = Vec::with_capacity(3);
     if mt.is_upgrading {
-        owned.push(format!("Nâng cấp nhanh\n({} ngọc)", mt.fast_upgrade_gem_cost()));
+        owned.push(format!(
+            "Nâng cấp nhanh\n({} ngọc)",
+            mt.fast_upgrade_gem_cost()
+        ));
         owned.push("Hủy nâng cấp".to_owned());
     } else {
         owned.push("Thu hoạch".to_owned());
         if let Some(gold) = mt.upgrade_gold_cost() {
-            owned.push(if gold == 0 { "Nâng cấp\n(Miễn phí)".to_owned() } else { format!("Nâng cấp\n({gold} vàng)") });
+            owned.push(if gold == 0 {
+                "Nâng cấp\n(Miễn phí)".to_owned()
+            } else {
+                format!("Nâng cấp\n({gold} vàng)")
+            });
         }
         if mt.curr_peas < mt.max_peas() {
-            owned.push(format!("Kết hạt nhanh\n({} ngọc)", mt.fast_harvest_gem_cost()));
+            owned.push(format!(
+                "Kết hạt nhanh\n({} ngọc)",
+                mt.fast_harvest_gem_cost()
+            ));
         }
     }
     let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
@@ -277,5 +345,16 @@ pub(super) fn build_magic_tree_load(snap: &PlayerSnapshot) -> Result<Packet, Pac
     } else {
         0
     };
-    s2c_packets::magic_tree_load(icon_id, &name, x, y, level, curr_peas, max_peas, &name, seconds, mt.is_upgrade)
+    s2c_packets::magic_tree_load(
+        icon_id,
+        &name,
+        x,
+        y,
+        level,
+        curr_peas,
+        max_peas,
+        &name,
+        seconds,
+        mt.is_upgrade,
+    )
 }

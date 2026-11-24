@@ -55,6 +55,8 @@ pub enum ZoneCommand {
     RollbackPlayer {
         /// Restored player ingress payload.
         ingress: Box<PlayerIngress>,
+        /// Restored companion pet snapshot, if any.
+        pet: Option<PetCompanion>,
         /// Reply channel receiving the re-assigned [`EntityKey`].
         reply: oneshot::Sender<Result<EntityKey, WorldError>>,
     },
@@ -100,17 +102,11 @@ pub enum ZoneCommand {
     WipeMobs,
     /// Resolves a player's attack against zone monsters, replying with `(tnsm, killed_temp_ids)`.
     AttackMobs {
-        /// Attacking player's arena key.
         attacker: EntityKey,
-        /// Client skill paint ID (`u8`).
         skill_paint_id: u8,
-        /// Targeted mob slot indices (`u8`).
         mob_ids: Vec<u8>,
-        /// Hit damage before clamping.
         damage: u64,
-        /// Critical strike flag.
         is_crit: bool,
-        /// Reply channel receiving `(earned_tnsm, killed_mob_template_ids)`.
         reply: oneshot::Sender<(u64, Vec<i16>)>,
     },
     /// Sends existing peers, ground drops, and non-full mob HP states to `EntityKey`.
@@ -157,7 +153,7 @@ impl ZoneActor {
         traps: Vec<TrapVolume>,
         rng: GameRng,
     ) -> (Self, mpsc::Sender<ZoneCommand>) {
-        let (tx, rx) = mpsc::channel(64);
+        let (tx, rx) = mpsc::channel(1024);
         router.insert(cfg.id, tx.clone());
         (
             Self {
@@ -185,6 +181,15 @@ impl ZoneActor {
     pub fn with_event_tx(mut self, tx: mpsc::Sender<ZoneEvent>) -> Self {
         self.event_tx = Some(tx);
         self
+    }
+
+    #[inline]
+    pub(super) const fn effective_map_width(&self) -> i16 {
+        if self.cfg.map_width > 0 {
+            self.cfg.map_width
+        } else {
+            4_095
+        }
     }
 
     /// Runs the `50 ms` `tokio::time::interval` loop until `Shutdown` or channel drop.
@@ -286,8 +291,17 @@ impl ZoneActor {
             ZoneCommand::EnterPlayer(ing, reply) => {
                 let _ = reply.send(self.admit_player(*ing));
             }
-            ZoneCommand::RollbackPlayer { ingress, reply } => {
-                let _ = reply.send(self.admit_player_inner(*ingress, true));
+            ZoneCommand::RollbackPlayer {
+                ingress,
+                pet,
+                reply,
+            } => {
+                let pid = ingress.identity.0;
+                let res = self.admit_player_inner(*ingress, true);
+                if res.is_ok() {
+                    self.sync_player_pet(pid, pet);
+                }
+                let _ = reply.send(res);
             }
             ZoneCommand::LeavePlayer { player_id } => {
                 self.remove_pet_on_leave(player_id);
@@ -300,8 +314,9 @@ impl ZoneActor {
             }
             ZoneCommand::MovePlayer(key, to) => {
                 if let Some(i) = self.arena.dense_index(key) {
+                    let max_x = self.effective_map_width();
                     if (85..=91).contains(&self.cfg.id.0.0)
-                        && (to.x < 24 || to.x > self.cfg.map_width.saturating_sub(24))
+                        && (to.x < 24 || to.x > max_x.saturating_sub(24))
                     {
                         if let Some(tx) = &self.arena.outbound_txs[i] {
                             let _ = tx.try_send(s2c_packets::reset_point(self.arena.locations[i]));
@@ -309,8 +324,10 @@ impl ZoneActor {
                     } else {
                         let prev_x = self.arena.locations[i].x;
                         self.arena.locations[i] = Location {
-                            x: to.x.clamp(0, self.cfg.map_width.max(4_095)),
-                            ..to
+                            map_id: self.cfg.id.0,
+                            zone_id: self.cfg.id.1,
+                            x: to.x.clamp(0, max_x),
+                            y: to.y,
                         };
                         if !offline && let Some(pid) = self.arena.player_ids[i] {
                             self.broadcast(

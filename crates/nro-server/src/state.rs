@@ -17,24 +17,17 @@ use tokio::sync::RwLock;
 /// Entry in one of the four server leaderboards (`TopSM`, `TopNV`, `TopSukien1`, `TopSukien2`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LeaderboardRow {
-    /// 1-based leaderboard rank.
     pub rank: u32,
-    /// Character display name.
     pub player_name: String,
-    /// Ranked metric (`power`, `task_id`, `point_sukien1`, or `point_sukien2`).
     pub score: i64,
 }
 
 /// Distinct leaderboard slots managed by [`LeaderboardCache`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LeaderboardSlot {
-    /// Power ranking (`TopSM`).
     Power,
-    /// Main task progression ranking (`TopNV`).
     Task,
-    /// Primary seasonal event ranking (`TopSukien1`).
     SuKien1,
-    /// Secondary seasonal event ranking (`TopSukien2` — isolated from `TopSukien1`!).
     SuKien2,
 }
 
@@ -122,7 +115,6 @@ pub struct IpRateLimiter {
 }
 
 impl IpRateLimiter {
-    /// Creates a new [`IpRateLimiter`].
     #[must_use]
     pub fn new(max_per_ip: usize, login_cooldown_ms: u64) -> Arc<Self> {
         Arc::new(Self {
@@ -134,7 +126,6 @@ impl IpRateLimiter {
         })
     }
 
-    /// Increments the active connection count for `ip`, returning `false` if capped.
     pub fn try_acquire(&self, ip: IpAddr) -> bool {
         if self.buckets.len() >= MAX_TRACKED_IPS && !self.buckets.contains_key(&ip) {
             self.prune_idle();
@@ -150,7 +141,6 @@ impl IpRateLimiter {
         true
     }
 
-    /// Releases one active connection slot for `ip` and prunes idle entries once cooldown elapses.
     pub fn release(&self, ip: IpAddr) {
         let is_idle = self.buckets.get_mut(&ip).is_some_and(|mut entry| {
             entry.0 = entry.0.saturating_sub(1);
@@ -160,13 +150,13 @@ impl IpRateLimiter {
             let now = Instant::now();
             self.buckets.remove_if(&ip, |_, (count, last_login)| {
                 *count == 0
-                    && last_login
-                        .is_none_or(|prev| now.saturating_duration_since(prev) >= self.login_cooldown)
+                    && last_login.is_none_or(|prev| {
+                        now.saturating_duration_since(prev) >= self.login_cooldown
+                    })
             });
         }
     }
 
-    /// Enforces per-IP login burst cooldown (loopback is exempt for local multi-step handshakes).
     pub fn check_login_cooldown(&self, ip: IpAddr) -> Result<(), Duration> {
         if ip.is_loopback() {
             return Ok(());
@@ -189,12 +179,13 @@ impl IpRateLimiter {
         Ok(())
     }
 
-    /// Enforces per-IP account/guest creation quota (5 per 60s; never cleared by `clear_login_cooldown`).
     pub fn check_account_creation_limit(&self, ip: IpAddr) -> Result<(), Duration> {
         if ip.is_loopback() {
             return Ok(());
         }
-        if self.account_creations.len() >= MAX_TRACKED_IPS && !self.account_creations.contains_key(&ip) {
+        if self.account_creations.len() >= MAX_TRACKED_IPS
+            && !self.account_creations.contains_key(&ip)
+        {
             self.prune_idle();
             if self.account_creations.len() >= MAX_TRACKED_IPS {
                 return Err(Duration::from_secs(1));
@@ -204,14 +195,14 @@ impl IpRateLimiter {
         let mut entry = self.account_creations.entry(ip).or_default();
         entry.retain(|&ts| now.saturating_duration_since(ts) < ACCOUNT_CREATION_WINDOW);
         if entry.len() >= MAX_ACCOUNT_CREATIONS_PER_WINDOW {
-            let wait = ACCOUNT_CREATION_WINDOW.saturating_sub(now.saturating_duration_since(entry[0]));
+            let wait =
+                ACCOUNT_CREATION_WINDOW.saturating_sub(now.saturating_duration_since(entry[0]));
             return Err(wait.max(Duration::from_secs(1)));
         }
         entry.push(now);
         Ok(())
     }
 
-    /// Clears the login burst cooldown for `ip` (superseded by per-session bypass on `SessionHandle`).
     #[allow(dead_code)]
     pub fn clear_login_cooldown(&self, ip: IpAddr) {
         if let Some(mut entry) = self.buckets.get_mut(&ip) {
@@ -219,14 +210,16 @@ impl IpRateLimiter {
         }
     }
 
-    /// Enforces a bounded per-IP bulk/asset request burst limit (max 30 requests / 10s, loopback exempt).
     pub fn check_asset_burst(&self, ip: IpAddr) -> bool {
         if ip.is_loopback() {
             return true;
         }
         let now = Instant::now();
-        if self.asset_bursts.len() >= MAX_ASSET_BURST_TRACKED_IPS && !self.asset_bursts.contains_key(&ip) {
-            self.asset_bursts.retain(|_, (start, _)| now.saturating_duration_since(*start) < ASSET_BURST_WINDOW);
+        if self.asset_bursts.len() >= MAX_ASSET_BURST_TRACKED_IPS
+            && !self.asset_bursts.contains_key(&ip)
+        {
+            self.asset_bursts
+                .retain(|_, (start, _)| now.saturating_duration_since(*start) < ASSET_BURST_WINDOW);
             if self.asset_bursts.len() >= MAX_ASSET_BURST_TRACKED_IPS {
                 return false;
             }
@@ -243,58 +236,66 @@ impl IpRateLimiter {
         true
     }
 
-    /// Prunes idle per-IP buckets whose connection count is zero and login cooldown has elapsed.
     pub fn prune_idle(&self) {
         let now = Instant::now();
         self.buckets.retain(|_, (count, last)| {
             *count > 0
-                || last.is_some_and(|prev| now.saturating_duration_since(prev) < self.login_cooldown)
+                || last
+                    .is_some_and(|prev| now.saturating_duration_since(prev) < self.login_cooldown)
         });
         self.account_creations.retain(|_, timestamps| {
             timestamps.retain(|&ts| now.saturating_duration_since(ts) < ACCOUNT_CREATION_WINDOW);
             !timestamps.is_empty()
         });
-        self.asset_bursts.retain(|_, (start, _)| now.saturating_duration_since(*start) < ASSET_BURST_WINDOW);
+        self.asset_bursts
+            .retain(|_, (start, _)| now.saturating_duration_since(*start) < ASSET_BURST_WINDOW);
     }
 }
 
 /// Active authenticated player state tracked per connected session.
 #[derive(Debug, Clone)]
 pub struct ActivePlayerEntry {
-    /// Connected session handle.
     pub handle: SessionHandle,
-    /// Generational session key inside `ZoneActor`.
     pub session_key: SessionKey,
-    /// Active zone entity key, if spawned in-world.
     pub entity_key: Option<EntityKey>,
-    /// Database snapshot updated across gameplay actions for crash-safe persistence.
     pub snapshot: PlayerSnapshot,
-    /// Whether account has admin privileges.
     pub is_admin: bool,
-    /// Whether account is activated (`account.active != 0`).
     pub activated: bool,
-    /// Currently selected skill template ID (`SKILL_SELECT`).
     pub selected_skill: i16,
-    /// Timestamp (`ms`) of last Magic Pea consumption.
     pub last_pea_ms: i64,
-    /// Current PK flag color (`CHANGE_FLAG`).
     pub c_flag: i8,
 }
 
 /// Concurrent session & player registry replacing `Client.java` and `ServerNotify.java`.
 #[derive(Debug, Default)]
 pub struct ClientRegistry {
-    /// Connected sessions keyed by `SessionHandle::id()`.
     pub sessions: DashMap<u64, SessionHandle>,
-    /// Authenticated players keyed by `SessionHandle::id()`.
     pub authenticated: DashMap<u64, ActivePlayerEntry>,
-    /// Account-to-session index preventing dual-login dupes.
     pub accounts: DashMap<AccountId, u64>,
-    /// Player-to-session index for whispers, trades, and kicks.
     pub players: DashMap<PlayerId, u64>,
 }
 
 impl ClientRegistry {
+    /// Synchronously detaches `old_sid` from `authenticated`, `players`, `accounts`, and `sessions`,
+    /// disconnecting its TCP session handle and returning its [`ActivePlayerEntry`] for immediate save.
+    pub fn take_session_for_eviction(&self, old_sid: u64) -> Option<ActivePlayerEntry> {
+        let entry = self.authenticated.remove(&old_sid).map(|(_, e)| e);
+        if let Some(ref ev) = entry {
+            self.players
+                .remove_if(&ev.snapshot.id, |_, s| *s == old_sid);
+            if let Some(acc) = ev.snapshot.account_id {
+                self.accounts.remove_if(&acc, |_, s| *s == old_sid);
+            }
+        }
+        self.accounts.retain(|_, s| *s != old_sid);
+        if let Some((_, handle)) = self.sessions.remove(&old_sid) {
+            handle.disconnect();
+        } else if let Some(ref ev) = entry {
+            ev.handle.disconnect();
+        }
+        entry
+    }
+
     /// Evicts any existing session on `account_id` and binds `entry`, returning the evicted entry if any.
     pub fn bind_authenticated(
         &self,
@@ -307,7 +308,11 @@ impl ClientRegistry {
             && old_sid != session_id
         {
             evicted = self.authenticated.remove(&old_sid).map(|(_, e)| e);
-            if let Some(old_handle) = self.sessions.get(&old_sid) {
+            if let Some(ref ev) = evicted {
+                self.players
+                    .remove_if(&ev.snapshot.id, |_, s| *s == old_sid);
+            }
+            if let Some((_, old_handle)) = self.sessions.remove(&old_sid) {
                 old_handle.disconnect();
             }
         }
@@ -344,7 +349,10 @@ impl ClientRegistry {
         let found = self
             .authenticated
             .iter()
-            .find(|e| e.value().snapshot.name.eq_ignore_ascii_case(needle) || e.value().snapshot.id.0.to_string() == needle)
+            .find(|e| {
+                e.value().snapshot.name.eq_ignore_ascii_case(needle)
+                    || e.value().snapshot.id.0.to_string() == needle
+            })
             .map(|e| *e.key());
         if let Some(sid) = found
             && let Some(h) = self.sessions.get(&sid)
@@ -364,20 +372,22 @@ pub struct MaintenanceCoordinator {
 }
 
 impl MaintenanceCoordinator {
-    /// Returns `true` once maintenance countdown has locked logins.
     #[must_use]
-    pub fn is_maintaining(&self) -> bool { self.maintaining.load(Ordering::Acquire) }
-    /// Claims the single `AutoMaintenance` scheduler slot.
+    pub fn is_maintaining(&self) -> bool {
+        self.maintaining.load(Ordering::Acquire)
+    }
     #[must_use]
     pub fn try_claim_auto_scheduler(&self) -> bool {
-        self.auto_scheduler_claimed.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok()
+        self.auto_scheduler_claimed
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
     }
-    /// Transitions into maintenance mode at most once.
     #[must_use]
     pub fn try_begin_maintenance(&self) -> bool {
-        self.maintaining.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok()
+        self.maintaining
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
     }
-    /// Explicitly toggles maintenance mode from the admin control panel.
     pub fn set_maintaining(&self, enabled: bool) {
         self.maintaining.store(enabled, Ordering::SeqCst);
     }

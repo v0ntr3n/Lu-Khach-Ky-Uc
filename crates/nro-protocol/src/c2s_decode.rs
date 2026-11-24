@@ -11,7 +11,11 @@ use crate::{
 
 impl ClientPacket {
     /// Decodes a C2S `cmd` and payload `reader` according to `Controller.java` and `client_version`.
-    pub fn decode(cmd: i8, reader: &mut PacketReader<'_>, client_version: i32) -> Result<Self, ProtocolError> {
+    pub fn decode(
+        cmd: i8,
+        reader: &mut PacketReader<'_>,
+        client_version: i32,
+    ) -> Result<Self, ProtocolError> {
         let r = reader;
         Ok(match cmd {
             -127 => Self::LuckyRoundOpen(r.read_i8().ok(), r.read_i8().ok()),
@@ -48,14 +52,20 @@ impl ClientPacket {
             -91 => Self::MapTransport(r.read_i8().ok()),
             -87 => Self::UpdateData,
             -86 => Self::Trade(match r.read_i8()? {
-                a @ (0 | 1) => TradeAction::InviteOrAccept(a, r.read_i32().ok().map(PlayerId::from)),
+                a @ (0 | 1) => {
+                    TradeAction::InviteOrAccept(a, r.read_i32().ok().map(PlayerId::from))
+                }
                 2 => TradeAction::AddItem(r.read_i8()?, r.read_i32()?),
                 4 => TradeAction::RemoveItem(r.read_i8()?),
                 a => TradeAction::StateChange(a),
             }),
             -81 => {
                 let action = r.read_i8()?;
-                let items = if action == 1 { read_vec(r, PacketReader::read_i8)? } else { Vec::new() };
+                let items = if action == 1 {
+                    read_vec(r, PacketReader::read_i8)?
+                } else {
+                    Vec::new()
+                };
                 Self::CombinePreview(action, items)
             }
             -80 => Self::FriendList(decode_social(r)?),
@@ -81,7 +91,12 @@ impl ClientPacket {
             -55 => Self::ClanLeaveMenu,
             -54 => Self::ClanDonate(r.read_i32().ok()),
             -53 => Self::ClanInfo(r.read_i16()?),
-            -51 => Self::ClanMessage(match r.read_i8()? { 0 => ClanMessageAction::Chat(r.read_utf()?), 1 => ClanMessageAction::AskForPea, 2 => ClanMessageAction::AskForJoin(r.read_i32()?), x => ClanMessageAction::Unknown(x) }),
+            -51 => Self::ClanMessage(match r.read_i8()? {
+                0 => ClanMessageAction::Chat(r.read_utf()?),
+                1 => ClanMessageAction::AskForPea,
+                2 => ClanMessageAction::AskForJoin(r.read_i32()?),
+                x => ClanMessageAction::Unknown(x),
+            }),
             -50 => Self::ClanMemberList(r.read_i32()?),
             -49 => Self::ClanJoinDecision(r.read_i32()?, r.read_i8()?),
             -47 => Self::ClanSearch(r.read_utf()?),
@@ -91,10 +106,34 @@ impl ClientPacket {
                 4 => ClanInfoAction::Update(r.read_i16()?, r.read_utf()?),
                 x => ClanInfoAction::Unknown(x),
             }),
-            -45 => { let s = r.read_i8()?; Self::SkillNotFocus(s, (s == 20).then(|| Ok::<_, ProtocolError>(SkillSpecialArgs { skill_id: r.read_i8()?, dx: r.read_i16()?, dy: r.read_i16()?, dir: r.read_i8()?, x: r.read_i16()?, y: r.read_i16()? })).transpose()?) }
+            -45 => {
+                let s = r.read_i8()?;
+                Self::SkillNotFocus(
+                    s,
+                    (s == 20)
+                        .then(|| {
+                            Ok::<_, ProtocolError>(SkillSpecialArgs {
+                                skill_id: r.read_i8()?,
+                                dx: r.read_i16()?,
+                                dy: r.read_i16()?,
+                                dir: r.read_i8()?,
+                                x: r.read_i16()?,
+                                y: r.read_i16()?,
+                            })
+                        })
+                        .transpose()?,
+                )
+            }
             -43 => {
                 let (t, w, idx) = (r.read_i8()?, r.read_i8()?, r.read_i8()?);
-                Self::UseItem(t, w, idx, (idx == -1).then(|| r.read_i16().map(TemplateId)).transpose()?)
+                Self::UseItem(
+                    t,
+                    w,
+                    idx,
+                    (idx == -1)
+                        .then(|| r.read_i16().map(TemplateId))
+                        .transpose()?,
+                )
             }
             -41 => Self::UpdateCaption(r.read_i8()?),
             -40 => Self::GetItemMove(r.read_i8()?, r.read_i8()?),
@@ -105,7 +144,10 @@ impl ClientPacket {
             -32 => Self::BackgroundTemplate(TemplateId(r.read_i16()?)),
             -30 => match r.read_i8()? {
                 16 => Self::PotentialUp(r.read_i8()?, r.read_i16()?),
-                17 => Self::SkillUp { template_id: r.read_i16()?, point: r.read_i8()? },
+                17 => Self::SkillUp {
+                    template_id: r.read_i16()?,
+                    point: r.read_i8()?,
+                },
                 19 => Self::BoxSort,
                 61 => Self::LoadRms(r.read_utf()?),
                 63 => Self::GetPlayerMenu(PlayerId::from(r.read_i32()?)),
@@ -120,7 +162,10 @@ impl ClientPacket {
                 8 => Self::UpdateItem,
                 10 => Self::RequestMapTemplate(MapId(i16::from(r.read_u8()?))),
                 13 => Self::ClientOk,
-                18 => Self::ChangeName { player_id: r.read_i32()?, name: r.read_utf()? },
+                18 => Self::ChangeName {
+                    player_id: r.read_i32()?,
+                    name: r.read_utf()?,
+                },
                 s => Self::NotMapUnknown(s),
             },
             -27 => Self::GetSessionId,
@@ -138,7 +183,10 @@ impl ClientPacket {
             7 => Self::ShopSell(r.read_i8()?, r.read_i8()?, r.read_i16()?),
             11 => Self::RequestMobTemplate(r.read_i16()?),
             18 => Self::GotoPlayer(PlayerId::from(r.read_i32()?)),
-            21 => { let z = r.read_i8()?; Self::ZoneChange(z, u16::try_from(z).ok().map(ZoneId)) }
+            21 => {
+                let z = r.read_i8()?;
+                Self::ZoneChange(z, u16::try_from(z).ok().map(ZoneId))
+            }
             22 => {
                 let npc = r.read_i8()?;
                 let select = r.read_i8()?;
@@ -154,7 +202,11 @@ impl ClientPacket {
                 let npc_id = r.read_i8()?;
                 let menu_id = r.read_i8()?;
                 let option_id = if r.remaining() >= 1 { r.read_i8()? } else { -1 };
-                Self::TaskGet { npc_id, menu_id, option_id }
+                Self::TaskGet {
+                    npc_id,
+                    menu_id,
+                    option_id,
+                }
             }
             42 => Self::UserInfoDisabled,
             44 => Self::ChatMap(r.read_utf()?),
@@ -163,7 +215,11 @@ impl ClientPacket {
             112 => Self::IntrinsicMenu(r.read_i8().unwrap_or(0)),
             125 => Self::Fusion(r.read_i8()?),
             126 => Self::AndroidPackNoop,
-            127 => Self::Radar(match r.read_i8()? { 0 => RadarAction::OpenList, 1 => RadarAction::ToggleCard(TemplateId(r.read_i16()?)), x => RadarAction::Unknown(x) }),
+            127 => Self::Radar(match r.read_i8()? {
+                0 => RadarAction::OpenList,
+                1 => RadarAction::ToggleCard(TemplateId(r.read_i16()?)),
+                x => RadarAction::Unknown(x),
+            }),
             other => Self::Unhandled(other),
         })
     }
@@ -185,8 +241,8 @@ fn decode_attack_mobs(r: &mut PacketReader<'_>) -> Result<ClientPacket, Protocol
     let mut mobs = Vec::new();
     let mut mob_mes = Vec::new();
     while r.remaining() > 1 && mobs.len() + mob_mes.len() < MAX_ATTACK_TARGETS {
-        let m = r.read_i8()?;
-        if m == -1 {
+        let m = r.read_u8()?;
+        if m == 0xFF {
             if r.remaining() < 5 {
                 break;
             }
@@ -207,10 +263,10 @@ fn decode_attack_players(r: &mut PacketReader<'_>) -> Result<ClientPacket, Proto
 }
 
 fn decode_attack_multi(r: &mut PacketReader<'_>) -> Result<ClientPacket, ProtocolError> {
-    let mob_count = usize::try_from(r.read_i8()?).unwrap_or(0);
+    let mob_count = usize::from(r.read_u8()?);
     let mut mobs = Vec::with_capacity(mob_count.min(MAX_ATTACK_TARGETS));
     for _ in 0..mob_count {
-        let m = r.read_i8()?;
+        let m = r.read_u8()?;
         if mobs.len() < MAX_ATTACK_TARGETS {
             mobs.push(m);
         }
@@ -222,14 +278,26 @@ fn decode_attack_multi(r: &mut PacketReader<'_>) -> Result<ClientPacket, Protoco
     Ok(ClientPacket::AttackMulti(mobs, players))
 }
 
-fn read_vec<'a, T>(r: &mut PacketReader<'a>, f: fn(&mut PacketReader<'a>) -> Result<T, ProtocolError>) -> Result<Vec<T>, ProtocolError> {
-    let n = usize::try_from(r.read_i8()?).unwrap_or(0);
+fn read_vec<'a, T>(
+    r: &mut PacketReader<'a>,
+    f: fn(&mut PacketReader<'a>) -> Result<T, ProtocolError>,
+) -> Result<Vec<T>, ProtocolError> {
+    let n = usize::from(r.read_u8()?);
     (0..n).map(|_| f(r)).collect()
 }
 
 fn decode_consign(r: &mut PacketReader<'_>, v: i32) -> Result<ConsignAction, ProtocolError> {
     Ok(match r.read_i8()? {
-        0 => ConsignAction::Create(TemplateId(r.read_i16()?), r.read_i8()?, r.read_i32()?, if v >= 220 || r.remaining() >= 4 { r.read_i32()? } else { i32::from(r.read_i8()?) }),
+        0 => ConsignAction::Create(
+            TemplateId(r.read_i16()?),
+            r.read_i8()?,
+            r.read_i32()?,
+            if v >= 220 || r.remaining() >= 4 {
+                r.read_i32()?
+            } else {
+                i32::from(r.read_i8()?)
+            },
+        ),
         a @ (1 | 2) => ConsignAction::ClaimOrCancel(a, TemplateId(r.read_i16()?)),
         3 => ConsignAction::Buy(TemplateId(r.read_i16()?), r.read_i8()?, r.read_i32()?),
         4 => ConsignAction::OpenTab(r.read_i8()?, r.read_i8()?),
@@ -240,7 +308,11 @@ fn decode_consign(r: &mut PacketReader<'_>, v: i32) -> Result<ConsignAction, Pro
 
 fn decode_social(r: &mut PacketReader<'_>) -> Result<SocialAction, ProtocolError> {
     let read_pid = |r: &mut PacketReader<'_>| -> Result<PlayerId, ProtocolError> {
-        Ok(PlayerId::from(if r.remaining() >= 4 { r.read_i32()? } else { -1 }))
+        Ok(PlayerId::from(if r.remaining() >= 4 {
+            r.read_i32()?
+        } else {
+            -1
+        }))
     };
     Ok(match r.read_i8()? {
         0 => SocialAction::OpenList,
@@ -255,9 +327,18 @@ fn decode_not_login(r: &mut PacketReader<'_>) -> Result<ClientPacket, ProtocolEr
         0 => {
             let username = r.read_utf()?;
             let password = r.read_utf()?;
-            let version = if r.remaining() >= 2 { r.read_utf()? } else { String::new() };
+            let version = if r.remaining() >= 2 {
+                r.read_utf()?
+            } else {
+                String::new()
+            };
             let login_type = if r.remaining() >= 1 { r.read_i8()? } else { 0 };
-            ClientPacket::Login { username, password, version, login_type }
+            ClientPacket::Login {
+                username,
+                password,
+                version,
+                login_type,
+            }
         }
         1 => {
             let username = r.read_utf()?;
@@ -268,60 +349,37 @@ fn decode_not_login(r: &mut PacketReader<'_>) -> Result<ClientPacket, ProtocolEr
             } else {
                 None
             };
-            ClientPacket::Register { username, password, guest_user }
+            ClientPacket::Register {
+                username,
+                password,
+                guest_user,
+            }
         }
         2 => {
             let (type_client, zoom_level, is_gprs) = (r.read_i8()?, r.read_u8()?, r.read_bool()?);
             let (width, height) = (r.read_i32()?, r.read_i32()?);
             let (is_qwerty, is_touch, platform) = (r.read_bool()?, r.read_bool()?, r.read_utf()?);
-            let parsed_version = platform.split('|').nth(1).and_then(|s| s.replace('.', "").parse().ok()).unwrap_or(0);
-            ClientPacket::SetClientType(ClientTypeInfo { type_client, zoom_level, is_gprs, width, height, is_qwerty, is_touch, platform, parsed_version })
+            let parsed_version = platform
+                .split('|')
+                .nth(1)
+                .and_then(|s| s.replace('.', "").parse().ok())
+                .unwrap_or(0);
+            ClientPacket::SetClientType(ClientTypeInfo {
+                type_client,
+                zoom_level,
+                is_gprs,
+                width,
+                height,
+                is_qwerty,
+                is_touch,
+                platform,
+                parsed_version,
+            })
         }
         s => ClientPacket::NotLoginUnknown(s),
     })
 }
 
 #[cfg(test)]
-mod clan_image_tests {
-    use super::*;
-    use crate::frame::PacketWriter;
-
-    #[test]
-    fn decodes_unsigned_clan_image_flag_id_above_127() {
-        let mut pw = PacketWriter::new();
-        pw.write_u8(200);
-        let pkt = pw.finish(-62);
-        assert_eq!(
-            ClientPacket::decode(pkt.cmd, &mut pkt.reader(), 231).expect("-62"),
-            ClientPacket::ClanImageChoose(200)
-        );
-    }
-
-    #[test]
-    fn attack_decoders_keep_final_mob_and_cap_targets() {
-        let mut pw = PacketWriter::new();
-        pw.write_i8(1);
-        pw.write_i8(2);
-        pw.write_i8(3);
-        pw.write_i8(1);
-        let pkt = pw.finish(54);
-        assert_eq!(
-            ClientPacket::decode(pkt.cmd, &mut pkt.reader(), 231).expect("54"),
-            ClientPacket::AttackMobs(vec![1, 2, 3], vec![])
-        );
-
-        let mut pw_cap = PacketWriter::new();
-        for i in 0..50_i8 {
-            pw_cap.write_i8(i);
-        }
-        pw_cap.write_i8(1);
-        let pkt_cap = pw_cap.finish(54);
-        if let ClientPacket::AttackMobs(mobs, _) =
-            ClientPacket::decode(pkt_cap.cmd, &mut pkt_cap.reader(), 231).expect("54 cap")
-        {
-            assert_eq!(mobs.len(), MAX_ATTACK_TARGETS);
-        } else {
-            panic!("expected AttackMobs");
-        }
-    }
-}
+#[path = "c2s_clan_tests.rs"]
+mod clan_image_tests;

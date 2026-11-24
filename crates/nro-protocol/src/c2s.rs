@@ -202,7 +202,7 @@ pub enum ClientPacket {
     /// `-7`: Player movement `(move_type, to_x, optional_to_y)`.
     PlayerMove(i8, i16, Option<i16>),
     /// `-4 | 67`: Simultaneous multi-target mob & player AoE attack (`SEND_PLAYER_ATTACK`).
-    AttackMulti(Vec<i8>, Vec<PlayerId>),
+    AttackMulti(Vec<u8>, Vec<PlayerId>),
     /// `6`: Buy item from shop `(buy_type, item_id, quantity)` (`quantity` defaults to `1`).
     ShopBuy(i8, TemplateId, i16),
     /// `7`: Confirm (`0`) or execute (`!= 0`) item sale `(action, where_slot, index)`.
@@ -238,8 +238,8 @@ pub enum ClientPacket {
     UserInfoDisabled,
     /// `44`: Local map chat or admin/pet command (`CHAT_MAP`).
     ChatMap(String),
-    /// `54`: Attack one or more mobs (`mob_id >= 0`) and/or `MobMe` targets (`mob_id == -1`, `master_id`).
-    AttackMobs(Vec<i8>, Vec<PlayerId>),
+    /// `54`: Attack one or more mobs (`mob_id != 0xFF`) and/or `MobMe` targets (`mob_id == 0xFF`, `master_id`).
+    AttackMobs(Vec<u8>, Vec<PlayerId>),
     /// `66`: Request named image asset (`GET_IMG_BY_NAME`).
     GetImgByName(String),
     /// `112`: Show Intrinsic (`Nội tại`) menu (`SPEACIAL_SKILL`).

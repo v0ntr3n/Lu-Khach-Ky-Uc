@@ -9,6 +9,8 @@ use gpui_kit::*;
 use crate::app::{AdminApp, LogLevelFilter};
 use crate::log_buffer::LogLevel;
 
+const MAX_RENDERED_LOG_ROWS: usize = 250;
+
 fn level_matches(filter: LogLevelFilter, level: LogLevel) -> bool {
     match filter {
         LogLevelFilter::All => true,
@@ -28,19 +30,14 @@ impl AdminApp {
         let border = cx.theme().border;
         let fg = cx.theme().foreground;
         let muted = cx.theme().muted_foreground;
-        let keyword = self
-            .log_search_input
-            .read(cx)
-            .value()
-            .trim()
-            .to_ascii_lowercase();
+        let keyword = self.log_search_input.read(cx).value().trim().to_lowercase();
 
         let filtered: Vec<_> = self
             .logs
             .iter()
             .filter(|entry| {
                 level_matches(self.log_level_filter, entry.level)
-                    && (keyword.is_empty() || entry.text.to_ascii_lowercase().contains(&keyword))
+                    && (keyword.is_empty() || entry.text.to_lowercase().contains(&keyword))
             })
             .collect();
 
@@ -60,7 +57,8 @@ impl AdminApp {
         if filtered.is_empty() {
             list = list.child(Label::new("Chưa có dòng log nào phù hợp bộ lọc."));
         } else {
-            for entry in &filtered {
+            let start = filtered.len().saturating_sub(MAX_RENDERED_LOG_ROWS);
+            for entry in &filtered[start..] {
                 let color = match entry.level {
                     LogLevel::Error => rgb(0xef4444).into(),
                     LogLevel::Warn => rgb(0xf59e0b).into(),
@@ -167,7 +165,7 @@ impl AdminApp {
                     )
                     .child(Label::new(format!(
                         "{}/{} dòng",
-                        filtered.len(),
+                        filtered.len().min(MAX_RENDERED_LOG_ROWS),
                         self.logs.len()
                     ))),
             )

@@ -1,5 +1,6 @@
 //! Main GPUI Kit 3-tab dashboard & user control state for `nro-server-gui`.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use chrono::Local;
@@ -61,6 +62,7 @@ pub(crate) fn format_num(n: i64) -> String {
 pub struct AdminApp {
     pub(crate) boot_state: Arc<Mutex<BootState>>,
     pub(crate) control: Option<AdminControl>,
+    pub(crate) window_closed: Arc<AtomicBool>,
     pub(crate) boot_error: Option<String>,
     pub(crate) summary: Option<ServerSummary>,
     pub(crate) online_count: usize,
@@ -99,10 +101,25 @@ pub struct AdminApp {
     _subscriptions: Vec<Subscription>,
 }
 
+impl Drop for AdminApp {
+    fn drop(&mut self) {
+        self.shutting_down = true;
+        if let Some(ctrl) = &self.control {
+            ctrl.trigger_shutdown();
+        } else if let Ok(guard) = self.boot_state.lock()
+            && let BootState::Ready(ctrl) = &*guard
+        {
+            ctrl.trigger_shutdown();
+        }
+        self.window_closed.store(true, Ordering::Release);
+    }
+}
+
 impl AdminApp {
     pub(crate) fn new(
         boot_state: Arc<Mutex<BootState>>,
         log_buffer: LogBuffer,
+        window_closed: Arc<AtomicBool>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -153,6 +170,7 @@ impl AdminApp {
         let mut app = Self {
             boot_state,
             control: None,
+            window_closed,
             boot_error: None,
             summary: None,
             online_count: 0,

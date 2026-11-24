@@ -148,15 +148,15 @@ impl ServerSessionHandler {
         let mut guard = match self.try_reserve_account(auth.user_id, session.id()) {
             Ok(g) => g,
             Err(old_sid) => {
-                if let Some(h) = self.shared.clients.sessions.get(&old_sid) {
-                    h.disconnect();
-                }
+                self.evict_online_session(old_sid).await;
                 return send_dialog(
                     session,
                     "Tài khoản đang đăng nhập ở nơi khác, vui lòng thử lại sau vài giây!",
                 );
             }
         };
+        self.evict_account_sessions(auth.user_id, session.id())
+            .await;
         match self
             .shared
             .players_repo
@@ -252,41 +252,56 @@ impl ServerSessionHandler {
             return Ok(());
         }
         let ip_str = session.ip().to_string();
-        if let Some(guest) = guest_user.map(str::trim).filter(|s| !s.is_empty())
-            && let Ok(Some(acc)) = self.shared.accounts_repo.get_by_username(guest)
-        {
-            let ip_ok = acc
-                .ip_address
-                .as_deref()
-                .is_none_or(|ip| ip.is_empty() || ip == ip_str);
-            if session.account_id() != AccountId(acc.id) && !ip_ok {
-                session
-                    .send(s2c_packets::register_result(
-                        false,
-                        "Phiên đăng nhập không khớp tài khoản khách!",
-                    ))
-                    .await?;
-                return Ok(());
-            }
-            if let Some(old_sid) = self
-                .shared
-                .clients
-                .accounts
-                .get(&AccountId(acc.id))
-                .map(|s| *s)
-                && old_sid != session.id()
-                && let Some(h) = self.shared.clients.sessions.get(&old_sid)
-            {
-                h.disconnect();
+        let trimmed_guest = guest_user.map(str::trim).filter(|s| !s.is_empty());
+        let mut guest_acc_id = None;
+        if let Some(guest) = trimmed_guest {
+            match self.shared.accounts_repo.get_by_username(guest) {
+                Ok(Some(acc)) => {
+                    let ip_ok = acc
+                        .ip_address
+                        .as_deref()
+                        .is_none_or(|ip| ip.is_empty() || ip == ip_str);
+                    if session.account_id() != AccountId(acc.id) && !ip_ok {
+                        session
+                            .send(s2c_packets::register_result(
+                                false,
+                                "Phiên đăng nhập không khớp tài khoản khách!",
+                            ))
+                            .await?;
+                        return Ok(());
+                    }
+                    guest_acc_id = Some(AccountId(acc.id));
+                }
+                Ok(None) => {
+                    session
+                        .send(s2c_packets::register_result(
+                            false,
+                            "Tài khoản ảo không tồn tại hoặc đã đăng ký!",
+                        ))
+                        .await?;
+                    return Ok(());
+                }
+                Err(err) => {
+                    warn!(%guest, error = %err, "database error looking up guest account");
+                    session
+                        .send(s2c_packets::register_result(
+                            false,
+                            "Đăng ký thất bại, vui lòng thử lại!",
+                        ))
+                        .await?;
+                    return Ok(());
+                }
             }
         }
         match self
             .shared
             .accounts_repo
-            .register_account(username, password, guest_user, &ip_str, Utc::now())
+            .register_account(username, password, trimmed_guest, &ip_str, Utc::now())
             .await
         {
             Ok(acc) => {
+                let evict_acc = guest_acc_id.unwrap_or(AccountId(acc.id));
+                self.evict_account_sessions(evict_acc, session.id()).await;
                 info!(sid = session.id(), account_id = acc.id, username = %acc.username, "registered account");
                 session.grant_auth_cooldown_bypass();
                 session.send(s2c_packets::register_result(true, "")).await?;

@@ -26,6 +26,16 @@ pub(self) fn pet_unfusion_cooldown() -> &'static DashMap<PlayerId, i64> {
     PET_UNFUSION_COOLDOWN.get_or_init(DashMap::new)
 }
 
+pub(super) fn is_pet_fusion_on_cooldown(pid: PlayerId, now_ms: i64) -> bool {
+    pet_unfusion_cooldown()
+        .get(&pid)
+        .is_some_and(|t| now_ms.saturating_sub(*t) < PET_FUSION_COOLDOWN_MS)
+}
+
+pub(super) fn record_pet_unfusion_cooldown(pid: PlayerId, now_ms: i64) {
+    pet_unfusion_cooldown().insert(pid, now_ms);
+}
+
 static LAST_FUSION_ENTER_MS: OnceLock<DashMap<PlayerId, i64>> = OnceLock::new();
 pub(super) fn last_fusion_enter_ms() -> &'static DashMap<PlayerId, i64> {
     LAST_FUSION_ENTER_MS.get_or_init(DashMap::new)
@@ -41,15 +51,20 @@ pub(super) fn clear_clan_invites(pid: PlayerId) {
 }
 
 impl ServerSessionHandler {
-    pub(crate) async fn on_pet_combat_progress(
+    pub(crate) fn on_pet_combat_progress(
         &self,
         session: &SessionHandle,
         sid: u64,
         killed_mob: Option<i16>,
     ) {
-        let _ = self.advance_task_on_power(session, sid).await;
+        let mut pkts = self.collect_task_on_power_pkts(sid);
         if let Some(mob_tid) = killed_mob {
-            let _ = self.advance_task_on_mob_kill(session, sid, mob_tid).await;
+            pkts.extend(self.collect_task_on_mob_kill_pkts(sid, mob_tid));
+        }
+        if session.sent_key() {
+            for p in pkts {
+                let _ = session.try_send(p);
+            }
         }
     }
 
@@ -60,23 +75,6 @@ impl ServerSessionHandler {
     ) -> Result<(), ProtocolError> {
         if let Some(pet_pkt) = self.pkt_pet_detail(snap) {
             session.send(pet_pkt).await?;
-        }
-        if snap.intrinsic.intrinsic_id > 0
-            && let Some(intr) = self
-                .shared
-                .templates
-                .intrinsics
-                .iter()
-                .find(|r| r.id == i32::from(snap.intrinsic.intrinsic_id))
-        {
-            session
-                .send(s2c_packets::intrinsic_info(
-                    intr.icon as i16,
-                    &intr
-                        .name
-                        .replacen('#', &snap.intrinsic.param1.to_string(), 1),
-                )?)
-                .await?;
         }
         if snap.clan_id.0 >= 0
             && let Ok(clan_opt) = self.shared.clans_repo.get_by_id(snap.clan_id).await

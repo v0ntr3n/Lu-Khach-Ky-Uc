@@ -1,12 +1,12 @@
 //! Pet appearance resolution and `PET_INFO (-107)` wire serialization.
 
 use nro_consts::cmd_message;
-use nro_core::{Gender, ItemInstance};
+use nro_core::{Gender, ParityMode};
 use nro_db::{json_columns::PetSnapshot, player_repo::PlayerSnapshot, templates::GameTemplates};
 use nro_protocol::{Packet, PacketWriter};
 use nro_world::s2c_packets;
 
-use super::{is_valid_item, is_valid_part};
+use super::{compute_pet_npoint, is_valid_part};
 use crate::runtime::SharedServerState;
 
 const CAPTION_THRESHOLDS: [i64; 22] = [
@@ -117,7 +117,7 @@ pub(crate) fn resolve_pet_appearance(
 ) -> (i16, i16, i16, i16) {
     let g = usize::from(u8::from(pet.gender)).min(2);
     let valid_triplet = |(h, b, l): (i16, i16, i16)| {
-        is_valid_part(tpl, h) && is_valid_part(tpl, b) && is_valid_part(tpl, l)
+        is_valid_part(tpl, h, 0) && is_valid_part(tpl, b, 1) && is_valid_part(tpl, l, 2)
     };
     let (mut head, mut body, mut leg) = match pet.type_pet {
         1 => (297_i16, 298_i16, 299_i16),
@@ -129,7 +129,7 @@ pub(crate) fn resolve_pet_appearance(
             .into_iter()
             .find(|&t| valid_triplet(t))
             .unwrap_or((297, 298, 299)),
-        4 => [(882, 883, 884), (297, 298, 299)]
+        4 => [(876, 877, 878), (297, 298, 299)]
             .into_iter()
             .find(|&t| valid_triplet(t))
             .unwrap_or((297, 298, 299)),
@@ -138,17 +138,18 @@ pub(crate) fn resolve_pet_appearance(
             if valid_triplet(adult) {
                 adult
             } else {
-                ([303, 304, 305][g], [57, 59, 57][g], [60, 60, 61][g])
+                ([303, 304, 305][g], [57, 59, 57][g], [58, 60, 58][g])
             }
         }
-        _ => ([303, 304, 305][g], [57, 59, 57][g], [60, 60, 61][g]),
+        _ => ([303, 304, 305][g], [57, 59, 57][g], [58, 60, 58][g]),
     };
 
     let item_part = |slot: usize| -> Option<i16> {
         let tid = pet.items_body.get(slot)?.as_ref()?.template_id.0;
         let rec = tpl.items.iter().find(|r| r.id == i32::from(tid))?;
         let p = rec.part as i16;
-        is_valid_part(tpl, p).then_some(p)
+        let exp_type = if slot == 0 { 1 } else { 2 };
+        is_valid_part(tpl, p, exp_type).then_some(p)
     };
     if let Some(p_body) = item_part(0) {
         body = p_body;
@@ -162,32 +163,32 @@ pub(crate) fn resolve_pet_appearance(
             .iter()
             .find(|r| r.id == i32::from(disg.template_id.0))
     {
-        if is_valid_part(tpl, rec.head as i16) {
+        if is_valid_part(tpl, rec.head as i16, 0) {
             head = rec.head as i16;
         }
-        if is_valid_part(tpl, rec.body as i16) {
+        if is_valid_part(tpl, rec.body as i16, 1) {
             body = rec.body as i16;
         }
-        if is_valid_part(tpl, rec.leg as i16) {
+        if is_valid_part(tpl, rec.leg as i16, 2) {
             leg = rec.leg as i16;
         }
     }
-    if !is_valid_part(tpl, head) {
-        head = if is_valid_part(tpl, 297) {
+    if !is_valid_part(tpl, head, 0) {
+        head = if is_valid_part(tpl, 297, 0) {
             297
         } else {
             [303, 304, 305][g]
         };
     }
-    if !is_valid_part(tpl, body) {
-        body = if head == 297 && is_valid_part(tpl, 298) {
+    if !is_valid_part(tpl, body, 1) {
+        body = if head == 297 && is_valid_part(tpl, 298, 1) {
             298
         } else {
             [57, 59, 57][g]
         };
     }
-    if !is_valid_part(tpl, leg) {
-        leg = if head == 297 && is_valid_part(tpl, 299) {
+    if !is_valid_part(tpl, leg, 2) {
+        leg = if head == 297 && is_valid_part(tpl, 299, 2) {
             299
         } else {
             [58, 60, 58][g]
@@ -221,31 +222,33 @@ fn pet_tier_caption(gender: Gender, power: i64) -> &'static str {
     table[idx]
 }
 
-/// Builds opcode `-107` (`PET_INFO` mode `2`) with validated items, parts, skills, and `hp.max(0)`.
+/// Builds opcode `-107` (`PET_INFO` mode `2`) with validated items, parts, skills, `cGiamST`, and `cCritDameFull`.
 #[must_use]
 pub(crate) fn build_pet_detail_pkt(
     shared: &SharedServerState,
     snap: &PlayerSnapshot,
 ) -> Option<Packet> {
-    build_pet_detail_pkt_from_templates(&shared.templates, snap)
+    build_pet_detail_pkt_with_parity(&shared.templates, shared.config.parity_mode, snap)
 }
 
+#[cfg(test)]
 #[must_use]
 pub(crate) fn build_pet_detail_pkt_from_templates(
     templates: &GameTemplates,
     snap: &PlayerSnapshot,
 ) -> Option<Packet> {
+    build_pet_detail_pkt_with_parity(templates, ParityMode::Fixed, snap)
+}
+
+#[must_use]
+fn build_pet_detail_pkt_with_parity(
+    templates: &GameTemplates,
+    parity: ParityMode,
+    snap: &PlayerSnapshot,
+) -> Option<Packet> {
     let pet = snap.pet.as_ref()?;
     let (head, _, _, _) = resolve_pet_appearance(templates, pet);
-    let sanitized_body: Vec<Option<ItemInstance>> = pet
-        .items_body
-        .iter()
-        .map(|slot| {
-            slot.as_ref()
-                .filter(|it| is_valid_item(templates, it.template_id.0))
-                .cloned()
-        })
-        .collect();
+    let (npoint, sanitized_body) = compute_pet_npoint(templates, parity, pet);
     let mut w = PacketWriter::with_capacity(224);
     w.write_i8(2);
     w.write_i16(head);
@@ -274,7 +277,7 @@ pub(crate) fn build_pet_detail_pkt_from_templates(
     w.write_i16(pet.stats.max_stamina.clamp(1_000, i16::MAX as u16) as i16);
     w.write_i8(pet.stats.crit.min(i8::MAX as u8) as i8);
     w.write_i64(i64::from(pet.stats.def.max(0)));
-    let min_sk = if matches!(pet.type_pet, 3 | 4) { 5 } else { 4 };
+    let min_sk = if matches!(pet.type_pet, 2..=4) { 5 } else { 4 };
     let sk_n = pet.skills.len().max(min_sk).min(5);
     w.write_i8(sk_n as i8);
     for idx in 0..sk_n {
@@ -315,7 +318,7 @@ pub(crate) fn build_pet_detail_pkt_from_templates(
             let _ = w.write_utf(msg);
         }
     }
-    w.write_i8(0);
-    w.write_i16(0);
+    w.write_i8(npoint.mods.tl_giap.clamp(0, 86) as i8);
+    w.write_i16(npoint.mods.tl_sdcm.clamp(0, i32::from(i16::MAX)) as i16);
     Some(w.finish(cmd_message::PET_INFO))
 }

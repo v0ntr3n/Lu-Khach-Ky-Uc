@@ -109,13 +109,59 @@ pub(super) fn spawn_background_ticks(
     shared: Arc<SharedServerState>,
     shutdown: CancellationToken,
 ) {
+    let (autosave_shared, autosave_shutdown) = (Arc::clone(&shared), shutdown.clone());
+    tracker.spawn(async move {
+        let mut autosave_iv = tokio::time::interval(Duration::from_secs(60));
+        autosave_iv.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        loop {
+            tokio::select! {
+                () = autosave_shutdown.cancelled() => break,
+                _ = autosave_iv.tick() => {
+                    autosave_shared.rate_limiter.prune_idle();
+                    let sids: Vec<u64> = autosave_shared
+                        .clients
+                        .authenticated
+                        .iter()
+                        .map(|e| *e.key())
+                        .collect();
+                    if !sids.is_empty() {
+                        let mut saved = 0_usize;
+                        for sid in &sids {
+                            let Some((snap, now_ms)) = autosave_shared
+                                .clients
+                                .authenticated
+                                .get(sid)
+                                .map(|e| (e.snapshot.clone(), unix_now_ms()))
+                            else {
+                                continue;
+                            };
+                            if let Err(err) = autosave_shared
+                                .players_repo
+                                .save_player(&snap, None, autosave_shared.config.parity_mode, now_ms)
+                                .await
+                            {
+                                warn!(player_id = snap.id.0, error = %err, "periodic autosave failed for player");
+                            } else {
+                                saved += 1;
+                            }
+                        }
+                        debug!(saved, total = sids.len(), "completed periodic player autosave");
+                    }
+                }
+            }
+        }
+    });
+
     tracker.spawn(async move {
         let mut boss_iv = tokio::time::interval(Duration::from_millis(BOSS_TICK_MS));
         let mut lb_iv = tokio::time::interval(Duration::from_millis(LEADERBOARD_REFRESH_MS));
-        let mut lot_iv = tokio::time::interval(Duration::from_millis(LOTTERY_TICK_MS.max(TOURNAMENT_TICK_MS)));
+        let mut lot_iv = tokio::time::interval(Duration::from_millis(
+            LOTTERY_TICK_MS.max(TOURNAMENT_TICK_MS),
+        ));
         let mut regen_iv = tokio::time::interval(Duration::from_secs(30));
-        let mut autosave_iv = tokio::time::interval(Duration::from_secs(60));
-        for iv in [&mut boss_iv, &mut lb_iv, &mut lot_iv, &mut regen_iv, &mut autosave_iv] { iv.set_missed_tick_behavior(MissedTickBehavior::Skip); }
+        for iv in [&mut boss_iv, &mut lb_iv, &mut lot_iv, &mut regen_iv] {
+            iv.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        }
         let mut rng = GameRng::from_seed(0x2026_B055);
         loop {
             tokio::select! {
@@ -154,7 +200,9 @@ pub(super) fn spawn_background_ticks(
                         zone_rosters,
                     };
                     let effects = shared.bosses.lock().tick_all(&ctx, &mut rng, unix_now_ms() as u64);
-                    if !effects.is_empty() { shared.dispatch_boss_effects(effects).await; }
+                    if !effects.is_empty() {
+                        shared.dispatch_boss_effects(effects).await;
+                    }
                 }
                 _ = lb_iv.tick() => {
                     let repo = shared.players_repo.clone();
@@ -169,13 +217,17 @@ pub(super) fn spawn_background_ticks(
                             };
                             let entries = repo.top_leaderboard(kind, 100)?;
                             Ok(entries.into_iter().enumerate().map(|(idx, e)| LeaderboardRow {
-                                rank: (idx + 1) as u32, player_name: e.player_name, score: e.score,
+                                rank: (idx + 1) as u32,
+                                player_name: e.player_name,
+                                score: e.score,
                             }).collect())
                         }
                     }).await;
                 }
                 _ = lot_iv.tick() => {
-                    for s in &shared.clients.sessions { s.value().tick_login_timeout(); }
+                    for s in &shared.clients.sessions {
+                        s.value().tick_login_timeout();
+                    }
                     let handler = ServerSessionHandler::new(Arc::clone(&shared));
                     handler.tick_timed_fusions(LOTTERY_TICK_MS.max(TOURNAMENT_TICK_MS) as i32).await;
                     handler.tick_expired_buffs().await;
@@ -183,22 +235,6 @@ pub(super) fn spawn_background_ticks(
                 _ = regen_iv.tick() => {
                     tick_passive_regen(&shared);
                     super::runtime_pet::tick_passive_pet_regen(&shared).await;
-                }
-                _ = autosave_iv.tick() => {
-                    shared.rate_limiter.prune_idle();
-                    let sids: Vec<u64> = shared.clients.authenticated.iter().map(|e| *e.key()).collect();
-                    if !sids.is_empty() {
-                        let mut saved = 0_usize;
-                        for sid in &sids {
-                            let Some((snap, now_ms)) = shared.clients.authenticated.get(sid).map(|e| (e.snapshot.clone(), unix_now_ms())) else {
-                                continue;
-                            };
-                            if let Err(err) = shared.players_repo.save_player(&snap, None, shared.config.parity_mode, now_ms).await {
-                                warn!(player_id = snap.id.0, error = %err, "periodic autosave failed for player");
-                            } else { saved += 1; }
-                        }
-                        debug!(saved, total = sids.len(), "completed periodic player autosave");
-                    }
                 }
             }
         }

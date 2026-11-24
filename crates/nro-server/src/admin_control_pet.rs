@@ -2,12 +2,15 @@
 
 use nro_core::AccountId;
 use nro_db::player_repo::PlayerSnapshot;
-use nro_world::s2c_packets;
+use nro_world::{ZoneCommand, s2c_packets};
 use tracing::info;
 
 use super::AdminControl;
 use super::admin_control_ops::try_send_if_ready;
-use crate::router;
+use crate::router::{
+    self, effective_appearance, pkt_fusion, recalculate_session_stats, recalculate_snapshot_stats,
+    sprite_restore_packets,
+};
 use crate::runtime::SharedServerState;
 
 /// Hard ceiling on Pet (`Đệ tử`) power and potential (`200_000_000_000`).
@@ -41,7 +44,7 @@ pub(super) fn pet_summary(snap: Option<&PlayerSnapshot>) -> (bool, String, i8, i
 
 impl AdminControl {
     /// Grants a fresh Pet (`type_pet` in `0..=4`) or switches an existing Pet's type while
-    /// preserving any equipped `items_body` slots, working for both online and offline players.
+    /// preserving any equipped `items_body` slots and cleanly unfusing fused masters.
     pub fn grant_or_set_pet(&self, account_id: i32, type_pet: i8) -> Result<String, String> {
         if !(0..=4).contains(&type_pet) {
             return Err(format!(
@@ -55,9 +58,17 @@ impl AdminControl {
                 if router::is_player_in_trade(entry.snapshot.id) {
                     return Err("Người chơi đang giao dịch, vui lòng thử lại sau!".to_owned());
                 }
+                let was_fused = entry
+                    .snapshot
+                    .pet
+                    .as_ref()
+                    .is_some_and(|p| p.fusion_type != 0);
                 apply_fresh_pet_preserving_gear(&self.shared, &mut entry.snapshot, type_pet);
+                recalculate_session_stats(sid, &mut entry.snapshot, self.shared.config.parity_mode);
                 Some((
                     entry.snapshot.id,
+                    entry.entity_key,
+                    was_fused,
                     entry.snapshot.clone(),
                     entry.handle.clone(),
                 ))
@@ -65,8 +76,34 @@ impl AdminControl {
                 None
             };
 
-            if let Some((pid, snap, handle)) = online {
+            if let Some((pid, ek_opt, was_fused, snap, handle)) = online {
                 self.persist_snapshot(account_id, &snap)?;
+                if was_fused {
+                    let (eh, eb, el, _, is_disg) =
+                        effective_appearance(&self.shared.templates, &snap);
+                    try_send_if_ready(&handle, account_id, pkt_fusion(pid, 1));
+                    try_send_if_ready(
+                        &handle,
+                        account_id,
+                        s2c_packets::inventory_body(eh, &snap.items_body),
+                    );
+                    for p in sprite_restore_packets(pid, eh, eb, el, is_disg)
+                        .into_iter()
+                        .flatten()
+                    {
+                        try_send_if_ready(&handle, account_id, p);
+                    }
+                    if let Some(ek) = ek_opt
+                        && let Some(ztx) = self
+                            .shared
+                            .world_router
+                            .get(&(snap.location.map_id, snap.location.zone_id))
+                    {
+                        let _ = ztx.try_send(ZoneCommand::UpdatePlayerParts(ek, (eh, eb, el)));
+                        let _ = ztx.try_send(ZoneCommand::UpdatePlayerStats(ek, snap.stats));
+                    }
+                }
+                try_send_if_ready(&handle, account_id, s2c_packets::me_load_point(&snap.stats));
                 try_send_if_ready(&handle, account_id, s2c_packets::have_pet(true));
                 if let Some(detail_pkt) =
                     crate::router_pet::build_pet_detail_pkt(&self.shared, &snap)
@@ -78,15 +115,15 @@ impl AdminControl {
                 {
                     try_send_if_ready(&handle, account_id, toast);
                 }
-                self.rt
-                    .block_on(crate::router_pet::sync_online_pet_map_state(
-                        &self.shared,
-                        pid,
-                    ));
+                let _ = self.run_async(crate::router_pet::sync_online_pet_map_state(
+                    &self.shared,
+                    pid,
+                ));
                 info!(
                     account_id,
                     player_id = pid.0,
                     type_pet,
+                    was_fused,
                     "admin UI granted/switched online pet"
                 );
                 return Ok(format!(
@@ -97,6 +134,7 @@ impl AdminControl {
 
         let mut snap = self.load_offline_snapshot(account_id)?;
         apply_fresh_pet_preserving_gear(&self.shared, &mut snap, type_pet);
+        recalculate_snapshot_stats(&mut snap, self.shared.config.parity_mode);
         self.persist_snapshot(account_id, &snap)?;
         info!(
             account_id,
@@ -110,7 +148,7 @@ impl AdminControl {
     }
 
     /// Adds `delta_power` (saturating, capped at `200_000_000_000`) to both `pet.stats.power`
-    /// and `pet.stats.tiem_nang`, recalculates stats/skills, and syncs online map state.
+    /// and `pet.stats.tiem_nang`, recalculates stats/skills (and fused master stats), and syncs map state.
     pub fn add_pet_power(&self, account_id: i32, delta_power: i64) -> Result<String, String> {
         if delta_power <= 0 {
             return Err("Lượng sức mạnh cộng thêm cho Đệ tử phải > 0.".to_owned());
@@ -123,8 +161,22 @@ impl AdminControl {
                 }
                 let (pet_name, type_pet, new_power) =
                     apply_pet_power_delta(&self.shared, &mut entry.snapshot, delta_power)?;
+                let is_fused = entry
+                    .snapshot
+                    .pet
+                    .as_ref()
+                    .is_some_and(|p| p.fusion_type != 0);
+                if is_fused {
+                    recalculate_session_stats(
+                        sid,
+                        &mut entry.snapshot,
+                        self.shared.config.parity_mode,
+                    );
+                }
                 Some((
                     entry.snapshot.id,
+                    entry.entity_key,
+                    is_fused,
                     entry.snapshot.clone(),
                     entry.handle.clone(),
                     pet_name,
@@ -135,8 +187,21 @@ impl AdminControl {
                 None
             };
 
-            if let Some((pid, snap, handle, pet_name, type_pet, new_power)) = online {
+            if let Some((pid, ek_opt, is_fused, snap, handle, pet_name, type_pet, new_power)) =
+                online
+            {
                 self.persist_snapshot(account_id, &snap)?;
+                if is_fused {
+                    try_send_if_ready(&handle, account_id, s2c_packets::me_load_point(&snap.stats));
+                    if let Some(ek) = ek_opt
+                        && let Some(ztx) = self
+                            .shared
+                            .world_router
+                            .get(&(snap.location.map_id, snap.location.zone_id))
+                    {
+                        let _ = ztx.try_send(ZoneCommand::UpdatePlayerStats(ek, snap.stats));
+                    }
+                }
                 if let Some(detail_pkt) =
                     crate::router_pet::build_pet_detail_pkt(&self.shared, &snap)
                 {
@@ -147,11 +212,10 @@ impl AdminControl {
                 )) {
                     try_send_if_ready(&handle, account_id, toast);
                 }
-                self.rt
-                    .block_on(crate::router_pet::sync_online_pet_map_state(
-                        &self.shared,
-                        pid,
-                    ));
+                let _ = self.run_async(crate::router_pet::sync_online_pet_map_state(
+                    &self.shared,
+                    pid,
+                ));
                 info!(
                     account_id,
                     player_id = pid.0,
@@ -170,6 +234,9 @@ impl AdminControl {
         let mut snap = self.load_offline_snapshot(account_id)?;
         let (pet_name, type_pet, new_power) =
             apply_pet_power_delta(&self.shared, &mut snap, delta_power)?;
+        if snap.pet.as_ref().is_some_and(|p| p.fusion_type != 0) {
+            recalculate_snapshot_stats(&mut snap, self.shared.config.parity_mode);
+        }
         self.persist_snapshot(account_id, &snap)?;
         info!(
             account_id,

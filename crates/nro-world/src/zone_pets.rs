@@ -44,22 +44,18 @@ impl PetCompanion {
 }
 
 fn ensure_dollar_prefix(name: &mut String) {
-    if name.trim().is_empty() {
+    let stripped = name.trim_start_matches(['$', '#']).trim();
+    if stripped.is_empty() {
         "$Đệ tử".clone_into(name);
-    } else if !name.starts_with('$') {
-        name.insert(0, '$');
+    } else {
+        *name = format!("${stripped}");
     }
 }
 
 fn pet_add_packet(master_pid: PlayerId, pet: &PetCompanion) -> Result<Packet, PacketError> {
     let pet_id = PlayerId(master_pid.0.saturating_neg());
-    let owned_name;
-    let wire_name: &str = if pet.name.starts_with('$') {
-        &pet.name
-    } else {
-        owned_name = format!("${}", pet.name);
-        &owned_name
-    };
+    let mut normalized_name = pet.name.clone();
+    ensure_dollar_prefix(&mut normalized_name);
     let stats = CoreStats {
         hp: pet.hp.max(0),
         hp_max: pet.hp_max.max(1),
@@ -70,7 +66,7 @@ fn pet_add_packet(master_pid: PlayerId, pet: &PetCompanion) -> Result<Packet, Pa
         level_and_pk: (1, 0),
         gender: pet.gender,
         parts: (pet.parts.0, pet.parts.1, pet.parts.2, -1, -1, -1),
-        name: wire_name,
+        name: &normalized_name,
         stats: &stats,
         flags: (0, 0, false, 0, -1),
         loc: pet.loc,
@@ -91,17 +87,12 @@ impl ZoneActor {
         let master_loc = self.arena.locations[master_idx];
         let map_id = self.cfg.id.0;
         let zone_id = self.cfg.id.1;
+        let max_x = self.effective_map_width();
         let prev = self.pets.remove(&player_id);
         let mut next = incoming.filter(|p| p.is_visible_on(map_id));
         if let Some(ref mut cur) = next {
             ensure_dollar_prefix(&mut cur.name);
-            cur.loc = if let Some(ref old) = prev {
-                Location {
-                    map_id,
-                    zone_id,
-                    ..old.loc
-                }
-            } else if cur.status == 3 && matches!(map_id.0, 21..=23) {
+            let default_loc = if cur.status == 3 && matches!(map_id.0, 21..=23) {
                 Location {
                     map_id,
                     zone_id,
@@ -112,9 +103,17 @@ impl ZoneActor {
                 Location {
                     map_id,
                     zone_id,
-                    x: (master_loc.x.saturating_sub(28)).max(24),
+                    x: master_loc.x.saturating_sub(28).max(24).min(max_x),
                     y: master_loc.y,
                 }
+            };
+            cur.loc = match prev {
+                Some(ref old) if old.status == cur.status => Location {
+                    map_id,
+                    zone_id,
+                    ..old.loc
+                },
+                _ => default_loc,
             };
         }
 
@@ -147,19 +146,25 @@ impl ZoneActor {
                         let (_, die_pkt) = s2c_packets::char_die_packets(pet_id, 0, cur.loc, 0);
                         self.emit_for_actor(master_idx, &die_pkt);
                     }
-                } else if old.hp != cur.hp || old.hp_max != cur.hp_max {
-                    if old.hp <= 0 && cur.hp > 0 {
-                        let (_, live_pkt) =
-                            s2c_packets::char_revive_packets(pet_id, cur.hp, cur.hp_max, cur.loc);
-                        self.emit_for_actor(master_idx, &live_pkt);
+                } else {
+                    if old.hp != cur.hp || old.hp_max != cur.hp_max {
+                        if old.hp <= 0 && cur.hp > 0 {
+                            let (_, live_pkt) = s2c_packets::char_revive_packets(
+                                pet_id, cur.hp, cur.hp_max, cur.loc,
+                            );
+                            self.emit_for_actor(master_idx, &live_pkt);
+                        }
+                        self.emit_for_actor(
+                            master_idx,
+                            &s2c_packets::player_load_hp(pet_id, cur.hp, cur.hp_max),
+                        );
+                        if old.hp > 0 && cur.hp <= 0 {
+                            let (_, die_pkt) = s2c_packets::char_die_packets(pet_id, 0, cur.loc, 0);
+                            self.emit_for_actor(master_idx, &die_pkt);
+                        }
                     }
-                    self.emit_for_actor(
-                        master_idx,
-                        &s2c_packets::player_load_hp(pet_id, cur.hp, cur.hp_max),
-                    );
-                    if old.hp > 0 && cur.hp <= 0 {
-                        let (_, die_pkt) = s2c_packets::char_die_packets(pet_id, 0, cur.loc, 0);
-                        self.emit_for_actor(master_idx, &die_pkt);
+                    if old.status != cur.status {
+                        self.emit_for_actor(master_idx, &s2c_packets::player_move(pet_id, cur.loc));
                     }
                 }
                 self.pets.insert(player_id, cur);
@@ -181,10 +186,7 @@ impl ZoneActor {
         if let Some(own_pet) = self.pets.get(&pid)
             && let Ok(pkt) = pet_add_packet(pid, own_pet)
         {
-            let _ = target_tx.try_send(pkt.clone());
-            if !offline {
-                self.broadcast(&pkt, Some(target_idx));
-            }
+            let _ = target_tx.try_send(pkt);
             if own_pet.hp <= 0 {
                 let (_, die_pkt) = s2c_packets::char_die_packets(
                     PlayerId(pid.0.saturating_neg()),
@@ -192,10 +194,7 @@ impl ZoneActor {
                     own_pet.loc,
                     0,
                 );
-                let _ = target_tx.try_send(die_pkt.clone());
-                if !offline {
-                    self.broadcast(&die_pkt, Some(target_idx));
-                }
+                let _ = target_tx.try_send(die_pkt);
             }
         }
         if !offline {
@@ -223,11 +222,11 @@ impl ZoneActor {
             return;
         };
         let master_loc = self.arena.locations[master_idx];
-        let max_x = self.cfg.map_width.max(4_095);
+        let max_x = self.effective_map_width();
         let Some(pet) = self.pets.get_mut(&pid) else {
             return;
         };
-        if pet.status == 3 {
+        if pet.hp <= 0 || pet.status != 0 {
             return;
         }
         let delta: i16 = if master_loc.x >= prev_x { -28 } else { 28 };
@@ -254,7 +253,7 @@ impl ZoneActor {
         if self.pets.is_empty() {
             return;
         }
-        let max_x = self.cfg.map_width.max(4_095);
+        let max_x = self.effective_map_width();
         let masters: Vec<(PlayerId, usize, Location)> = (0..self.arena.len())
             .filter(|&i| self.arena.kinds[i] == EntityKind::Player && self.arena.stats[i].hp > 0)
             .filter_map(|i| self.arena.player_ids[i].map(|pid| (pid, i, self.arena.locations[i])))
@@ -316,10 +315,15 @@ impl ZoneActor {
                 if let Some(p) = self.pets.get_mut(&pid) {
                     p.loc = fight_loc;
                 }
+                let skill_paint_id: u8 = match pet_snap.gender {
+                    Gender::TraiDat => 0,
+                    Gender::Namec => 14,
+                    Gender::Xayda => 28,
+                };
                 self.emit_for_actor(master_idx, &s2c_packets::player_move(pet_id, fight_loc));
                 self.emit_for_actor(
                     master_idx,
-                    &s2c_packets::peer_attack_mobs(pet_id, 0, &[mob_slot]),
+                    &s2c_packets::peer_attack_mobs(pet_id, skill_paint_id, &[mob_slot]),
                 );
                 if let Some((earned_tnsm, killed_mob_temp_id)) =
                     self.hit_single_mob(pid, master_idx, mob_slot, pet_snap.dame.max(15), false)
@@ -336,7 +340,7 @@ impl ZoneActor {
                 || pet_snap.loc.y != master_loc.y
             {
                 let idle_loc = Location {
-                    x: (master_loc.x.saturating_sub(28)).max(24),
+                    x: master_loc.x.saturating_sub(28).max(24).min(max_x),
                     y: master_loc.y,
                     ..master_loc
                 };

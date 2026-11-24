@@ -16,7 +16,7 @@ use nro_protocol::{Packet, ProtocolError, SessionHandle};
 use nro_world::s2c_packets;
 use tracing::info;
 
-use super::{ServerSessionHandler, npc_menu_index, wallet_money_pkt};
+use super::{ServerSessionHandler, is_own_home_map, npc_menu_index, wallet_money_pkt};
 use crate::runtime::unix_now_ms;
 
 static DAILY_CHECKIN_DAY: OnceLock<DashMap<PlayerId, i64>> = OnceLock::new();
@@ -107,7 +107,7 @@ impl ServerSessionHandler {
         npc_id: i16,
         select: Option<i8>,
     ) -> Result<(), ProtocolError> {
-        let Some((pid, map_id, alive, clan_id, can_claim_starter_pet, stored_menu)) =
+        let Some((pid, map_id, gender, alive, clan_id, can_claim_starter_pet, stored_menu)) =
             self.shared.clients.authenticated.get(&sid).map(|e| {
                 let pid = e.snapshot.id;
                 let can_claim = e.snapshot.pet.is_none()
@@ -117,6 +117,7 @@ impl ServerSessionHandler {
                 (
                     pid,
                     e.snapshot.location.map_id,
+                    e.snapshot.gender,
                     e.snapshot.stats.hp > 0,
                     e.snapshot.clan_id,
                     can_claim,
@@ -150,16 +151,18 @@ impl ServerSessionHandler {
                 )?)
                 .await;
         }
-        let is_virtual = matches!(
-            npc_id,
-            x if x == i16::from(const_npc::CON_MEO)
-                || x == i16::from(const_npc::RONG_THIENG)
-                || x == i16::from(const_npc::RONG_THIENG_NAMEC)
-                || x == i16::from(const_npc::QUA_TRUNG)
-                || x == i16::from(const_npc::DUA_HAU)
-                || x == i16::from(const_npc::LY_TIEU_NUONG)
-        );
+        let is_home_plant =
+            npc_id == i16::from(const_npc::QUA_TRUNG) || npc_id == i16::from(const_npc::DUA_HAU);
+        let is_virtual = (is_home_plant && is_own_home_map(map_id, gender))
+            || matches!(
+                npc_id,
+                x if x == i16::from(const_npc::CON_MEO)
+                    || x == i16::from(const_npc::RONG_THIENG)
+                    || x == i16::from(const_npc::RONG_THIENG_NAMEC)
+                    || x == i16::from(const_npc::LY_TIEU_NUONG)
+            );
         let npc_valid = npc_id >= 0
+            && (!is_home_plant || is_own_home_map(map_id, gender))
             && (is_virtual
                 || self
                     .shared
@@ -209,21 +212,6 @@ impl ServerSessionHandler {
         } else {
             0
         };
-        if let Some(sel) = select
-            && cur_menu_idx == const_npc::MENU_START_COMBINE
-        {
-            return self
-                .execute_pending_combine(session, sid, npc_id, sel)
-                .await;
-        }
-        if let Some(sel) = select
-            && (npc_id == i16::from(const_npc::QUA_TRUNG)
-                || npc_id == i16::from(const_npc::DUA_HAU))
-        {
-            return self
-                .handle_home_plant_confirm(session, sid, pid, npc_id, cur_menu_idx, sel)
-                .await;
-        }
         if npc_id == i16::from(const_npc::RONG_THIENG)
             || npc_id == i16::from(const_npc::RONG_THIENG_NAMEC)
         {
@@ -240,6 +228,21 @@ impl ServerSessionHandler {
                 )?)
                 .await;
         }
+        if let Some(sel) = select
+            && matches!(npc_id, 21 | 56)
+            && cur_menu_idx == const_npc::MENU_START_COMBINE
+        {
+            return self
+                .execute_pending_combine(session, sid, npc_id, sel)
+                .await;
+        }
+        if let Some(sel) = select
+            && is_home_plant
+        {
+            return self
+                .handle_home_plant_confirm(session, sid, pid, npc_id, cur_menu_idx, sel)
+                .await;
+        }
         if matches!(npc_id, 0..=2) && can_claim_starter_pet {
             return self
                 .handle_home_elder_starter_pet(session, sid, pid, npc_id, select)
@@ -251,7 +254,8 @@ impl ServerSessionHandler {
         {
             return self.handle_achievement(session, sid, None).await;
         }
-        if cur_menu_idx == const_npc::OPEN_POWER_PET
+        if matches!(npc_id, 42 | 43)
+            && cur_menu_idx == const_npc::OPEN_POWER_PET
             && select == Some(0)
             && self
                 .shared

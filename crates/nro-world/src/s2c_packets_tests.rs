@@ -91,8 +91,12 @@ fn v250_combat_revive_die_inventory_and_wave2_builders_round_trip() {
     assert_eq!(r.read_i16().expect("y"), 200);
     assert!(r.is_empty());
 
-    let (_, rev_peer) =
-        char_revive_packets(PlayerId(7), 4_000_000_000, 8_000_000_000, Location::new(10, 20));
+    let (_, rev_peer) = char_revive_packets(
+        PlayerId(7),
+        4_000_000_000,
+        8_000_000_000,
+        Location::new(10, 20),
+    );
     let mut r = rev_peer.reader();
     assert_eq!(r.read_i8().expect("sub"), cmd_message::PLAYER_LOAD_LIVE);
     assert_eq!(r.read_i32().expect("pid"), 7);
@@ -102,9 +106,35 @@ fn v250_combat_revive_die_inventory_and_wave2_builders_round_trip() {
     assert_eq!(r.read_i16().expect("y"), 20);
     assert!(r.is_empty());
 
-    let pick_item = item_map_my_pick(1, 5, "ok", false).expect("item pick");
+    let pick_item = item_map_my_pick(1, 50_000, "ok", false).expect("item pick");
+    let mut pr = pick_item.reader();
+    assert_eq!(pr.read_i16().expect("id"), 1);
+    assert_eq!(pr.read_utf().expect("notice"), "ok");
+    assert_eq!(pr.read_i16().expect("clamped_i16_max"), i16::MAX);
+    assert!(pr.is_empty());
     let pick_gold = item_map_my_pick(1, 5, "ok", true).expect("gold pick");
     assert_eq!(pick_gold.payload.len(), pick_item.payload.len() + 2);
+
+    let g_sentinel = item_map_add(
+        &GroundItemWire {
+            item_map_id: 9,
+            template_id: TemplateId(76),
+            loc: Location::new(10, 20),
+            owner_id: Some(PlayerId(-2)),
+        },
+        ParityMode::Fixed,
+    );
+    let mut gr = g_sentinel.reader();
+    for _ in 0..4 {
+        let _ = gr.read_i16().expect("g16");
+    }
+    assert_eq!(gr.read_i32().expect("owner_mapped"), -1);
+
+    let sys_chat = chat_global(PlayerId(1), "", "Bảo trì", (1, 2, 3, -1)).expect("sys chat");
+    let mut scr = sys_chat.reader();
+    assert_eq!(scr.read_utf().expect("empty_name"), "");
+    assert_eq!(scr.read_utf().expect("text"), "|5|Bảo trì");
+    assert!(scr.is_empty());
 
     let item = ItemInstance::with_options(TemplateId(14), 1, [ItemOption::new(300, 99_999)], 0);
     let empty_opt_item = ItemInstance::new(TemplateId(15), 2);
@@ -145,7 +175,12 @@ fn v250_combat_revive_die_inventory_and_wave2_builders_round_trip() {
     assert_eq!(inventory_body(28, &[]).cmd, cmd_message::BODY);
     assert_eq!(inventory_box(&[]).cmd, cmd_message::BOX);
     assert_eq!(inventory_box_open(0).payload.as_ref(), &[1, 0]);
-    assert_eq!(have_attack_player(PlayerId(1), 10, 5, false, -1).payload.len(), 22);
+    assert_eq!(
+        have_attack_player(PlayerId(1), 10, 5, false, -1)
+            .payload
+            .len(),
+        22
+    );
     assert_eq!(npc_live(0, 0, 0, 1_000).payload.len(), 11);
     assert_eq!(combine_open("a", "b").cmd, cmd_message::COMBINNE);
     assert_eq!(combine_result(2).payload.as_ref(), &[2]);
@@ -239,8 +274,14 @@ fn ui_shop_open_client_input_and_trade_lock_round_trip() {
     let inp = client_input_open(
         "Nhập mã",
         &[
-            InputFieldWire { label: "Code", input_type: 1 },
-            InputFieldWire { label: "PIN", input_type: 2 },
+            InputFieldWire {
+                label: "Code",
+                input_type: 1,
+            },
+            InputFieldWire {
+                label: "PIN",
+                input_type: 2,
+            },
         ],
     )
     .expect("client_input_open");
@@ -268,12 +309,16 @@ fn ui_shop_open_client_input_and_trade_lock_round_trip() {
         is_new: true,
         part_temp: Some((10, 11, 12, 13)),
     }];
-    let tabs = [ShopTabWire { name: "Ký gửi\nTrang bị", max_page: 4, items: &consign_items }];
+    let tabs = [ShopTabWire {
+        name: "Ký gửi\nTrang bị",
+        max_page: 4,
+        items: &consign_items,
+    }];
     let shop = shop_open(2, &tabs).expect("shop_open consign");
     assert_eq!(shop.cmd, cmd_message::SHOP);
     let mut r = shop.reader();
     assert_eq!(r.read_i8().expect("type_shop"), 2);
-    assert_eq!(r.read_u8().expect("tabs"), 1);
+    assert_eq!(r.read_u8().expect("tabs"), 4);
     assert_eq!(r.read_utf().expect("tab_name"), "Ký gửi\nTrang bị");
     assert_eq!(r.read_u8().expect("max_page"), 4);
     assert_eq!(r.read_u8().expect("items"), 1);
@@ -294,6 +339,11 @@ fn ui_shop_open_client_input_and_trade_lock_round_trip() {
     assert_eq!(r.read_i16().expect("l"), 12);
     assert_eq!(r.read_i16().expect("bag"), 13);
     assert_eq!(r.read_utf().expect("seller"), "Vegeta");
+    for _ in 0..3 {
+        assert_eq!(r.read_utf().expect("pad_name"), "");
+        assert_eq!(r.read_u8().expect("pad_max_page"), 1);
+        assert_eq!(r.read_u8().expect("pad_items"), 0);
+    }
     assert!(r.is_empty());
 
     let offer = trade_lock_offer(1_000, &[ItemInstance::new(TemplateId(16), 5)]);
@@ -308,15 +358,27 @@ fn ui_shop_open_client_input_and_trade_lock_round_trip() {
     assert_eq!(r.read_i32().expect("opt_param"), 0);
     assert!(r.is_empty());
 
-    assert_eq!(item_sale_confirm(1, 2, "Bán?").expect("sale").cmd, cmd_message::ITEM_SALE);
-    assert_eq!(use_item_confirm(0, 1, 2, "Dùng?").cmd, cmd_message::USE_ITEM);
+    assert_eq!(
+        item_sale_confirm(1, 2, "Bán?").expect("sale").cmd,
+        cmd_message::ITEM_SALE
+    );
+    assert_eq!(
+        use_item_confirm(0, 1, 2, "Dùng?").cmd,
+        cmd_message::USE_ITEM
+    );
     assert_eq!(me_load_hp(500).payload.len(), 9);
     assert_eq!(me_load_mp(250).payload.len(), 9);
     assert_eq!(me_add_skill(17).payload.as_ref(), &[23, 0, 17]);
     assert_eq!(me_update_skill(17).payload.as_ref(), &[62, 0, 17]);
     assert_eq!(player_up_exp(2, 150).payload.len(), 5);
-    assert_eq!(peer_attack_mobs(PlayerId(7), 3, &[0_u8; 15]).payload.len(), 15);
-    assert_eq!(update_body(PlayerId(7), Some((1, 2, 3, 1))).payload.len(), 12);
+    assert_eq!(
+        peer_attack_mobs(PlayerId(7), 3, &[0_u8; 15]).payload.len(),
+        15
+    );
+    assert_eq!(
+        update_body(PlayerId(7), Some((1, 2, 3, 1))).payload.len(),
+        12
+    );
     assert_eq!(update_body(PlayerId(7), None).payload.len(), 5);
     assert_eq!(send_flag_bag(PlayerId(7), 205).payload.len(), 6);
     assert_eq!(task_next().cmd, cmd_message::TASK_NEXT);
