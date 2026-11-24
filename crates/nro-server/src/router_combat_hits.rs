@@ -93,7 +93,8 @@ impl ServerSessionHandler {
                         .apply_hit(
                             tpid,
                             &atk_view,
-                            cast.skill_kind.unwrap_or(SkillKind::Dragon),
+                            nro_boss::SkillKind::from_repr(cast.skill_kind.map_or(0, |k| k as u8))
+                                .unwrap_or(nro_boss::SkillKind::Dragon),
                             raw_dmg,
                             piercing,
                             false,

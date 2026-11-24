@@ -20,7 +20,7 @@ use super::{router_economy, router_npc, router_secondary, router_shop, router_sk
 use crate::runtime::{SharedServerState, unix_now_ms};
 
 /// `GameTemplates`-backed [`ItemCatalog`] falling back to [`ItemMeta::classify_builtin`].
-pub(super) struct DbItemCatalog<'a>(pub &'a GameTemplates);
+pub(crate) struct DbItemCatalog<'a>(pub &'a GameTemplates);
 
 impl ItemCatalog for DbItemCatalog<'_> {
     fn meta_of(&self, id: TemplateId) -> ItemMeta {
@@ -267,14 +267,14 @@ pub(crate) fn unfuse_if_missing_porata(
     true
 }
 
-pub(super) fn send_dialog(session: &SessionHandle, text: &str) -> Result<(), ProtocolError> {
+pub(crate) fn send_dialog(session: &SessionHandle, text: &str) -> Result<(), ProtocolError> {
     let mut pw = PacketWriter::with_capacity(text.len() + 4);
     pw.write_utf(text)?;
     let _ = session.try_send(pw.finish(cmd_message::DIALOG_MESSAGE));
     Ok(())
 }
 
-pub(super) fn send_thong_bao(session: &SessionHandle, text: &str) -> Result<(), ProtocolError> {
+pub(crate) fn send_thong_bao(session: &SessionHandle, text: &str) -> Result<(), ProtocolError> {
     let pkt = s2c_packets::thong_bao(text)?;
     let _ = session.try_send(pkt);
     Ok(())

@@ -79,7 +79,8 @@ fn spawn_server_thread(
     cli: GuiCliArgs,
     boot_state: Arc<Mutex<BootState>>,
     shutdown_token: CancellationToken,
-    ui_exit_token: CancellationToken,
+    window_closed: Arc<AtomicBool>,
+    main_exited: Arc<AtomicBool>,
 ) -> thread::JoinHandle<()> {
     let bg_shutdown = shutdown_token;
     thread::Builder::new()
@@ -110,7 +111,8 @@ fn spawn_server_thread(
                 let ready_state = Arc::clone(&boot_state);
                 rt.block_on(async move {
                     let runtime = ServerRuntime::boot(config, bg_shutdown.clone()).await?;
-                    let control = AdminControl::new(runtime.shared(), rt_handle, bg_shutdown.clone());
+                    let control =
+                        AdminControl::new(runtime.shared(), rt_handle, bg_shutdown.clone());
                     if let Ok(mut guard) = ready_state.lock() {
                         *guard = BootState::Ready(control);
                     }
@@ -119,7 +121,6 @@ fn spawn_server_thread(
                     if let Err(err) = runtime.shutdown_and_flush().await {
                         error!(error = %err, "error during server shutdown flush");
                     }
-                    ui_exit_token.cancelled().await;
                     Ok(())
                 })
             })();
@@ -128,6 +129,24 @@ fn spawn_server_thread(
                 error!(error = %err, "failed booting embedded nro-server");
                 if let Ok(mut guard) = boot_state.lock() {
                     *guard = BootState::Failed(format!("{err:#}"));
+                }
+                while !bg_shutdown.is_cancelled() && !main_exited.load(Ordering::Acquire) {
+                    thread::sleep(Duration::from_millis(100));
+                }
+            }
+
+            if let Ok(mut guard) = boot_state.lock() {
+                *guard = BootState::Booting;
+            }
+            if window_closed.load(Ordering::Acquire) {
+                for _ in 0..12 {
+                    if main_exited.load(Ordering::Acquire) {
+                        return;
+                    }
+                    thread::sleep(Duration::from_millis(25));
+                }
+                if !main_exited.load(Ordering::Acquire) {
+                    std::process::exit(0);
                 }
             }
         })
@@ -144,43 +163,30 @@ fn main() {
 
     let boot_state = Arc::new(Mutex::new(BootState::Booting));
     let shutdown_token = CancellationToken::new();
-    let ui_exit_token = CancellationToken::new();
     let window_closed = Arc::new(AtomicBool::new(false));
+    let main_exited = Arc::new(AtomicBool::new(false));
     let server_thread = spawn_server_thread(
         cli,
         Arc::clone(&boot_state),
         shutdown_token.clone(),
-        ui_exit_token.clone(),
+        Arc::clone(&window_closed),
+        Arc::clone(&main_exited),
     );
 
     let ui_state = Arc::clone(&boot_state);
     let ui_logs = log_buffer;
-    let ui_closed_flag = Arc::clone(&window_closed);
+    let app_closed_flag = Arc::clone(&window_closed);
     gpui_kit::application()
         .with_assets(gpui_kit::assets::Assets)
         .run(move |cx| {
             gpui_kit::init(cx);
             cx.activate(true);
-            let watcher_flag = Arc::clone(&ui_closed_flag);
-            cx.spawn(async move |cx| {
-                loop {
-                    cx.background_executor()
-                        .timer(Duration::from_millis(250))
-                        .await;
-                    if watcher_flag.load(Ordering::Acquire) {
-                        let _ = cx.update(|cx| cx.quit());
-                        break;
-                    }
-                }
-            })
-            .detach();
             let window_options = WindowOptions {
                 window_bounds: Some(WindowBounds::centered(size(px(1280.0), px(820.0)), cx)),
                 focus: true,
                 show: true,
                 ..Default::default()
             };
-            let app_closed_flag = Arc::clone(&ui_closed_flag);
             if let Err(err) = gpui_kit::open_window(window_options, cx, |window, cx| {
                 cx.new(|cx| AdminApp::new(ui_state, ui_logs, app_closed_flag, window, cx))
             }) {
@@ -190,6 +196,7 @@ fn main() {
             }
         });
 
+    main_exited.store(true, Ordering::Release);
     if !shutdown_token.is_cancelled() {
         if let Ok(guard) = boot_state.lock()
             && let BootState::Ready(control) = &*guard
@@ -199,6 +206,5 @@ fn main() {
             shutdown_token.cancel();
         }
     }
-    ui_exit_token.cancel();
     let _ = server_thread.join();
 }

@@ -123,10 +123,10 @@ impl AdminControl {
         }
         try_send_if_ready(&handle, account_id, s2c_packets::me_load_point(&snap.stats));
         if let Some(ek) = ek_opt
-            && let Some(ztx) = self
+            && let Ok(ztx) = self
                 .shared
                 .world_router
-                .get(&(snap.location.map_id, snap.location.zone_id))
+                .resolve_sender(snap.location.map_id, snap.location.zone_id)
         {
             let _ = ztx.try_send(ZoneCommand::UpdatePlayerStats(ek, snap.stats));
         }
