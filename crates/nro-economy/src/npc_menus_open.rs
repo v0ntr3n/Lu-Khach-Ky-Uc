@@ -2,7 +2,7 @@
 
 use super::{MenuPrompt, NpcEffect, NpcKind, NpcMenuError, NpcPlayerCtx};
 use nro_consts::const_npc;
-use nro_core::Gender;
+use nro_core::{Gender, TemplateId};
 
 /// Unified 66-NPC `openBaseMenu` and `confirmMenu` dispatcher.
 pub struct NpcMenuRouter;

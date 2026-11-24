@@ -6,7 +6,7 @@ use crate::{
     ShopService, ShopTabKind, ShopType,
 };
 use nro_consts::const_player;
-use nro_core::{CoreStats, Gender};
+use nro_core::{CoreStats, Gender, TemplateId};
 
 #[test]
 fn capsule_193_defers_deduction_and_pea_restores_hp_mp_stamina() {
